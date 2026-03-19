@@ -1,0 +1,108 @@
+/**
+ * WordPress REST API and sync protocol types.
+ *
+ * These types match the wire format used by the Gutenberg HTTP polling
+ * sync provider at POST /wp-sync/v1/updates.
+ */
+
+// --- Sync Protocol Types ---
+
+export enum SyncUpdateType {
+  SYNC_STEP_1 = 'sync_step1',
+  SYNC_STEP_2 = 'sync_step2',
+  UPDATE = 'update',
+  COMPACTION = 'compaction',
+}
+
+/** A single typed update with base64-encoded Yjs binary data. */
+export interface SyncUpdate {
+  type: SyncUpdateType;
+  data: string; // base64-encoded Yjs V2 update
+}
+
+/** Awareness state: null means disconnected. */
+export type LocalAwarenessState = object | null;
+
+/** Server-side awareness: map of clientId (as string) → state object. */
+export type AwarenessState = Record<string, LocalAwarenessState>;
+
+// --- Client → Server ---
+
+export interface SyncEnvelopeFromClient {
+  room: string;
+  client_id: number;
+  after: number;
+  awareness: LocalAwarenessState;
+  updates: SyncUpdate[];
+}
+
+export interface SyncPayload {
+  rooms: SyncEnvelopeFromClient[];
+}
+
+// --- Server → Client ---
+
+export interface SyncEnvelopeFromServer {
+  room: string;
+  end_cursor: number;
+  awareness: AwarenessState;
+  updates: SyncUpdate[];
+  should_compact?: boolean;
+  compaction_request?: SyncUpdate[]; // deprecated
+}
+
+export interface SyncResponse {
+  rooms: SyncEnvelopeFromServer[];
+}
+
+// --- WordPress REST API Types ---
+
+/** WordPress post as returned by the REST API (subset of fields we care about). */
+export interface WPPost {
+  id: number;
+  title: { rendered: string; raw?: string };
+  content: { rendered: string; raw?: string };
+  excerpt: { rendered: string; raw?: string };
+  status: string;
+  type: string;
+  slug: string;
+  author: number;
+  date: string | null;
+  modified: string;
+  categories?: number[];
+  tags?: number[];
+  meta?: Record<string, unknown>;
+}
+
+/** WordPress user as returned by /wp/v2/users/me. */
+export interface WPUser {
+  id: number;
+  name: string;
+  slug: string;
+  avatar_urls: Record<string, string>;
+}
+
+// --- Connection Config ---
+
+export interface WordPressConfig {
+  siteUrl: string;
+  username: string;
+  appPassword: string;
+}
+
+// --- Sync Client Config ---
+
+export interface SyncClientConfig {
+  /** Polling interval in ms when editing solo. */
+  pollingInterval: number;
+  /** Polling interval in ms when collaborators are present. */
+  pollingIntervalWithCollaborators: number;
+  /** Max exponential backoff in ms on error. */
+  maxErrorBackoff: number;
+}
+
+export const DEFAULT_SYNC_CONFIG: SyncClientConfig = {
+  pollingInterval: 1000,
+  pollingIntervalWithCollaborators: 250,
+  maxErrorBackoff: 30_000,
+};

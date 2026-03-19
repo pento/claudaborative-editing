@@ -1,0 +1,33 @@
+{
+  "name": "claudaborative-editing",
+  "version": "0.1.0",
+  "description": "MCP server for collaborative WordPress post editing via Yjs CRDT",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "claudaborative-editing": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "@wordpress/block-serialization-default-parser": "^5.42.0",
+    "lib0": "0.2.99",
+    "y-protocols": "^1.0.7",
+    "yjs": "13.6.29",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.15",
+    "@wordpress/env": "^11.2.0",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.0"
+  }
+}

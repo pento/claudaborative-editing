@@ -1,0 +1,468 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { SyncClient } from '../../src/wordpress/sync-client.js';
+import type { SyncCallbacks } from '../../src/wordpress/sync-client.js';
+import type { WordPressApiClient } from '../../src/wordpress/api-client.js';
+import {
+  SyncUpdateType,
+  DEFAULT_SYNC_CONFIG,
+} from '../../src/wordpress/types.js';
+import type {
+  SyncPayload,
+  SyncResponse,
+  SyncUpdate,
+  SyncClientConfig,
+  AwarenessState,
+} from '../../src/wordpress/types.js';
+
+function createMockApiClient() {
+  return {
+    sendSyncUpdate: vi.fn<(payload: SyncPayload) => Promise<SyncResponse>>(),
+  } as unknown as WordPressApiClient & { sendSyncUpdate: ReturnType<typeof vi.fn> };
+}
+
+function createMockCallbacks(overrides?: Partial<SyncCallbacks>): SyncCallbacks {
+  return {
+    onUpdate: vi.fn<(update: SyncUpdate) => SyncUpdate | null>().mockReturnValue(null),
+    onAwareness: vi.fn<(state: AwarenessState) => void>(),
+    onStatusChange: vi.fn<(status: string) => void>(),
+    onCompactionRequested: vi.fn<() => SyncUpdate>().mockReturnValue({
+      type: SyncUpdateType.COMPACTION,
+      data: 'compacted-data',
+    }),
+    getAwarenessState: vi.fn().mockReturnValue({ cursor: { x: 0, y: 0 } }),
+    ...overrides,
+  };
+}
+
+function emptyRoomResponse(
+  room: string,
+  endCursor: number,
+  awareness: AwarenessState = {},
+  updates: SyncUpdate[] = [],
+  shouldCompact = false,
+): SyncResponse {
+  return {
+    rooms: [
+      {
+        room,
+        end_cursor: endCursor,
+        awareness,
+        updates,
+        should_compact: shouldCompact,
+      },
+    ],
+  };
+}
+
+describe('SyncClient', () => {
+  let apiClient: ReturnType<typeof createMockApiClient>;
+  let config: SyncClientConfig;
+  let syncClient: SyncClient;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    apiClient = createMockApiClient();
+    config = { ...DEFAULT_SYNC_CONFIG };
+    syncClient = new SyncClient(apiClient, config);
+  });
+
+  afterEach(() => {
+    syncClient.stop();
+    vi.useRealTimers();
+  });
+
+  describe('start()', () => {
+    it('begins polling immediately', async () => {
+      apiClient.sendSyncUpdate.mockResolvedValue(emptyRoomResponse('postType/post:1', 0));
+      const callbacks = createMockCallbacks();
+
+      syncClient.start('postType/post:1', 100, [], callbacks);
+      expect(callbacks.onStatusChange).toHaveBeenCalledWith('connecting');
+
+      // First poll fires at setTimeout(0)
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(apiClient.sendSyncUpdate).toHaveBeenCalledTimes(1);
+      expect(callbacks.onStatusChange).toHaveBeenCalledWith('connected');
+    });
+
+    it('sends initial updates in first poll', async () => {
+      apiClient.sendSyncUpdate.mockResolvedValue(emptyRoomResponse('postType/post:1', 1));
+      const callbacks = createMockCallbacks();
+      const initialUpdates: SyncUpdate[] = [
+        { type: SyncUpdateType.SYNC_STEP_1, data: 'sync-data' },
+      ];
+
+      syncClient.start('postType/post:1', 100, initialUpdates, callbacks);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const payload = apiClient.sendSyncUpdate.mock.calls[0][0] as SyncPayload;
+      expect(payload.rooms[0].updates).toEqual(initialUpdates);
+      expect(payload.rooms[0].room).toBe('postType/post:1');
+      expect(payload.rooms[0].client_id).toBe(100);
+      expect(payload.rooms[0].after).toBe(0);
+    });
+  });
+
+  describe('stop()', () => {
+    it('clears timer and sets status to disconnected', async () => {
+      apiClient.sendSyncUpdate.mockResolvedValue(emptyRoomResponse('postType/post:1', 0));
+      const callbacks = createMockCallbacks();
+
+      syncClient.start('postType/post:1', 100, [], callbacks);
+      await vi.advanceTimersByTimeAsync(0);
+
+      syncClient.stop();
+
+      expect(callbacks.onStatusChange).toHaveBeenCalledWith('disconnected');
+      expect(syncClient.getStatus().isPolling).toBe(false);
+
+      // Ensure no more polls happen
+      apiClient.sendSyncUpdate.mockClear();
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(apiClient.sendSyncUpdate).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('poll payload', () => {
+    it('sends correct room, client_id, after, and awareness', async () => {
+      apiClient.sendSyncUpdate.mockResolvedValue(emptyRoomResponse('postType/post:42', 5));
+      const awarenessState = { cursor: { x: 10, y: 20 } };
+      const callbacks = createMockCallbacks({
+        getAwarenessState: vi.fn().mockReturnValue(awarenessState),
+      });
+
+      syncClient.start('postType/post:42', 200, [], callbacks);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const payload = apiClient.sendSyncUpdate.mock.calls[0][0] as SyncPayload;
+      expect(payload.rooms).toHaveLength(1);
+      expect(payload.rooms[0]).toEqual({
+        room: 'postType/post:42',
+        client_id: 200,
+        after: 0,
+        awareness: awarenessState,
+        updates: [],
+      });
+    });
+
+    it('uses updated end_cursor in subsequent polls', async () => {
+      apiClient.sendSyncUpdate
+        .mockResolvedValueOnce(emptyRoomResponse('postType/post:1', 10))
+        .mockResolvedValueOnce(emptyRoomResponse('postType/post:1', 20));
+
+      const callbacks = createMockCallbacks();
+      syncClient.start('postType/post:1', 100, [], callbacks);
+
+      // First poll
+      await vi.advanceTimersByTimeAsync(0);
+      expect((apiClient.sendSyncUpdate.mock.calls[0][0] as SyncPayload).rooms[0].after).toBe(0);
+
+      // Second poll
+      await vi.advanceTimersByTimeAsync(config.pollingInterval);
+      expect((apiClient.sendSyncUpdate.mock.calls[1][0] as SyncPayload).rooms[0].after).toBe(10);
+    });
+  });
+
+  describe('response processing', () => {
+    it('updates end_cursor from response', async () => {
+      apiClient.sendSyncUpdate.mockResolvedValue(emptyRoomResponse('postType/post:1', 42));
+      const callbacks = createMockCallbacks();
+
+      syncClient.start('postType/post:1', 100, [], callbacks);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(syncClient.getStatus().endCursor).toBe(42);
+    });
+
+    it('calls onAwareness with awareness state', async () => {
+      const awareness: AwarenessState = { '200': { cursor: { x: 1, y: 2 } } };
+      apiClient.sendSyncUpdate.mockResolvedValue(
+        emptyRoomResponse('postType/post:1', 0, awareness),
+      );
+      const callbacks = createMockCallbacks();
+
+      syncClient.start('postType/post:1', 100, [], callbacks);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(callbacks.onAwareness).toHaveBeenCalledWith(awareness);
+    });
+
+    it('calls onUpdate for each incoming update', async () => {
+      const updates: SyncUpdate[] = [
+        { type: SyncUpdateType.SYNC_STEP_1, data: 'data1' },
+        { type: SyncUpdateType.UPDATE, data: 'data2' },
+      ];
+      apiClient.sendSyncUpdate.mockResolvedValue(
+        emptyRoomResponse('postType/post:1', 0, {}, updates),
+      );
+      const callbacks = createMockCallbacks();
+
+      syncClient.start('postType/post:1', 100, [], callbacks);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(callbacks.onUpdate).toHaveBeenCalledTimes(2);
+      expect(callbacks.onUpdate).toHaveBeenCalledWith(updates[0]);
+      expect(callbacks.onUpdate).toHaveBeenCalledWith(updates[1]);
+    });
+
+    it('queues reply from onUpdate callback', async () => {
+      const serverUpdate: SyncUpdate = { type: SyncUpdateType.SYNC_STEP_1, data: 'sync1' };
+      const replyUpdate: SyncUpdate = { type: SyncUpdateType.SYNC_STEP_2, data: 'sync2' };
+
+      apiClient.sendSyncUpdate
+        .mockResolvedValueOnce(emptyRoomResponse('postType/post:1', 1, {}, [serverUpdate]))
+        .mockResolvedValueOnce(emptyRoomResponse('postType/post:1', 2));
+
+      const callbacks = createMockCallbacks({
+        onUpdate: vi.fn<(u: SyncUpdate) => SyncUpdate | null>().mockReturnValue(replyUpdate),
+      });
+
+      syncClient.start('postType/post:1', 100, [], callbacks);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // The reply should be queued and sent in next poll
+      await vi.advanceTimersByTimeAsync(config.pollingInterval);
+
+      const secondPayload = apiClient.sendSyncUpdate.mock.calls[1][0] as SyncPayload;
+      expect(secondPayload.rooms[0].updates).toContainEqual(replyUpdate);
+    });
+  });
+
+  describe('collaborator detection', () => {
+    it('detects collaborators from awareness and increases poll frequency', async () => {
+      // First poll: no collaborators
+      apiClient.sendSyncUpdate
+        .mockResolvedValueOnce(emptyRoomResponse('postType/post:1', 1, { '100': { cursor: null } }))
+        // Second poll: collaborator appears
+        .mockResolvedValueOnce(
+          emptyRoomResponse('postType/post:1', 2, {
+            '100': { cursor: null },
+            '200': { cursor: { x: 1, y: 1 } },
+          }),
+        )
+        .mockResolvedValue(emptyRoomResponse('postType/post:1', 3, {
+          '100': { cursor: null },
+          '200': { cursor: { x: 1, y: 1 } },
+        }));
+
+      const callbacks = createMockCallbacks();
+      syncClient.start('postType/post:1', 100, [], callbacks);
+
+      // First poll — solo
+      await vi.advanceTimersByTimeAsync(0);
+      expect(syncClient.getStatus().hasCollaborators).toBe(false);
+
+      // Second poll — collaborator detected
+      await vi.advanceTimersByTimeAsync(config.pollingInterval);
+      expect(syncClient.getStatus().hasCollaborators).toBe(true);
+
+      // Third poll should happen at faster interval
+      apiClient.sendSyncUpdate.mockClear();
+      await vi.advanceTimersByTimeAsync(config.pollingIntervalWithCollaborators);
+      expect(apiClient.sendSyncUpdate).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not count own clientId as collaborator', async () => {
+      apiClient.sendSyncUpdate.mockResolvedValue(
+        emptyRoomResponse('postType/post:1', 1, { '100': { cursor: { x: 0, y: 0 } } }),
+      );
+      const callbacks = createMockCallbacks();
+
+      syncClient.start('postType/post:1', 100, [], callbacks);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(syncClient.getStatus().hasCollaborators).toBe(false);
+    });
+
+    it('does not count null awareness entries as collaborators', async () => {
+      apiClient.sendSyncUpdate.mockResolvedValue(
+        emptyRoomResponse('postType/post:1', 1, { '100': { cursor: null }, '200': null }),
+      );
+      const callbacks = createMockCallbacks();
+
+      syncClient.start('postType/post:1', 100, [], callbacks);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(syncClient.getStatus().hasCollaborators).toBe(false);
+    });
+  });
+
+  describe('error handling', () => {
+    it('triggers exponential backoff on error', async () => {
+      apiClient.sendSyncUpdate
+        .mockRejectedValueOnce(new Error('Network error'))
+        .mockRejectedValueOnce(new Error('Network error'))
+        .mockResolvedValue(emptyRoomResponse('postType/post:1', 0));
+
+      const callbacks = createMockCallbacks();
+      syncClient.start('postType/post:1', 100, [], callbacks);
+
+      // First poll fails
+      await vi.advanceTimersByTimeAsync(0);
+      expect(callbacks.onStatusChange).toHaveBeenCalledWith('error');
+
+      // Backoff: initial interval * 2 = 2000ms
+      apiClient.sendSyncUpdate.mockClear();
+      await vi.advanceTimersByTimeAsync(1999);
+      expect(apiClient.sendSyncUpdate).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(apiClient.sendSyncUpdate).toHaveBeenCalledTimes(1);
+
+      // Second failure: backoff doubles to 4000ms
+      apiClient.sendSyncUpdate.mockClear();
+      await vi.advanceTimersByTimeAsync(3999);
+      expect(apiClient.sendSyncUpdate).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(apiClient.sendSyncUpdate).toHaveBeenCalledTimes(1);
+    });
+
+    it('caps backoff at maxErrorBackoff', async () => {
+      const shortConfig: SyncClientConfig = {
+        pollingInterval: 100,
+        pollingIntervalWithCollaborators: 50,
+        maxErrorBackoff: 500,
+      };
+      const client = new SyncClient(apiClient, shortConfig);
+
+      apiClient.sendSyncUpdate
+        .mockRejectedValueOnce(new Error('err')) // backoff: 200
+        .mockRejectedValueOnce(new Error('err')) // backoff: 400
+        .mockRejectedValueOnce(new Error('err')) // backoff: 500 (capped)
+        .mockRejectedValueOnce(new Error('err')) // backoff: 500 (still capped)
+        .mockResolvedValue(emptyRoomResponse('postType/post:1', 0));
+
+      const callbacks = createMockCallbacks();
+      client.start('postType/post:1', 100, [], callbacks);
+
+      // First poll fails
+      await vi.advanceTimersByTimeAsync(0);
+
+      // After 3 failures the backoff should be at the cap
+      await vi.advanceTimersByTimeAsync(200); // 2nd poll
+      await vi.advanceTimersByTimeAsync(400); // 3rd poll
+
+      // 4th poll should happen at 500ms (capped), not 800ms
+      apiClient.sendSyncUpdate.mockClear();
+      await vi.advanceTimersByTimeAsync(500);
+      expect(apiClient.sendSyncUpdate).toHaveBeenCalledTimes(1);
+
+      client.stop();
+    });
+
+    it('restores failed updates to front of queue (excluding compaction)', async () => {
+      const update1: SyncUpdate = { type: SyncUpdateType.UPDATE, data: 'u1' };
+      const compaction: SyncUpdate = { type: SyncUpdateType.COMPACTION, data: 'c1' };
+
+      apiClient.sendSyncUpdate
+        .mockRejectedValueOnce(new Error('Network error'))
+        .mockResolvedValue(emptyRoomResponse('postType/post:1', 1));
+
+      const callbacks = createMockCallbacks();
+      syncClient.start('postType/post:1', 100, [update1, compaction], callbacks);
+
+      // First poll drains queue and fails
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Check queue: compaction should be excluded, update1 should be restored
+      expect(syncClient.getStatus().queueSize).toBe(1);
+
+      // Next poll should send the restored update
+      await vi.advanceTimersByTimeAsync(config.pollingInterval * 2);
+      const payload = apiClient.sendSyncUpdate.mock.calls[1][0] as SyncPayload;
+      expect(payload.rooms[0].updates).toContainEqual(update1);
+      expect(payload.rooms[0].updates).not.toContainEqual(compaction);
+    });
+
+    it('resets backoff on successful poll', async () => {
+      apiClient.sendSyncUpdate
+        .mockRejectedValueOnce(new Error('err'))
+        .mockResolvedValueOnce(emptyRoomResponse('postType/post:1', 1))
+        .mockResolvedValue(emptyRoomResponse('postType/post:1', 2));
+
+      const callbacks = createMockCallbacks();
+      syncClient.start('postType/post:1', 100, [], callbacks);
+
+      // First poll fails — backoff to 2000ms
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Second poll succeeds
+      await vi.advanceTimersByTimeAsync(2000);
+
+      // Third poll should happen at normal interval (1000ms), not backoff
+      apiClient.sendSyncUpdate.mockClear();
+      await vi.advanceTimersByTimeAsync(config.pollingInterval);
+      expect(apiClient.sendSyncUpdate).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('compaction', () => {
+    it('calls onCompactionRequested when should_compact is true', async () => {
+      apiClient.sendSyncUpdate
+        .mockResolvedValueOnce(emptyRoomResponse('postType/post:1', 1, {}, [], true))
+        .mockResolvedValue(emptyRoomResponse('postType/post:1', 2));
+
+      const compactionUpdate: SyncUpdate = { type: SyncUpdateType.COMPACTION, data: 'compacted' };
+      const callbacks = createMockCallbacks({
+        onCompactionRequested: vi.fn<() => SyncUpdate>().mockReturnValue(compactionUpdate),
+      });
+
+      syncClient.start('postType/post:1', 100, [], callbacks);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(callbacks.onCompactionRequested).toHaveBeenCalledTimes(1);
+
+      // Compaction update should be sent in next poll
+      await vi.advanceTimersByTimeAsync(config.pollingInterval);
+      const payload = apiClient.sendSyncUpdate.mock.calls[1][0] as SyncPayload;
+      expect(payload.rooms[0].updates).toContainEqual(compactionUpdate);
+    });
+  });
+
+  describe('queueUpdate()', () => {
+    it('adds update to queue', () => {
+      const update: SyncUpdate = { type: SyncUpdateType.UPDATE, data: 'test' };
+      syncClient.queueUpdate(update);
+      expect(syncClient.getStatus().queueSize).toBe(1);
+    });
+
+    it('queued updates are sent in next poll', async () => {
+      apiClient.sendSyncUpdate
+        .mockResolvedValueOnce(emptyRoomResponse('postType/post:1', 1))
+        .mockResolvedValue(emptyRoomResponse('postType/post:1', 2));
+
+      const callbacks = createMockCallbacks();
+      syncClient.start('postType/post:1', 100, [], callbacks);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const update: SyncUpdate = { type: SyncUpdateType.UPDATE, data: 'queued-update' };
+      syncClient.queueUpdate(update);
+
+      await vi.advanceTimersByTimeAsync(config.pollingInterval);
+      const payload = apiClient.sendSyncUpdate.mock.calls[1][0] as SyncPayload;
+      expect(payload.rooms[0].updates).toContainEqual(update);
+    });
+  });
+
+  describe('getStatus()', () => {
+    it('reports initial state', () => {
+      const status = syncClient.getStatus();
+      expect(status.isPolling).toBe(false);
+      expect(status.hasCollaborators).toBe(false);
+      expect(status.endCursor).toBe(0);
+      expect(status.queueSize).toBe(0);
+    });
+
+    it('reports active state after start', async () => {
+      apiClient.sendSyncUpdate.mockResolvedValue(emptyRoomResponse('postType/post:1', 5));
+      const callbacks = createMockCallbacks();
+
+      syncClient.start('postType/post:1', 100, [], callbacks);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const status = syncClient.getStatus();
+      expect(status.isPolling).toBe(true);
+      expect(status.endCursor).toBe(5);
+    });
+  });
+});
