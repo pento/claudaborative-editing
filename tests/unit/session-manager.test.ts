@@ -27,6 +27,7 @@ vi.mock('../../src/wordpress/api-client.js', () => {
 const mockSyncStart = vi.fn();
 const mockSyncStop = vi.fn();
 const mockSyncQueueUpdate = vi.fn();
+const mockSyncFlushQueue = vi.fn();
 const mockSyncGetStatus = vi.fn().mockReturnValue({
   isPolling: true,
   hasCollaborators: false,
@@ -42,6 +43,7 @@ vi.mock('../../src/wordpress/sync-client.js', () => {
       this.start = mockSyncStart;
       this.stop = mockSyncStop;
       this.queueUpdate = mockSyncQueueUpdate;
+      this.flushQueue = mockSyncFlushQueue;
       this.getStatus = mockSyncGetStatus;
       this.waitForFirstPoll = mockWaitForFirstPoll;
     }),
@@ -260,7 +262,7 @@ describe('SessionManager', () => {
     it('modifies block content in doc', async () => {
       await connectAndOpen(session);
 
-      session.updateBlock('0', { content: 'Updated paragraph' });
+      await session.updateBlock('0', { content: 'Updated paragraph' });
 
       const text = session.readPost();
       expect(text).toContain('Updated paragraph');
@@ -268,28 +270,81 @@ describe('SessionManager', () => {
 
     it('throws when not editing', async () => {
       await connectSession(session);
-      expect(() => session.updateBlock('0', { content: 'test' })).toThrow(/requires state/);
+      await expect(session.updateBlock('0', { content: 'test' })).rejects.toThrow(/requires state/);
+    });
+
+    it('streams long content in chunks', async () => {
+      vi.useFakeTimers();
+      await connectAndOpen(session);
+
+      const longContent = 'This is a long paragraph that should be streamed in chunks to the browser.';
+      const promise = session.updateBlock('0', { content: longContent });
+
+      // Advance through all streaming delays
+      await vi.runAllTimersAsync();
+      await promise;
+
+      const text = session.readPost();
+      expect(text).toContain(longContent);
+      // flushQueue should have been called for streaming chunks
+      expect(mockSyncFlushQueue).toHaveBeenCalled();
+
+      vi.useRealTimers();
+    });
+
+    it('applies short content atomically without flushing', async () => {
+      await connectAndOpen(session);
+
+      await session.updateBlock('0', { content: 'Short' });
+
+      const text = session.readPost();
+      expect(text).toContain('Short');
+      // Short content should not trigger flush
+      expect(mockSyncFlushQueue).not.toHaveBeenCalled();
     });
   });
 
   describe('insertBlock()', () => {
     it('adds a new block to the doc', async () => {
+      vi.useFakeTimers();
       await connectAndOpen(session);
 
-      session.insertBlock(0, { name: 'core/paragraph', content: 'New first paragraph' });
+      const promise = session.insertBlock(0, { name: 'core/paragraph', content: 'New first paragraph' });
+      await vi.runAllTimersAsync();
+      await promise;
 
       const text = session.readPost();
       expect(text).toContain('New first paragraph');
+
+      vi.useRealTimers();
     });
 
     it('inserts at the correct position', async () => {
       await connectAndOpen(session);
 
-      session.insertBlock(1, { name: 'core/paragraph', content: 'Inserted at 1' });
+      await session.insertBlock(1, { name: 'core/paragraph', content: 'Inserted at 1' });
 
       // Read block at position 1
       const blockText = session.readBlock('1');
       expect(blockText).toContain('Inserted at 1');
+    });
+
+    it('streams content after block structure appears', async () => {
+      vi.useFakeTimers();
+      await connectAndOpen(session);
+
+      const longContent = 'This is a long paragraph that exceeds the streaming threshold for testing.';
+      const promise = session.insertBlock(0, { name: 'core/paragraph', content: longContent });
+      await vi.runAllTimersAsync();
+      await promise;
+
+      // Block should exist with full content
+      const block = session.readBlock('0');
+      expect(block).toContain(longContent);
+      // flushQueue should have been called for streaming
+      expect(mockSyncFlushQueue).toHaveBeenCalled();
+
+      vi.useRealTimers();
     });
   });
 
@@ -321,17 +376,22 @@ describe('SessionManager', () => {
 
   describe('replaceBlocks()', () => {
     it('replaces a range of blocks', async () => {
+      vi.useFakeTimers();
       await connectAndOpen(session);
 
-      session.replaceBlocks(0, 1, [
+      const promise = session.replaceBlocks(0, 1, [
         { name: 'core/paragraph', content: 'Replacement paragraph' },
       ]);
+      await vi.runAllTimersAsync();
+      await promise;
 
       const text = session.readPost();
       expect(text).toContain('Replacement paragraph');
       expect(text).not.toContain('First paragraph');
       // Heading should still be there
       expect(text).toContain('A Heading');
+
+      vi.useRealTimers();
     });
   });
 
@@ -339,7 +399,7 @@ describe('SessionManager', () => {
     it('updates the title in the doc', async () => {
       await connectAndOpen(session);
 
-      session.setTitle('New Title');
+      await session.setTitle('New Title');
 
       const text = session.readPost();
       expect(text).toContain('Title: "New Title"');
@@ -347,7 +407,23 @@ describe('SessionManager', () => {
 
     it('throws when not editing', async () => {
       await connectSession(session);
-      expect(() => session.setTitle('test')).toThrow(/requires state/);
+      await expect(session.setTitle('test')).rejects.toThrow(/requires state/);
+    });
+
+    it('streams long titles', async () => {
+      vi.useFakeTimers();
+      await connectAndOpen(session);
+
+      const longTitle = 'This Is A Very Long Title That Should Be Streamed';
+      const promise = session.setTitle(longTitle);
+      await vi.runAllTimersAsync();
+      await promise;
+
+      const text = session.readPost();
+      expect(text).toContain(longTitle);
+      expect(mockSyncFlushQueue).toHaveBeenCalled();
+
+      vi.useRealTimers();
     });
   });
 

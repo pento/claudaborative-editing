@@ -15,11 +15,16 @@ import {
   createCompactionUpdate,
   createUpdateFromChange,
 } from '../yjs/sync-protocol.js';
+import {
+  computeTextDelta,
+  findHtmlSafeChunkEnd,
+} from '../yjs/block-converter.js';
 import { parseBlocks, parsedBlockToBlock } from '../blocks/parser.js';
 import { renderPost, renderBlock } from '../blocks/renderer.js';
 import { buildAwarenessState, parseCollaborators } from './awareness.js';
 import { DEFAULT_SYNC_CONFIG } from '../wordpress/types.js';
 import type { Block, CollaboratorInfo, AwarenessLocalState } from '../yjs/types.js';
+import { isRichTextAttribute, getDefaultAttributes } from '../yjs/types.js';
 import type {
   WordPressConfig,
   WPUser,
@@ -33,6 +38,16 @@ export type SessionState = 'disconnected' | 'connected' | 'editing';
  * Used to distinguish local changes from sync updates when observing Y.Doc events.
  */
 const LOCAL_ORIGIN = 'local';
+
+/** Streaming chunk size range in characters. Randomized for a natural feel. */
+const STREAM_CHUNK_SIZE_MIN = 2;
+const STREAM_CHUNK_SIZE_MAX = 6;
+
+/** Delay between streaming chunks in milliseconds. */
+const STREAM_CHUNK_DELAY_MS = 200;
+
+/** Minimum text length to trigger streaming (short text is applied atomically). */
+const STREAM_THRESHOLD = 20;
 
 export class SessionManager {
   private apiClient: WordPressApiClient | null = null;
@@ -298,11 +313,15 @@ export class SessionManager {
 
   /**
    * Update a block's content and/or attributes.
+   *
+   * Rich-text attributes that exceed the streaming threshold are streamed
+   * in chunks so the browser sees progressive updates (like fast typing).
+   * Non-rich-text and short changes are applied atomically.
    */
-  updateBlock(
+  async updateBlock(
     index: string,
     changes: { content?: string; attributes?: Record<string, unknown> },
-  ): void {
+  ): Promise<void> {
     this.requireState('editing');
 
     // Set cursor position BEFORE the edit — pointing to existing items
@@ -311,35 +330,130 @@ export class SessionManager {
     // references new items the browser doesn't have yet (causing a crash).
     this.updateCursorPosition(index);
 
-    this.doc!.transact(() => {
-      this.documentManager.updateBlock(this.doc!, index, changes);
-    }, LOCAL_ORIGIN);
+    // Identify which changes should be streamed vs applied atomically.
+    // Look up the block name to determine rich-text attributes.
+    const block = this.documentManager.getBlockByIndex(this.doc!, index);
+    if (!block) return;
+
+    const streamTargets: Array<{ attrName: string; newValue: string }> = [];
+    const atomicChanges: { content?: string; attributes?: Record<string, unknown> } = {};
+
+    // Check 'content' field
+    if (changes.content !== undefined) {
+      if (isRichTextAttribute(block.name, 'content') && changes.content.length >= STREAM_THRESHOLD) {
+        streamTargets.push({ attrName: 'content', newValue: changes.content });
+      } else {
+        atomicChanges.content = changes.content;
+      }
+    }
+
+    // Check explicit attributes
+    if (changes.attributes) {
+      const atomicAttrs: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(changes.attributes)) {
+        if (
+          isRichTextAttribute(block.name, key) &&
+          typeof value === 'string' &&
+          value.length >= STREAM_THRESHOLD
+        ) {
+          streamTargets.push({ attrName: key, newValue: value });
+        } else {
+          atomicAttrs[key] = value;
+        }
+      }
+      if (Object.keys(atomicAttrs).length > 0) {
+        atomicChanges.attributes = atomicAttrs;
+      }
+    }
+
+    // Apply atomic changes (non-streaming) in one transaction
+    if (atomicChanges.content !== undefined || atomicChanges.attributes) {
+      this.doc!.transact(() => {
+        this.documentManager.updateBlock(this.doc!, index, atomicChanges);
+      }, LOCAL_ORIGIN);
+    }
+
+    // Stream each rich-text attribute
+    for (const target of streamTargets) {
+      let ytext = this.documentManager.getBlockAttributeYText(this.doc!, index, target.attrName);
+      if (!ytext) {
+        // Y.Text doesn't exist yet — create it atomically before streaming
+        this.doc!.transact(() => {
+          this.documentManager.updateBlock(this.doc!, index, {
+            ...(target.attrName === 'content' ? { content: '' } : { attributes: { [target.attrName]: '' } }),
+          });
+        }, LOCAL_ORIGIN);
+        ytext = this.documentManager.getBlockAttributeYText(this.doc!, index, target.attrName);
+      }
+      if (ytext) {
+        await this.streamTextToYText(ytext, target.newValue, index);
+      }
+    }
   }
 
   /**
    * Insert a new block at position.
+   *
+   * The block structure (with empty content) is inserted atomically,
+   * then rich-text content is streamed in progressively.
    */
-  insertBlock(
+  async insertBlock(
     position: number,
     block: { name: string; content?: string; attributes?: Record<string, unknown> },
-  ): void {
+  ): Promise<void> {
     this.requireState('editing');
+
+    // Determine which attributes should be streamed
+    const streamTargets: Array<{ attrName: string; value: string }> = [];
+    const defaults = getDefaultAttributes(block.name);
+    const attrs = { ...defaults, ...block.attributes };
+
+    if (block.content !== undefined) {
+      if (
+        isRichTextAttribute(block.name, 'content') &&
+        block.content.length >= STREAM_THRESHOLD
+      ) {
+        streamTargets.push({ attrName: 'content', value: block.content });
+        attrs.content = ''; // Insert with empty content, stream later
+      } else {
+        attrs.content = block.content;
+      }
+    }
+
+    // Check other attributes for streaming
+    for (const [key, value] of Object.entries(attrs)) {
+      if (
+        key !== 'content' &&
+        isRichTextAttribute(block.name, key) &&
+        typeof value === 'string' &&
+        value.length >= STREAM_THRESHOLD
+      ) {
+        streamTargets.push({ attrName: key, value });
+        attrs[key] = ''; // Insert with empty value, stream later
+      }
+    }
 
     const fullBlock: Block = {
       name: block.name,
       clientId: crypto.randomUUID(),
-      attributes: { ...block.attributes },
+      attributes: attrs,
       innerBlocks: [],
+      isValid: true,
     };
 
-    // Set content as an attribute if provided
-    if (block.content !== undefined) {
-      fullBlock.attributes.content = block.content;
-    }
-
+    // Insert block structure atomically
     this.doc!.transact(() => {
       this.documentManager.insertBlock(this.doc!, position, fullBlock);
     }, LOCAL_ORIGIN);
+
+    // Stream rich-text content into the new block
+    const blockIndex = String(position);
+    for (const target of streamTargets) {
+      const ytext = this.documentManager.getBlockAttributeYText(this.doc!, blockIndex, target.attrName);
+      if (ytext) {
+        await this.streamTextToYText(ytext, target.value, blockIndex);
+      }
+    }
   }
 
   /**
@@ -364,8 +478,11 @@ export class SessionManager {
 
   /**
    * Replace a range of blocks with new ones.
+   *
+   * Old blocks are removed and new block structures (with empty content)
+   * are inserted atomically. Rich-text content is then streamed progressively.
    */
-  replaceBlocks(
+  async replaceBlocks(
     startIndex: number,
     count: number,
     newBlocks: Array<{
@@ -373,22 +490,51 @@ export class SessionManager {
       content?: string;
       attributes?: Record<string, unknown>;
     }>,
-  ): void {
+  ): Promise<void> {
     this.requireState('editing');
 
+    // Prepare blocks: separate streamable content from atomic structure
+    const streamMap: Array<Array<{ attrName: string; value: string }>> = [];
     const fullBlocks: Block[] = newBlocks.map((b) => {
-      const attrs = { ...b.attributes };
+      const defaults = getDefaultAttributes(b.name);
+      const attrs = { ...defaults, ...b.attributes };
+      const targets: Array<{ attrName: string; value: string }> = [];
+
       if (b.content !== undefined) {
-        attrs.content = b.content;
+        if (
+          isRichTextAttribute(b.name, 'content') &&
+          b.content.length >= STREAM_THRESHOLD
+        ) {
+          targets.push({ attrName: 'content', value: b.content });
+          attrs.content = '';
+        } else {
+          attrs.content = b.content;
+        }
       }
+
+      for (const [key, value] of Object.entries(attrs)) {
+        if (
+          key !== 'content' &&
+          isRichTextAttribute(b.name, key) &&
+          typeof value === 'string' &&
+          value.length >= STREAM_THRESHOLD
+        ) {
+          targets.push({ attrName: key, value });
+          attrs[key] = '';
+        }
+      }
+
+      streamMap.push(targets);
       return {
         name: b.name,
         clientId: crypto.randomUUID(),
         attributes: attrs,
         innerBlocks: [],
+        isValid: true,
       };
     });
 
+    // Remove old blocks and insert new structures atomically
     this.doc!.transact(() => {
       this.documentManager.removeBlocks(this.doc!, startIndex, count);
       for (let i = 0; i < fullBlocks.length; i++) {
@@ -399,16 +545,48 @@ export class SessionManager {
         );
       }
     }, LOCAL_ORIGIN);
+
+    // Stream content for each new block
+    for (let i = 0; i < streamMap.length; i++) {
+      for (const target of streamMap[i]) {
+        const blockIndex = String(startIndex + i);
+        const ytext = this.documentManager.getBlockAttributeYText(this.doc!, blockIndex, target.attrName);
+        if (ytext) {
+          await this.streamTextToYText(ytext, target.value, blockIndex);
+        }
+      }
+    }
   }
 
   /**
    * Set the post title.
+   *
+   * Long titles are streamed progressively; short titles are applied atomically.
    */
-  setTitle(title: string): void {
+  async setTitle(title: string): Promise<void> {
     this.requireState('editing');
-    this.doc!.transact(() => {
-      this.documentManager.setTitle(this.doc!, title);
-    }, LOCAL_ORIGIN);
+
+    if (title.length < STREAM_THRESHOLD) {
+      this.doc!.transact(() => {
+        this.documentManager.setTitle(this.doc!, title);
+      }, LOCAL_ORIGIN);
+      return;
+    }
+
+    // Get the title Y.Text
+    const documentMap = this.documentManager.getDocumentMap(this.doc!);
+    let ytext = documentMap.get('title');
+    if (!(ytext instanceof Y.Text)) {
+      // Create Y.Text if it doesn't exist
+      this.doc!.transact(() => {
+        const newYText = new Y.Text();
+        documentMap.set('title', newYText);
+      }, LOCAL_ORIGIN);
+      ytext = documentMap.get('title');
+    }
+    if (ytext instanceof Y.Text) {
+      await this.streamTextToYText(ytext, title);
+    }
   }
 
   /**
@@ -453,6 +631,107 @@ export class SessionManager {
 
   getUser(): WPUser | null {
     return this.user;
+  }
+
+  /**
+   * Stream text into a Y.Text in chunks, flushing the sync client between
+   * each chunk so the browser sees progressive updates (like fast typing).
+   *
+   * 1. Compute the delta between the current and target text.
+   * 2. Apply retain + delete atomically (old text removed immediately).
+   * 3. Split the insert text into HTML-safe chunks (~20 chars each).
+   * 4. For each chunk: apply in its own transaction, flush, and delay.
+   */
+  private async streamTextToYText(ytext: Y.Text, newValue: string, blockIndex?: string): Promise<void> {
+    const oldValue = ytext.toString();
+    const delta = computeTextDelta(oldValue, newValue);
+    if (!delta) return;
+
+    // Set cursor to the block being edited
+    if (blockIndex !== undefined) {
+      this.updateCursorPosition(blockIndex);
+    }
+
+    // Apply retain + delete atomically (remove old text immediately)
+    if (delta.deleteCount > 0) {
+      this.doc!.transact(() => {
+        const ops: Array<{ retain?: number; delete?: number }> = [];
+        if (delta.prefixLen > 0) ops.push({ retain: delta.prefixLen });
+        ops.push({ delete: delta.deleteCount });
+        ytext.applyDelta(ops);
+      }, LOCAL_ORIGIN);
+
+      if (this.syncClient) {
+        this.syncClient.flushQueue();
+      }
+    }
+
+    // If there's nothing to insert, we're done
+    if (delta.insertText.length === 0) return;
+
+    // For short inserts, apply atomically (no streaming overhead)
+    if (delta.insertText.length < STREAM_THRESHOLD) {
+      this.doc!.transact(() => {
+        const ops: Array<{ retain?: number; insert?: string }> = [];
+        if (delta.prefixLen > 0) ops.push({ retain: delta.prefixLen });
+        ops.push({ insert: delta.insertText });
+        ytext.applyDelta(ops);
+      }, LOCAL_ORIGIN);
+      return;
+    }
+
+    // Stream the insert text in chunks.
+    // Use Yjs relative positions to track the insertion point so that
+    // concurrent edits (e.g., user typing earlier in the block) don't
+    // throw off our position. The relative position is created right after
+    // inserting a chunk (anchored to a CRDT item), then resolved AFTER the
+    // flush+delay when remote edits may have shifted absolute positions.
+    let offset = 0;
+    let insertPos = delta.prefixLen;
+    let nextInsertRelPos: Y.RelativePosition | null = null;
+
+    while (offset < delta.insertText.length) {
+      // Early exit: bail if session is no longer active
+      if (!this.doc || !this.syncClient) return;
+
+      // If we have a relative position from the previous chunk, resolve it
+      // now (after the delay, when remote edits may have been applied).
+      if (nextInsertRelPos) {
+        const absPos = Y.createAbsolutePositionFromRelativePosition(nextInsertRelPos, this.doc);
+        if (absPos) {
+          insertPos = absPos.index;
+        }
+        nextInsertRelPos = null;
+      }
+
+      const chunkSize = STREAM_CHUNK_SIZE_MIN + Math.floor(Math.random() * (STREAM_CHUNK_SIZE_MAX - STREAM_CHUNK_SIZE_MIN + 1));
+      const chunkEnd = findHtmlSafeChunkEnd(delta.insertText, offset, chunkSize);
+      const chunk = delta.insertText.slice(offset, chunkEnd);
+
+      this.doc.transact(() => {
+        const ops: Array<{ retain?: number; insert?: string }> = [];
+        if (insertPos > 0) ops.push({ retain: insertPos });
+        ops.push({ insert: chunk });
+        ytext.applyDelta(ops);
+      }, LOCAL_ORIGIN);
+
+      // Anchor a relative position at the end of what we just inserted.
+      // This tracks the CRDT item, not the absolute offset, so it survives
+      // concurrent edits that shift positions.
+      insertPos += chunk.length;
+      nextInsertRelPos = Y.createRelativePositionFromTypeIndex(ytext, insertPos);
+
+      offset = chunkEnd;
+
+      // Update cursor to the end of the inserted text so far
+      this.updateCursorOffset(insertPos);
+
+      // Flush and delay between chunks (but not after the last one)
+      if (offset < delta.insertText.length) {
+        this.syncClient.flushQueue();
+        await new Promise((resolve) => setTimeout(resolve, STREAM_CHUNK_DELAY_MS));
+      }
+    }
   }
 
   /**
@@ -501,6 +780,18 @@ export class SessionManager {
         },
       },
     };
+  }
+
+  /**
+   * Update just the cursor offset within the current awareness position.
+   * Used during streaming to move the cursor forward as text is typed.
+   */
+  private updateCursorOffset(offset: number): void {
+    if (!this.awarenessState?.editorState?.selection) return;
+    const selection = this.awarenessState.editorState.selection;
+    if (selection.type === 'cursor') {
+      selection.cursorPosition.absoluteOffset = offset;
+    }
   }
 
   // --- Internal ---

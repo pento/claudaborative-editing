@@ -36,6 +36,8 @@ export class SyncClient {
   private hasCollaborators: boolean = false;
   private currentBackoff: number;
   private isPolling: boolean = false;
+  private pollInProgress: boolean = false;
+  private flushRequested: boolean = false;
   private room: string = '';
   private clientId: number = 0;
 
@@ -105,6 +107,30 @@ export class SyncClient {
   }
 
   /**
+   * Flush the outgoing queue by triggering an immediate poll.
+   *
+   * If a poll is already in progress, sets a flag so that another poll
+   * is triggered immediately after the current one completes. This avoids
+   * concurrent poll execution while ensuring the flush is honoured.
+   */
+  flushQueue(): void {
+    if (!this.isPolling) return;
+
+    if (this.pollInProgress) {
+      // A poll is already running — request a follow-up poll when it finishes
+      this.flushRequested = true;
+      return;
+    }
+
+    // Cancel the scheduled timer and poll immediately
+    if (this.pollTimer !== null) {
+      clearTimeout(this.pollTimer);
+      this.pollTimer = null;
+    }
+    this.pollTimer = setTimeout(() => this.poll(), 0);
+  }
+
+  /**
    * Add an update to the outgoing queue.
    */
   queueUpdate(update: SyncUpdate): void {
@@ -137,6 +163,14 @@ export class SyncClient {
     if (!this.isPolling || !this.callbacks) {
       return;
     }
+
+    // Re-entrancy guard: if a poll is already running, skip
+    if (this.pollInProgress) {
+      return;
+    }
+
+    this.pollInProgress = true;
+    this.flushRequested = false;
 
     // Drain the queue: take all pending updates.
     // When paused, only initial/sync updates are sent (queue is drained regardless);
@@ -191,7 +225,19 @@ export class SyncClient {
       );
     }
 
-    this.scheduleNextPoll();
+    this.pollInProgress = false;
+
+    // If a flush was requested during this poll, trigger an immediate follow-up
+    if (this.flushRequested) {
+      this.flushRequested = false;
+      if (this.pollTimer !== null) {
+        clearTimeout(this.pollTimer);
+        this.pollTimer = null;
+      }
+      this.pollTimer = setTimeout(() => this.poll(), 0);
+    } else {
+      this.scheduleNextPoll();
+    }
   }
 
   /**

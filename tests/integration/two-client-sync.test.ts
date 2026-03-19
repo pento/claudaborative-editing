@@ -265,6 +265,61 @@ describe('Two-client sync integration', () => {
     expect(contentA).toContain('quick brown');
   });
 
+  it('syncs chunked delta inserts from one client to another', () => {
+    const manager = new DocumentManager();
+    const docA = manager.createDoc();
+
+    // Set initial content
+    manager.setBlocks(docA, [makeParagraph('Hello')]);
+
+    // Sync to client B
+    const docB = syncNewClient(docA);
+    expect(manager.getBlocks(docB)[0].attributes.content).toBe('Hello');
+
+    // Collect updates from A
+    const updatesFromA: SyncUpdate[] = [];
+    docA.on('update', (update: Uint8Array) => {
+      updatesFromA.push(createUpdateFromChange(update));
+    });
+
+    // Simulate chunked insertion: apply delta in multiple transactions
+    // (This is what streamTextToYText does internally)
+    const blocksArray = docA.getMap('document').get('blocks') as Y.Array<Y.Map<unknown>>;
+    const blockMap = blocksArray.get(0);
+    const attrMap = blockMap.get('attributes') as Y.Map<unknown>;
+    const ytext = attrMap.get('content') as Y.Text;
+
+    // First, delete old content (retain "Hello" prefix isn't needed here, full replace)
+    docA.transact(() => {
+      ytext.applyDelta([{ retain: 5 }]); // retain "Hello"
+    });
+
+    // Chunk 1: insert " world, this is"
+    docA.transact(() => {
+      ytext.applyDelta([{ retain: 5 }, { insert: ' world, this is' }]);
+    });
+
+    // Chunk 2: insert " a test of chunked"
+    docA.transact(() => {
+      ytext.applyDelta([{ retain: 20 }, { insert: ' a test of chunked' }]);
+    });
+
+    // Chunk 3: insert " streaming"
+    docA.transact(() => {
+      ytext.applyDelta([{ retain: 38 }, { insert: ' streaming' }]);
+    });
+
+    // Apply all updates to B
+    for (const update of updatesFromA) {
+      processIncomingUpdate(docB, update);
+    }
+
+    // Both should have the full text
+    const expectedText = 'Hello world, this is a test of chunked streaming';
+    expect(manager.getBlocks(docA)[0].attributes.content).toBe(expectedText);
+    expect(manager.getBlocks(docB)[0].attributes.content).toBe(expectedText);
+  });
+
   it('compaction transfers full document state', () => {
     const manager = new DocumentManager();
     const docA = manager.createDoc();

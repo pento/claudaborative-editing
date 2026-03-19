@@ -5,6 +5,8 @@ import {
   yMapToBlock,
   updateYText,
   deltaUpdateYText,
+  computeTextDelta,
+  findHtmlSafeChunkEnd,
 } from '#yjs/block-converter';
 import type { Block } from '#yjs/types';
 
@@ -370,5 +372,107 @@ describe('deltaUpdateYText', () => {
     expect(result).toContain('XXX');
     expect(result).toContain('BBB');
     expect(result).toContain('ZZZ');
+  });
+});
+
+describe('computeTextDelta', () => {
+  it('returns null for identical strings', () => {
+    expect(computeTextDelta('hello', 'hello')).toBeNull();
+  });
+
+  it('returns null for two empty strings', () => {
+    expect(computeTextDelta('', '')).toBeNull();
+  });
+
+  it('computes delta for prefix change', () => {
+    const delta = computeTextDelta('Hello world', 'Howdy world');
+    expect(delta).not.toBeNull();
+    expect(delta!.prefixLen).toBe(1); // 'H' is common
+    expect(delta!.deleteCount).toBe(4); // 'ello' deleted
+    expect(delta!.insertText).toBe('owdy');
+  });
+
+  it('computes delta for suffix change', () => {
+    const delta = computeTextDelta('Hello world', 'Hello there');
+    expect(delta).not.toBeNull();
+    expect(delta!.prefixLen).toBe(6); // 'Hello ' is common
+    expect(delta!.deleteCount).toBe(5); // 'world' deleted
+    expect(delta!.insertText).toBe('there');
+  });
+
+  it('computes delta for middle insertion', () => {
+    const delta = computeTextDelta('Hello world', 'Hello beautiful world');
+    expect(delta).not.toBeNull();
+    expect(delta!.prefixLen).toBe(6); // 'Hello '
+    expect(delta!.deleteCount).toBe(0);
+    expect(delta!.insertText).toBe('beautiful ');
+  });
+
+  it('computes delta for complete replacement', () => {
+    const delta = computeTextDelta('abc', 'xyz');
+    expect(delta).not.toBeNull();
+    expect(delta!.prefixLen).toBe(0);
+    expect(delta!.deleteCount).toBe(3);
+    expect(delta!.insertText).toBe('xyz');
+  });
+
+  it('computes delta for empty to non-empty', () => {
+    const delta = computeTextDelta('', 'Hello');
+    expect(delta).not.toBeNull();
+    expect(delta!.prefixLen).toBe(0);
+    expect(delta!.deleteCount).toBe(0);
+    expect(delta!.insertText).toBe('Hello');
+  });
+
+  it('computes delta for non-empty to empty', () => {
+    const delta = computeTextDelta('Hello', '');
+    expect(delta).not.toBeNull();
+    expect(delta!.prefixLen).toBe(0);
+    expect(delta!.deleteCount).toBe(5);
+    expect(delta!.insertText).toBe('');
+  });
+});
+
+describe('findHtmlSafeChunkEnd', () => {
+  it('returns preferred end for plain text', () => {
+    expect(findHtmlSafeChunkEnd('Hello world, this is a test', 0, 10)).toBe(10);
+  });
+
+  it('returns text length when chunk reaches end', () => {
+    expect(findHtmlSafeChunkEnd('short', 0, 20)).toBe(5);
+  });
+
+  it('extends past closing > when chunk ends inside an HTML tag', () => {
+    const text = 'Hello <strong>bold text</strong> end';
+    // At offset 0 with size 10, we'd end at position 10 which is inside <strong>
+    expect(findHtmlSafeChunkEnd(text, 0, 10)).toBe(14); // past '>'
+  });
+
+  it('does not extend when chunk ends after a closing tag', () => {
+    const text = 'Hello <b>x</b> rest';
+    // At offset 0 with size 15, we end at position 15 which is after </b>
+    expect(findHtmlSafeChunkEnd(text, 0, 15)).toBe(15);
+  });
+
+  it('handles self-closing tags', () => {
+    const text = 'Hello <br/> world';
+    // At offset 0 with size 8, ends inside <br/>
+    expect(findHtmlSafeChunkEnd(text, 0, 8)).toBe(11); // past '>'
+  });
+
+  it('handles chunk starting mid-text', () => {
+    const text = 'aaaa<em>bbb</em>cccc';
+    // At offset 2 with size 5, we'd end at 7 which is inside <em>
+    expect(findHtmlSafeChunkEnd(text, 2, 5)).toBe(8); // past '>'
+  });
+
+  it('returns text length when no closing bracket found', () => {
+    const text = 'Hello <unclosed';
+    expect(findHtmlSafeChunkEnd(text, 0, 10)).toBe(15);
+  });
+
+  it('handles text with no HTML', () => {
+    const text = 'Just plain text without any tags';
+    expect(findHtmlSafeChunkEnd(text, 5, 10)).toBe(15);
   });
 });

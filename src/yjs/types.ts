@@ -70,6 +70,27 @@ export const RICH_TEXT_ATTRIBUTES: Record<string, Set<string>> = {
 };
 
 /**
+ * Default attribute values by block type.
+ *
+ * Gutenberg validates blocks against their schema and marks them as invalid
+ * if expected attributes are missing. This map provides the default values
+ * that Gutenberg would normally set when creating a block through the editor.
+ */
+export const DEFAULT_BLOCK_ATTRIBUTES: Record<string, Record<string, unknown>> = {
+  'core/paragraph': { dropCap: false },
+  'core/heading': { level: 2 },
+  'core/list': { ordered: false },
+};
+
+/**
+ * Get default attributes for a block type.
+ * Returns an empty object if no defaults are defined.
+ */
+export function getDefaultAttributes(blockName: string): Record<string, unknown> {
+  return DEFAULT_BLOCK_ATTRIBUTES[blockName] ?? {};
+}
+
+/**
  * Check if a block attribute is rich-text typed.
  */
 export function isRichTextAttribute(

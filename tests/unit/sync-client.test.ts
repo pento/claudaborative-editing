@@ -444,6 +444,99 @@ describe('SyncClient', () => {
     });
   });
 
+  describe('flushQueue()', () => {
+    it('triggers an immediate poll', async () => {
+      apiClient.sendSyncUpdate
+        .mockResolvedValueOnce(emptyRoomResponse('postType/post:1', 1))
+        .mockResolvedValue(emptyRoomResponse('postType/post:1', 2));
+
+      const callbacks = createMockCallbacks();
+      syncClient.start('postType/post:1', 100, [], callbacks);
+      await vi.advanceTimersByTimeAsync(0); // First poll
+
+      // Queue an update and flush
+      syncClient.queueUpdate({ type: SyncUpdateType.UPDATE, data: 'flush-me' });
+      apiClient.sendSyncUpdate.mockClear();
+      syncClient.flushQueue();
+
+      // The flush schedules a setTimeout(0), so advance to fire it
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(apiClient.sendSyncUpdate).toHaveBeenCalledTimes(1);
+      const payload = apiClient.sendSyncUpdate.mock.calls[0][0] as SyncPayload;
+      expect(payload.rooms[0].updates).toContainEqual({
+        type: SyncUpdateType.UPDATE,
+        data: 'flush-me',
+      });
+    });
+
+    it('is a no-op when stopped', () => {
+      const callbacks = createMockCallbacks();
+      apiClient.sendSyncUpdate.mockResolvedValue(emptyRoomResponse('postType/post:1', 0));
+
+      syncClient.start('postType/post:1', 100, [], callbacks);
+      syncClient.stop();
+
+      // Should not throw
+      syncClient.flushQueue();
+    });
+
+    it('sets flushRequested during active poll for follow-up', async () => {
+      // Use a delayed mock to simulate a slow poll
+      let resolvePoll!: (value: SyncResponse) => void;
+      apiClient.sendSyncUpdate
+        .mockReturnValueOnce(new Promise<SyncResponse>((resolve) => { resolvePoll = resolve; }))
+        .mockResolvedValue(emptyRoomResponse('postType/post:1', 2));
+
+      const callbacks = createMockCallbacks();
+      syncClient.start('postType/post:1', 100, [], callbacks);
+
+      // Trigger first poll (it will be pending because of the unresolved promise)
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Now call flushQueue while poll is in progress
+      syncClient.queueUpdate({ type: SyncUpdateType.UPDATE, data: 'during-poll' });
+      syncClient.flushQueue();
+
+      // Resolve the pending poll
+      resolvePoll(emptyRoomResponse('postType/post:1', 1));
+      await vi.advanceTimersByTimeAsync(0);
+
+      // A follow-up poll should have been triggered
+      await vi.advanceTimersByTimeAsync(0);
+      expect(apiClient.sendSyncUpdate).toHaveBeenCalledTimes(2);
+    });
+
+    it('re-entrancy guard prevents concurrent polls', async () => {
+      let resolvePoll!: (value: SyncResponse) => void;
+      apiClient.sendSyncUpdate
+        .mockReturnValueOnce(new Promise<SyncResponse>((resolve) => { resolvePoll = resolve; }))
+        .mockResolvedValue(emptyRoomResponse('postType/post:1', 2));
+
+      const callbacks = createMockCallbacks();
+      syncClient.start('postType/post:1', 100, [], callbacks);
+
+      // Trigger first poll (pending)
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Multiple flushes during active poll should not cause multiple concurrent polls
+      syncClient.flushQueue();
+      syncClient.flushQueue();
+      syncClient.flushQueue();
+
+      // Still only one call to sendSyncUpdate
+      expect(apiClient.sendSyncUpdate).toHaveBeenCalledTimes(1);
+
+      // Resolve the pending poll
+      resolvePoll(emptyRoomResponse('postType/post:1', 1));
+      await vi.advanceTimersByTimeAsync(0);
+
+      // One follow-up poll should fire
+      await vi.advanceTimersByTimeAsync(0);
+      expect(apiClient.sendSyncUpdate).toHaveBeenCalledTimes(2);
+    });
+  });
+
   describe('getStatus()', () => {
     it('reports initial state', () => {
       const status = syncClient.getStatus();

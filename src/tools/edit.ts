@@ -13,7 +13,7 @@ export function registerEditTools(server: McpServer, session: SessionManager): v
     },
     async ({ index, content, attributes }) => {
       try {
-        session.updateBlock(index, { content, attributes });
+        await session.updateBlock(index, { content, attributes });
         const updated = session.readBlock(index);
         return {
           content: [{ type: 'text' as const, text: `Updated block ${index}.\n\n${updated}` }],
@@ -38,7 +38,7 @@ export function registerEditTools(server: McpServer, session: SessionManager): v
     },
     async ({ position, name, content, attributes }) => {
       try {
-        session.insertBlock(position, { name, content, attributes });
+        await session.insertBlock(position, { name, content, attributes });
         return {
           content: [{ type: 'text' as const, text: `Inserted ${name} block at position ${position}.` }],
         };
@@ -116,7 +116,7 @@ export function registerEditTools(server: McpServer, session: SessionManager): v
     },
     async ({ startIndex, count, blocks }) => {
       try {
-        session.replaceBlocks(startIndex, count, blocks);
+        await session.replaceBlocks(startIndex, count, blocks);
         return {
           content: [{
             type: 'text' as const,
@@ -140,7 +140,7 @@ export function registerEditTools(server: McpServer, session: SessionManager): v
     },
     async ({ title }) => {
       try {
-        session.setTitle(title);
+        await session.setTitle(title);
         return {
           content: [{ type: 'text' as const, text: `Title set to "${title}".` }],
         };
@@ -152,4 +152,5 @@ export function registerEditTools(server: McpServer, session: SessionManager): v
       }
     },
   );
+
 }

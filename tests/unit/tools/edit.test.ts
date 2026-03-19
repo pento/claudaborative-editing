@@ -57,9 +57,9 @@ describe('edit tools', () => {
     });
 
     it('returns error when not editing', async () => {
-      (session.updateBlock as ReturnType<typeof import('vitest').vi.fn>).mockImplementation(() => {
-        throw new Error("Operation requires state editing, but current state is 'connected'");
-      });
+      (session.updateBlock as ReturnType<typeof import('vitest').vi.fn>).mockRejectedValue(
+        new Error("Operation requires state editing, but current state is 'connected'"),
+      );
 
       const tool = server.registeredTools.get('wp_update_block')!;
       const result = await tool.handler({ index: '0', content: 'test' });
@@ -87,9 +87,9 @@ describe('edit tools', () => {
     });
 
     it('returns error on failure', async () => {
-      (session.insertBlock as ReturnType<typeof import('vitest').vi.fn>).mockImplementation(() => {
-        throw new Error("Operation requires state editing, but current state is 'disconnected'");
-      });
+      (session.insertBlock as ReturnType<typeof import('vitest').vi.fn>).mockRejectedValue(
+        new Error("Operation requires state editing, but current state is 'disconnected'"),
+      );
 
       const tool = server.registeredTools.get('wp_insert_block')!;
       const result = await tool.handler({ position: 0, name: 'core/paragraph' });
@@ -156,9 +156,9 @@ describe('edit tools', () => {
     });
 
     it('returns error when not editing', async () => {
-      (session.setTitle as ReturnType<typeof import('vitest').vi.fn>).mockImplementation(() => {
-        throw new Error("Operation requires state editing, but current state is 'disconnected'");
-      });
+      (session.setTitle as ReturnType<typeof import('vitest').vi.fn>).mockRejectedValue(
+        new Error("Operation requires state editing, but current state is 'disconnected'"),
+      );
 
       const tool = server.registeredTools.get('wp_set_title')!;
       const result = await tool.handler({ title: 'Test' });

@@ -376,6 +376,59 @@ describe('DocumentManager', () => {
     });
   });
 
+  describe('getBlockAttributeYText', () => {
+    it('returns Y.Text for rich-text attributes', () => {
+      const { manager, doc } = createManager();
+      manager.setBlocks(doc, [makeParagraph('Hello')]);
+
+      const ytext = manager.getBlockAttributeYText(doc, '0', 'content');
+      expect(ytext).toBeInstanceOf(Y.Text);
+      expect(ytext!.toString()).toBe('Hello');
+    });
+
+    it('returns null for non-rich-text attributes', () => {
+      const { manager, doc } = createManager();
+      manager.setBlocks(doc, [makeHeading('Title', 2)]);
+
+      const ytext = manager.getBlockAttributeYText(doc, '0', 'level');
+      expect(ytext).toBeNull();
+    });
+
+    it('returns null for invalid block index', () => {
+      const { manager, doc } = createManager();
+      manager.setBlocks(doc, [makeParagraph('Only')]);
+
+      const ytext = manager.getBlockAttributeYText(doc, '5', 'content');
+      expect(ytext).toBeNull();
+    });
+
+    it('returns null for non-existent attribute', () => {
+      const { manager, doc } = createManager();
+      manager.setBlocks(doc, [makeParagraph('Hello')]);
+
+      const ytext = manager.getBlockAttributeYText(doc, '0', 'nonexistent');
+      expect(ytext).toBeNull();
+    });
+
+    it('works for nested block attributes', () => {
+      const { manager, doc } = createManager();
+      manager.setBlocks(doc, [makeList(['Item A', 'Item B'])]);
+
+      const ytext = manager.getBlockAttributeYText(doc, '0.1', 'content');
+      expect(ytext).toBeInstanceOf(Y.Text);
+      expect(ytext!.toString()).toBe('Item B');
+    });
+
+    it('delegates correctly from getBlockContentYText', () => {
+      const { manager, doc } = createManager();
+      manager.setBlocks(doc, [makeParagraph('Hello')]);
+
+      const viaContent = manager.getBlockContentYText(doc, '0');
+      const viaAttr = manager.getBlockAttributeYText(doc, '0', 'content');
+      expect(viaContent).toBe(viaAttr);
+    });
+  });
+
   describe('properties', () => {
     it('gets and sets scalar properties', () => {
       const { manager, doc } = createManager();

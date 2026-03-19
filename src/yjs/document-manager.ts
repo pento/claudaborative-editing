@@ -319,16 +319,25 @@ export class DocumentManager {
   }
 
   /**
-   * Get the raw Y.Text for a block's content attribute.
-   * Returns null if the block or content attribute doesn't exist.
+   * Get the raw Y.Text for a block attribute.
+   * Returns null if the block doesn't exist, the attribute doesn't exist,
+   * or the attribute is not a Y.Text (i.e., not a rich-text attribute).
    */
-  getBlockContentYText(doc: Y.Doc, index: string): Y.Text | null {
+  getBlockAttributeYText(doc: Y.Doc, index: string, attrName: string): Y.Text | null {
     const ymap = this._resolveBlockYMap(doc, index);
     if (!ymap) return null;
     const attrMap = ymap.get('attributes') as Y.Map<unknown> | undefined;
     if (!attrMap) return null;
-    const content = attrMap.get('content');
-    return content instanceof Y.Text ? content : null;
+    const attr = attrMap.get(attrName);
+    return attr instanceof Y.Text ? attr : null;
+  }
+
+  /**
+   * Get the raw Y.Text for a block's content attribute.
+   * Returns null if the block or content attribute doesn't exist.
+   */
+  getBlockContentYText(doc: Y.Doc, index: string): Y.Text | null {
+    return this.getBlockAttributeYText(doc, index, 'content');
   }
 
   /**

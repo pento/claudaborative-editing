@@ -125,20 +125,20 @@ export function updateYText(ytext: Y.Text, newValue: string): void {
 }
 
 /**
- * Update a Y.Text using delta-based editing via `Y.Text.applyDelta()`.
- *
- * Uses a simple common-prefix/common-suffix diff to compute the minimal
- * retain/delete/insert operations. Delta operations are POSITION-BASED,
- * not item-ID-based, so they operate on whatever CRDT items exist at
- * those positions — whether created by the browser or by us.
- *
- * This is the correct approach for live collaborative editing where
- * Gutenberg's `applyChangesToCRDTDoc` creates local items alongside
- * remote items in Y.Text.
+ * Result of computing the delta between two strings.
  */
-export function deltaUpdateYText(ytext: Y.Text, newValue: string): void {
-  const oldValue = ytext.toString();
-  if (oldValue === newValue) return;
+export interface TextDelta {
+  prefixLen: number;
+  deleteCount: number;
+  insertText: string;
+}
+
+/**
+ * Compute the minimal delta between two strings using common-prefix/common-suffix diff.
+ * Returns null if the strings are identical.
+ */
+export function computeTextDelta(oldValue: string, newValue: string): TextDelta | null {
+  if (oldValue === newValue) return null;
 
   // Find common prefix
   let prefixLen = 0;
@@ -164,13 +164,76 @@ export function deltaUpdateYText(ytext: Y.Text, newValue: string): void {
   const deleteCount = oldValue.length - prefixLen - suffixLen;
   const insertText = newValue.slice(prefixLen, newValue.length - suffixLen);
 
+  return { prefixLen, deleteCount, insertText };
+}
+
+/**
+ * Update a Y.Text using delta-based editing via `Y.Text.applyDelta()`.
+ *
+ * Uses a simple common-prefix/common-suffix diff to compute the minimal
+ * retain/delete/insert operations. Delta operations are POSITION-BASED,
+ * not item-ID-based, so they operate on whatever CRDT items exist at
+ * those positions — whether created by the browser or by us.
+ *
+ * This is the correct approach for live collaborative editing where
+ * Gutenberg's `applyChangesToCRDTDoc` creates local items alongside
+ * remote items in Y.Text.
+ */
+export function deltaUpdateYText(ytext: Y.Text, newValue: string): void {
+  const oldValue = ytext.toString();
+  const delta = computeTextDelta(oldValue, newValue);
+  if (!delta) return;
+
   // Build delta ops
   const ops: Array<{ retain?: number; delete?: number; insert?: string }> = [];
-  if (prefixLen > 0) ops.push({ retain: prefixLen });
-  if (deleteCount > 0) ops.push({ delete: deleteCount });
-  if (insertText.length > 0) ops.push({ insert: insertText });
+  if (delta.prefixLen > 0) ops.push({ retain: delta.prefixLen });
+  if (delta.deleteCount > 0) ops.push({ delete: delta.deleteCount });
+  if (delta.insertText.length > 0) ops.push({ insert: delta.insertText });
 
   if (ops.length > 0) {
     ytext.applyDelta(ops);
   }
+}
+
+/**
+ * Find the end position for an HTML-safe chunk of text.
+ *
+ * Given text and a starting offset, returns the end position for the next chunk,
+ * ensuring it doesn't split inside an HTML tag. If the preferred end position
+ * is inside a tag (between `<` and `>`), extends the chunk past the closing `>`.
+ *
+ * @param text The full text to chunk
+ * @param offset The starting offset within the text
+ * @param preferredSize The preferred chunk size in characters
+ * @returns The end position (exclusive) for the chunk
+ */
+export function findHtmlSafeChunkEnd(text: string, offset: number, preferredSize: number): number {
+  const end = Math.min(offset + preferredSize, text.length);
+  if (end >= text.length) return text.length;
+
+  // Check if we're inside an HTML tag at the proposed end position.
+  // Scan backward from end to find the most recent '<' or '>' before the end.
+  let inTag = false;
+  for (let i = end - 1; i >= offset; i--) {
+    if (text[i] === '>') {
+      // We found a closing '>' before reaching any '<', so we're NOT inside a tag
+      break;
+    }
+    if (text[i] === '<') {
+      // We found an opening '<' without a closing '>' between it and end,
+      // so the proposed end is inside a tag
+      inTag = true;
+      break;
+    }
+  }
+
+  if (!inTag) return end;
+
+  // Extend past the closing '>'
+  const closingBracket = text.indexOf('>', end);
+  if (closingBracket === -1) {
+    // No closing bracket found — include the rest of the text
+    return text.length;
+  }
+  return closingBracket + 1;
 }

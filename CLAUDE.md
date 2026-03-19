@@ -52,6 +52,25 @@ The WordPress sync endpoint is `POST /wp-sync/v1/updates`. Each request:
 
 Update types: `sync_step1` (state vector), `sync_step2` (missing updates response), `update` (regular change), `compaction` (full state merge).
 
+### Streaming Text Effect
+
+Rich-text edits (inserts and updates) are streamed to the browser in small chunks so changes appear progressively, like fast typing. This is implemented in `SessionManager.streamTextToYText()`.
+
+**Constants** (defined in `src/session/session-manager.ts`):
+
+- `STREAM_CHUNK_SIZE_MIN = 2` / `STREAM_CHUNK_SIZE_MAX = 6` — randomized chunk size per iteration for a natural typing feel
+- `STREAM_CHUNK_DELAY_MS = 200` — delay between chunks
+- `STREAM_THRESHOLD = 20` — minimum text length to trigger streaming; shorter text is applied atomically
+
+**Behavior**:
+
+- Deletions are applied atomically (old text disappears immediately)
+- Insertions are split into HTML-safe chunks (~20 chars) to avoid malformed intermediate states
+- Each chunk is applied in its own `doc.transact()` and flushed via `SyncClient.flushQueue()`
+- `flushQueue()` cancels the scheduled poll timer and triggers an immediate poll, with re-entrancy protection to prevent concurrent HTTP requests
+- `removeBlocks()`, `moveBlock()`, and `save()` are not streamed (no text content)
+- Default block attributes (e.g., `dropCap: false` for `core/paragraph`) are applied automatically via `DEFAULT_BLOCK_ATTRIBUTES` in `src/yjs/types.ts` to prevent Gutenberg from marking blocks as invalid
+
 ## Adding New Block Types
 
 To add rich-text support for a new block type, add it to `RICH_TEXT_ATTRIBUTES` in `src/yjs/types.ts`. The key is the block name, value is a `Set` of attribute names that are rich-text.
