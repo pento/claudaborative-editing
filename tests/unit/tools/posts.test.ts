@@ -93,6 +93,16 @@ describe('post tools', () => {
   });
 
   describe('wp_close_post', () => {
+    beforeEach(() => {
+      server = createMockServer();
+      session = createMockSession({
+        state: 'editing',
+        user: fakeUser,
+        post: fakePost,
+      });
+      registerPostTools(server as unknown as McpServer, session);
+    });
+
     it('calls session.closePost() and returns success message', async () => {
       const tool = server.registeredTools.get('wp_close_post')!;
       const result = await tool.handler({});
