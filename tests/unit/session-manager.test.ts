@@ -211,6 +211,15 @@ describe('SessionManager', () => {
       expect(session.getCurrentPost()).toBeNull();
     });
 
+    it('throws when not in editing state', async () => {
+      await connectSession(session);
+      expect(() => session.closePost()).toThrow(/requires state/);
+    });
+
+    it('throws when disconnected', () => {
+      expect(() => session.closePost()).toThrow(/requires state/);
+    });
+
     it('returns to connected state', async () => {
       await connectAndOpen(session);
 

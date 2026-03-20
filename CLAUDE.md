@@ -30,9 +30,20 @@ Claude Code  <--stdio-->  MCP Server (Node.js)  <--HTTP polling-->  WordPress
 - `src/wordpress/` — REST API client, HTTP polling sync client
 - `src/yjs/` — Y.Doc management, block ↔ Yjs conversion, sync protocol encoding
 - `src/session/` — Connection lifecycle, awareness/presence
-- `src/tools/` — MCP tool handlers (connect, posts, read, edit, status)
+- `src/tools/` — MCP tool handlers (connect, posts [open/close/create], read, edit, status)
 - `src/blocks/` — Gutenberg HTML parser, Claude-friendly renderer
 - `tests/` — Unit and integration tests
+
+### Session State Machine
+
+```txt
+disconnected ──connect──→ connected ──openPost/createPost──→ editing
+                  ↑            ↑                                 │
+                  │            └────────closePost─────────────────┘
+                  └──────────────────disconnect───────────────────┘
+```
+
+`wp_close_post` returns to `connected` state (can open another post). `wp_disconnect` tears down the entire connection.
 
 ### Key Design Decisions
 

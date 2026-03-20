@@ -18,9 +18,10 @@ describe('post tools', () => {
     registerPostTools(server as unknown as McpServer, session);
   });
 
-  it('registers wp_list_posts, wp_open_post, and wp_create_post', () => {
+  it('registers wp_list_posts, wp_open_post, wp_close_post, and wp_create_post', () => {
     expect(server.registeredTools.has('wp_list_posts')).toBe(true);
     expect(server.registeredTools.has('wp_open_post')).toBe(true);
+    expect(server.registeredTools.has('wp_close_post')).toBe(true);
     expect(server.registeredTools.has('wp_create_post')).toBe(true);
   });
 
@@ -88,6 +89,29 @@ describe('post tools', () => {
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain('Failed to open post');
+    });
+  });
+
+  describe('wp_close_post', () => {
+    it('calls session.closePost() and returns success message', async () => {
+      const tool = server.registeredTools.get('wp_close_post')!;
+      const result = await tool.handler({});
+
+      expect(session.closePost).toHaveBeenCalledTimes(1);
+      expect(result.content[0].text).toContain('Post closed');
+      expect(result.isError).toBeUndefined();
+    });
+
+    it('returns error on failure', async () => {
+      (session.closePost as ReturnType<typeof import('vitest').vi.fn>).mockImplementation(() => {
+        throw new Error("Operation requires state editing, but current state is 'connected'");
+      });
+
+      const tool = server.registeredTools.get('wp_close_post')!;
+      const result = await tool.handler({});
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Failed to close post');
     });
   });
 
