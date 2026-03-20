@@ -1,4 +1,4 @@
-name: Publish to npm
+name: Publish
 
 on:
   release:
@@ -19,8 +19,8 @@ jobs:
 
       - run: npm ci
       - run: npm run typecheck
-      - run: npm test
       - run: npm run build
+      - run: npm test
       - run: npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
