@@ -348,6 +348,90 @@ describe('SessionManager', () => {
     });
   });
 
+  describe('insertBlock() with innerBlocks', () => {
+    it('inserts a list block with list-item inner blocks', async () => {
+      vi.useFakeTimers();
+      await connectAndOpen(session);
+
+      const promise = session.insertBlock(0, {
+        name: 'core/list',
+        innerBlocks: [
+          { name: 'core/list-item', content: 'First item' },
+          { name: 'core/list-item', content: 'Second item' },
+        ],
+      });
+      await vi.runAllTimersAsync();
+      await promise;
+
+      const text = session.readPost();
+      expect(text).toContain('core/list');
+      expect(text).toContain('First item');
+      expect(text).toContain('Second item');
+
+      vi.useRealTimers();
+    });
+  });
+
+  describe('insertInnerBlock()', () => {
+    it('adds a list-item to an existing list', async () => {
+      vi.useFakeTimers();
+      await connectAndOpen(session);
+
+      // First, insert a list with one item
+      const insertPromise = session.insertBlock(0, {
+        name: 'core/list',
+        innerBlocks: [
+          { name: 'core/list-item', content: 'Existing item' },
+        ],
+      });
+      await vi.runAllTimersAsync();
+      await insertPromise;
+
+      // Now add an inner block to the list
+      const innerPromise = session.insertInnerBlock('0', 1, {
+        name: 'core/list-item',
+        content: 'New item',
+      });
+      await vi.runAllTimersAsync();
+      await innerPromise;
+
+      const text = session.readPost();
+      expect(text).toContain('Existing item');
+      expect(text).toContain('New item');
+
+      vi.useRealTimers();
+    });
+  });
+
+  describe('removeInnerBlocks()', () => {
+    it('removes inner blocks from an existing block', async () => {
+      vi.useFakeTimers();
+      await connectAndOpen(session);
+
+      // Insert a list with three items
+      const promise = session.insertBlock(0, {
+        name: 'core/list',
+        innerBlocks: [
+          { name: 'core/list-item', content: 'Keep' },
+          { name: 'core/list-item', content: 'Remove' },
+          { name: 'core/list-item', content: 'Also keep' },
+        ],
+      });
+      await vi.runAllTimersAsync();
+      await promise;
+
+      // Remove the middle inner block
+      session.removeInnerBlocks('0', 1, 1);
+
+      const text = session.readPost();
+      expect(text).toContain('Keep');
+      expect(text).not.toContain('Remove');
+      expect(text).toContain('Also keep');
+
+      vi.useRealTimers();
+    });
+  });
+
   describe('removeBlocks()', () => {
     it('removes blocks from the doc', async () => {
       await connectAndOpen(session);

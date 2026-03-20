@@ -231,6 +231,46 @@ export class DocumentManager {
   }
 
   /**
+   * Insert a block as an inner block of a parent block.
+   */
+  insertInnerBlock(doc: Y.Doc, parentIndex: string, position: number, block: Block): void {
+    doc.transact(() => {
+      const parentYMap = this._resolveBlockYMap(doc, parentIndex);
+      if (!parentYMap) {
+        throw new Error(`Block not found at index ${parentIndex}`);
+      }
+
+      let innerBlocksArray = parentYMap.get('innerBlocks') as Y.Array<Y.Map<unknown>> | undefined;
+      if (!innerBlocksArray) {
+        innerBlocksArray = new Y.Array<Y.Map<unknown>>();
+        parentYMap.set('innerBlocks', innerBlocksArray);
+      }
+
+      const ymap = blockToYMap(block);
+      innerBlocksArray.insert(position, [ymap]);
+    });
+  }
+
+  /**
+   * Remove inner blocks from a parent block.
+   */
+  removeInnerBlocks(doc: Y.Doc, parentIndex: string, startIndex: number, count: number): void {
+    doc.transact(() => {
+      const parentYMap = this._resolveBlockYMap(doc, parentIndex);
+      if (!parentYMap) {
+        throw new Error(`Block not found at index ${parentIndex}`);
+      }
+
+      const innerBlocksArray = parentYMap.get('innerBlocks') as Y.Array<Y.Map<unknown>> | undefined;
+      if (!innerBlocksArray) {
+        throw new Error(`Block at ${parentIndex} has no inner blocks`);
+      }
+
+      innerBlocksArray.delete(startIndex, count);
+    });
+  }
+
+  /**
    * Move a block from one position to another.
    */
   moveBlock(doc: Y.Doc, fromIndex: number, toIndex: number): void {

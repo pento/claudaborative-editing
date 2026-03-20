@@ -26,6 +26,8 @@ describe('edit tools', () => {
     expect(server.registeredTools.has('wp_move_block')).toBe(true);
     expect(server.registeredTools.has('wp_replace_blocks')).toBe(true);
     expect(server.registeredTools.has('wp_set_title')).toBe(true);
+    expect(server.registeredTools.has('wp_insert_inner_block')).toBe(true);
+    expect(server.registeredTools.has('wp_remove_inner_blocks')).toBe(true);
   });
 
   describe('wp_update_block', () => {
@@ -143,6 +145,135 @@ describe('edit tools', () => {
         { name: 'core/paragraph', content: 'New paragraph' },
       ]);
       expect(result.content[0].text).toContain('Replaced 2 blocks at index 1 with 2 new blocks');
+    });
+  });
+
+  describe('wp_insert_block with innerBlocks', () => {
+    it('passes innerBlocks through to session.insertBlock', async () => {
+      const tool = server.registeredTools.get('wp_insert_block')!;
+      const result = await tool.handler({
+        position: 0,
+        name: 'core/list',
+        innerBlocks: [
+          { name: 'core/list-item', content: 'Item 1' },
+          { name: 'core/list-item', content: 'Item 2' },
+        ],
+      });
+
+      expect(session.insertBlock).toHaveBeenCalledWith(0, {
+        name: 'core/list',
+        content: undefined,
+        attributes: undefined,
+        innerBlocks: [
+          { name: 'core/list-item', content: 'Item 1' },
+          { name: 'core/list-item', content: 'Item 2' },
+        ],
+      });
+      expect(result.content[0].text).toContain('Inserted core/list block at position 0');
+    });
+  });
+
+  describe('wp_insert_inner_block', () => {
+    it('calls session.insertInnerBlock with correct args', async () => {
+      const tool = server.registeredTools.get('wp_insert_inner_block')!;
+      const result = await tool.handler({
+        parentIndex: '0',
+        position: 1,
+        name: 'core/list-item',
+        content: 'New list item',
+      });
+
+      expect(session.insertInnerBlock).toHaveBeenCalledWith('0', 1, {
+        name: 'core/list-item',
+        content: 'New list item',
+        attributes: undefined,
+        innerBlocks: undefined,
+      });
+      expect(result.content[0].text).toContain('Inserted core/list-item as inner block at 0.1');
+    });
+
+    it('returns error on failure', async () => {
+      (session.insertInnerBlock as ReturnType<typeof import('vitest').vi.fn>).mockRejectedValue(
+        new Error('Block not found at index 99'),
+      );
+
+      const tool = server.registeredTools.get('wp_insert_inner_block')!;
+      const result = await tool.handler({
+        parentIndex: '99',
+        position: 0,
+        name: 'core/list-item',
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Failed to insert inner block');
+    });
+  });
+
+  describe('wp_remove_inner_blocks', () => {
+    it('calls session.removeInnerBlocks with default count of 1', async () => {
+      const tool = server.registeredTools.get('wp_remove_inner_blocks')!;
+      const result = await tool.handler({
+        parentIndex: '0',
+        startIndex: 1,
+      });
+
+      expect(session.removeInnerBlocks).toHaveBeenCalledWith('0', 1, 1);
+      expect(result.content[0].text).toContain('Removed 1 inner block from block 0');
+    });
+
+    it('calls session.removeInnerBlocks with explicit count', async () => {
+      const tool = server.registeredTools.get('wp_remove_inner_blocks')!;
+      const result = await tool.handler({
+        parentIndex: '2',
+        startIndex: 0,
+        count: 3,
+      });
+
+      expect(session.removeInnerBlocks).toHaveBeenCalledWith('2', 0, 3);
+      expect(result.content[0].text).toContain('Removed 3 inner blocks from block 2');
+    });
+
+    it('returns error on failure', async () => {
+      (session.removeInnerBlocks as ReturnType<typeof import('vitest').vi.fn>).mockImplementation(() => {
+        throw new Error('Block at 0 has no inner blocks');
+      });
+
+      const tool = server.registeredTools.get('wp_remove_inner_blocks')!;
+      const result = await tool.handler({
+        parentIndex: '0',
+        startIndex: 0,
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Failed to remove inner blocks');
+    });
+  });
+
+  describe('wp_replace_blocks with innerBlocks', () => {
+    it('passes innerBlocks through to session.replaceBlocks', async () => {
+      const tool = server.registeredTools.get('wp_replace_blocks')!;
+      const result = await tool.handler({
+        startIndex: 0,
+        count: 1,
+        blocks: [
+          {
+            name: 'core/list',
+            innerBlocks: [
+              { name: 'core/list-item', content: 'Replaced item' },
+            ],
+          },
+        ],
+      });
+
+      expect(session.replaceBlocks).toHaveBeenCalledWith(0, 1, [
+        {
+          name: 'core/list',
+          innerBlocks: [
+            { name: 'core/list-item', content: 'Replaced item' },
+          ],
+        },
+      ]);
+      expect(result.content[0].text).toContain('Replaced 1 block at index 0 with 1 new block');
     });
   });
 

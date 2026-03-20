@@ -292,6 +292,144 @@ describe('DocumentManager', () => {
     });
   });
 
+  describe('insertInnerBlock', () => {
+    it('inserts a child block at the beginning of innerBlocks', () => {
+      const { manager, doc } = createManager();
+      manager.setBlocks(doc, [makeList(['Item A', 'Item B'])]);
+
+      const newItem: Block = {
+        name: 'core/list-item',
+        clientId: crypto.randomUUID(),
+        attributes: { content: 'Item Z' },
+        innerBlocks: [],
+      };
+
+      manager.insertInnerBlock(doc, '0', 0, newItem);
+
+      const result = manager.getBlocks(doc);
+      expect(result[0].innerBlocks).toHaveLength(3);
+      expect(result[0].innerBlocks[0].attributes.content).toBe('Item Z');
+      expect(result[0].innerBlocks[1].attributes.content).toBe('Item A');
+      expect(result[0].innerBlocks[2].attributes.content).toBe('Item B');
+    });
+
+    it('inserts a child block at the end of innerBlocks', () => {
+      const { manager, doc } = createManager();
+      manager.setBlocks(doc, [makeList(['Item A', 'Item B'])]);
+
+      const newItem: Block = {
+        name: 'core/list-item',
+        clientId: crypto.randomUUID(),
+        attributes: { content: 'Item C' },
+        innerBlocks: [],
+      };
+
+      manager.insertInnerBlock(doc, '0', 2, newItem);
+
+      const result = manager.getBlocks(doc);
+      expect(result[0].innerBlocks).toHaveLength(3);
+      expect(result[0].innerBlocks[2].attributes.content).toBe('Item C');
+    });
+
+    it('inserts a child block in the middle of innerBlocks', () => {
+      const { manager, doc } = createManager();
+      manager.setBlocks(doc, [makeList(['Item A', 'Item C'])]);
+
+      const newItem: Block = {
+        name: 'core/list-item',
+        clientId: crypto.randomUUID(),
+        attributes: { content: 'Item B' },
+        innerBlocks: [],
+      };
+
+      manager.insertInnerBlock(doc, '0', 1, newItem);
+
+      const result = manager.getBlocks(doc);
+      expect(result[0].innerBlocks).toHaveLength(3);
+      expect(result[0].innerBlocks[0].attributes.content).toBe('Item A');
+      expect(result[0].innerBlocks[1].attributes.content).toBe('Item B');
+      expect(result[0].innerBlocks[2].attributes.content).toBe('Item C');
+    });
+
+    it('creates innerBlocks array if the parent has none', () => {
+      const { manager, doc } = createManager();
+      manager.setBlocks(doc, [makeParagraph('A standalone paragraph')]);
+
+      const newChild: Block = {
+        name: 'core/paragraph',
+        clientId: crypto.randomUUID(),
+        attributes: { content: 'Nested child' },
+        innerBlocks: [],
+      };
+
+      manager.insertInnerBlock(doc, '0', 0, newChild);
+
+      const result = manager.getBlocks(doc);
+      expect(result[0].innerBlocks).toHaveLength(1);
+      expect(result[0].innerBlocks[0].attributes.content).toBe('Nested child');
+    });
+
+    it('throws when parent index is invalid', () => {
+      const { manager, doc } = createManager();
+      manager.setBlocks(doc, [makeParagraph('Only one')]);
+
+      const newChild: Block = {
+        name: 'core/paragraph',
+        clientId: crypto.randomUUID(),
+        attributes: { content: 'Child' },
+        innerBlocks: [],
+      };
+
+      expect(() => manager.insertInnerBlock(doc, '5', 0, newChild)).toThrow(
+        'Block not found at index 5',
+      );
+    });
+  });
+
+  describe('removeInnerBlocks', () => {
+    it('removes a single inner block', () => {
+      const { manager, doc } = createManager();
+      manager.setBlocks(doc, [makeList(['Item A', 'Item B', 'Item C'])]);
+
+      manager.removeInnerBlocks(doc, '0', 1, 1);
+
+      const result = manager.getBlocks(doc);
+      expect(result[0].innerBlocks).toHaveLength(2);
+      expect(result[0].innerBlocks[0].attributes.content).toBe('Item A');
+      expect(result[0].innerBlocks[1].attributes.content).toBe('Item C');
+    });
+
+    it('removes multiple inner blocks', () => {
+      const { manager, doc } = createManager();
+      manager.setBlocks(doc, [makeList(['Item A', 'Item B', 'Item C', 'Item D'])]);
+
+      manager.removeInnerBlocks(doc, '0', 1, 2);
+
+      const result = manager.getBlocks(doc);
+      expect(result[0].innerBlocks).toHaveLength(2);
+      expect(result[0].innerBlocks[0].attributes.content).toBe('Item A');
+      expect(result[0].innerBlocks[1].attributes.content).toBe('Item D');
+    });
+
+    it('throws when parent index is invalid', () => {
+      const { manager, doc } = createManager();
+      manager.setBlocks(doc, [makeParagraph('Only one')]);
+
+      expect(() => manager.removeInnerBlocks(doc, '5', 0, 1)).toThrow(
+        'Block not found at index 5',
+      );
+    });
+
+    it('throws when removing from a block with empty inner blocks', () => {
+      const { manager, doc } = createManager();
+      // makeParagraph creates a block with innerBlocks: [], which becomes
+      // an empty Y.Array. Attempting to delete from it throws from Yjs.
+      manager.setBlocks(doc, [makeParagraph('No children')]);
+
+      expect(() => manager.removeInnerBlocks(doc, '0', 0, 1)).toThrow();
+    });
+  });
+
   describe('updateBlock', () => {
     it('updates block content', () => {
       const { manager, doc } = createManager();

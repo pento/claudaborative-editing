@@ -49,6 +49,85 @@ const STREAM_CHUNK_DELAY_MS = 200;
 /** Minimum text length to trigger streaming (short text is applied atomically). */
 const STREAM_THRESHOLD = 20;
 
+/** Input shape for blocks with optional recursive inner blocks. */
+export interface BlockInput {
+  name: string;
+  content?: string;
+  attributes?: Record<string, unknown>;
+  innerBlocks?: BlockInput[];
+}
+
+/** A streaming target: a specific attribute in a block that needs progressive insertion. */
+interface StreamTarget {
+  blockIndex: string;
+  attrName: string;
+  value: string;
+}
+
+/**
+ * Recursively prepare a block tree for insertion.
+ * Applies default attributes, sets isValid/clientId, and separates
+ * streamable rich-text content from atomic structure.
+ *
+ * @returns The Block (with empty placeholders for streamable content)
+ *          and a flat list of StreamTargets for progressive insertion.
+ */
+function prepareBlockTree(
+  input: BlockInput,
+  indexPrefix: string,
+): { block: Block; streamTargets: StreamTarget[] } {
+  const defaults = getDefaultAttributes(input.name);
+  const attrs = { ...defaults, ...input.attributes };
+  const streamTargets: StreamTarget[] = [];
+
+  // Handle 'content' field
+  if (input.content !== undefined) {
+    if (
+      isRichTextAttribute(input.name, 'content') &&
+      input.content.length >= STREAM_THRESHOLD
+    ) {
+      streamTargets.push({ blockIndex: indexPrefix, attrName: 'content', value: input.content });
+      attrs.content = '';
+    } else {
+      attrs.content = input.content;
+    }
+  }
+
+  // Check other attributes for streaming
+  for (const [key, value] of Object.entries(attrs)) {
+    if (
+      key !== 'content' &&
+      isRichTextAttribute(input.name, key) &&
+      typeof value === 'string' &&
+      value.length >= STREAM_THRESHOLD
+    ) {
+      streamTargets.push({ blockIndex: indexPrefix, attrName: key, value });
+      attrs[key] = '';
+    }
+  }
+
+  // Recurse into inner blocks
+  const innerBlocks: Block[] = [];
+  if (input.innerBlocks) {
+    for (let i = 0; i < input.innerBlocks.length; i++) {
+      const childIndex = `${indexPrefix}.${i}`;
+      const prepared = prepareBlockTree(input.innerBlocks[i], childIndex);
+      innerBlocks.push(prepared.block);
+      streamTargets.push(...prepared.streamTargets);
+    }
+  }
+
+  const block: Block = {
+    name: input.name,
+    clientId: crypto.randomUUID(),
+    attributes: attrs,
+    innerBlocks,
+    isValid: true,
+  };
+
+  return { block, streamTargets };
+}
+
 export class SessionManager {
   private apiClient: WordPressApiClient | null = null;
   private syncClient: SyncClient | null = null;
@@ -396,64 +475,24 @@ export class SessionManager {
    *
    * The block structure (with empty content) is inserted atomically,
    * then rich-text content is streamed in progressively.
+   * Supports recursive inner blocks.
    */
   async insertBlock(
     position: number,
-    block: { name: string; content?: string; attributes?: Record<string, unknown> },
+    block: BlockInput,
   ): Promise<void> {
     this.requireState('editing');
 
-    // Determine which attributes should be streamed
-    const streamTargets: Array<{ attrName: string; value: string }> = [];
-    const defaults = getDefaultAttributes(block.name);
-    const attrs = { ...defaults, ...block.attributes };
-
-    if (block.content !== undefined) {
-      if (
-        isRichTextAttribute(block.name, 'content') &&
-        block.content.length >= STREAM_THRESHOLD
-      ) {
-        streamTargets.push({ attrName: 'content', value: block.content });
-        attrs.content = ''; // Insert with empty content, stream later
-      } else {
-        attrs.content = block.content;
-      }
-    }
-
-    // Check other attributes for streaming
-    for (const [key, value] of Object.entries(attrs)) {
-      if (
-        key !== 'content' &&
-        isRichTextAttribute(block.name, key) &&
-        typeof value === 'string' &&
-        value.length >= STREAM_THRESHOLD
-      ) {
-        streamTargets.push({ attrName: key, value });
-        attrs[key] = ''; // Insert with empty value, stream later
-      }
-    }
-
-    const fullBlock: Block = {
-      name: block.name,
-      clientId: crypto.randomUUID(),
-      attributes: attrs,
-      innerBlocks: [],
-      isValid: true,
-    };
+    const blockIndex = String(position);
+    const { block: fullBlock, streamTargets } = prepareBlockTree(block, blockIndex);
 
     // Insert block structure atomically
     this.doc!.transact(() => {
       this.documentManager.insertBlock(this.doc!, position, fullBlock);
     }, LOCAL_ORIGIN);
 
-    // Stream rich-text content into the new block
-    const blockIndex = String(position);
-    for (const target of streamTargets) {
-      const ytext = this.documentManager.getBlockAttributeYText(this.doc!, blockIndex, target.attrName);
-      if (ytext) {
-        await this.streamTextToYText(ytext, target.value, blockIndex);
-      }
-    }
+    // Stream rich-text content (depth-first: parent first, then children)
+    await this.streamTargets(streamTargets);
   }
 
   /**
@@ -485,53 +524,17 @@ export class SessionManager {
   async replaceBlocks(
     startIndex: number,
     count: number,
-    newBlocks: Array<{
-      name: string;
-      content?: string;
-      attributes?: Record<string, unknown>;
-    }>,
+    newBlocks: BlockInput[],
   ): Promise<void> {
     this.requireState('editing');
 
-    // Prepare blocks: separate streamable content from atomic structure
-    const streamMap: Array<Array<{ attrName: string; value: string }>> = [];
-    const fullBlocks: Block[] = newBlocks.map((b) => {
-      const defaults = getDefaultAttributes(b.name);
-      const attrs = { ...defaults, ...b.attributes };
-      const targets: Array<{ attrName: string; value: string }> = [];
-
-      if (b.content !== undefined) {
-        if (
-          isRichTextAttribute(b.name, 'content') &&
-          b.content.length >= STREAM_THRESHOLD
-        ) {
-          targets.push({ attrName: 'content', value: b.content });
-          attrs.content = '';
-        } else {
-          attrs.content = b.content;
-        }
-      }
-
-      for (const [key, value] of Object.entries(attrs)) {
-        if (
-          key !== 'content' &&
-          isRichTextAttribute(b.name, key) &&
-          typeof value === 'string' &&
-          value.length >= STREAM_THRESHOLD
-        ) {
-          targets.push({ attrName: key, value });
-          attrs[key] = '';
-        }
-      }
-
-      streamMap.push(targets);
-      return {
-        name: b.name,
-        clientId: crypto.randomUUID(),
-        attributes: attrs,
-        innerBlocks: [],
-        isValid: true,
-      };
+    // Prepare all blocks recursively
+    const allStreamTargets: StreamTarget[] = [];
+    const fullBlocks: Block[] = newBlocks.map((b, i) => {
+      const blockIndex = String(startIndex + i);
+      const { block, streamTargets } = prepareBlockTree(b, blockIndex);
+      allStreamTargets.push(...streamTargets);
+      return block;
     });
 
     // Remove old blocks and insert new structures atomically
@@ -546,16 +549,38 @@ export class SessionManager {
       }
     }, LOCAL_ORIGIN);
 
-    // Stream content for each new block
-    for (let i = 0; i < streamMap.length; i++) {
-      for (const target of streamMap[i]) {
-        const blockIndex = String(startIndex + i);
-        const ytext = this.documentManager.getBlockAttributeYText(this.doc!, blockIndex, target.attrName);
-        if (ytext) {
-          await this.streamTextToYText(ytext, target.value, blockIndex);
-        }
-      }
-    }
+    // Stream content for all blocks (depth-first order)
+    await this.streamTargets(allStreamTargets);
+  }
+
+  /**
+   * Insert a block as an inner block of an existing block.
+   */
+  async insertInnerBlock(
+    parentIndex: string,
+    position: number,
+    block: BlockInput,
+  ): Promise<void> {
+    this.requireState('editing');
+
+    const blockIndex = `${parentIndex}.${position}`;
+    const { block: fullBlock, streamTargets } = prepareBlockTree(block, blockIndex);
+
+    this.doc!.transact(() => {
+      this.documentManager.insertInnerBlock(this.doc!, parentIndex, position, fullBlock);
+    }, LOCAL_ORIGIN);
+
+    await this.streamTargets(streamTargets);
+  }
+
+  /**
+   * Remove inner blocks from an existing block.
+   */
+  removeInnerBlocks(parentIndex: string, startIndex: number, count: number): void {
+    this.requireState('editing');
+    this.doc!.transact(() => {
+      this.documentManager.removeInnerBlocks(this.doc!, parentIndex, startIndex, count);
+    }, LOCAL_ORIGIN);
   }
 
   /**
@@ -642,6 +667,27 @@ export class SessionManager {
    * 3. Split the insert text into HTML-safe chunks (~20 chars each).
    * 4. For each chunk: apply in its own transaction, flush, and delay.
    */
+  /**
+   * Stream a list of targets (from prepareBlockTree) into their Y.Text instances.
+   */
+  private async streamTargets(targets: StreamTarget[]): Promise<void> {
+    for (const target of targets) {
+      let ytext = this.documentManager.getBlockAttributeYText(this.doc!, target.blockIndex, target.attrName);
+      if (!ytext) {
+        // Y.Text doesn't exist yet — create it atomically before streaming
+        this.doc!.transact(() => {
+          this.documentManager.updateBlock(this.doc!, target.blockIndex, {
+            ...(target.attrName === 'content' ? { content: '' } : { attributes: { [target.attrName]: '' } }),
+          });
+        }, LOCAL_ORIGIN);
+        ytext = this.documentManager.getBlockAttributeYText(this.doc!, target.blockIndex, target.attrName);
+      }
+      if (ytext) {
+        await this.streamTextToYText(ytext, target.value, target.blockIndex);
+      }
+    }
+  }
+
   private async streamTextToYText(ytext: Y.Text, newValue: string, blockIndex?: string): Promise<void> {
     const oldValue = ytext.toString();
     const delta = computeTextDelta(oldValue, newValue);
