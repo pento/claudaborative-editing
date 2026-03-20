@@ -14,15 +14,35 @@ import {
   CRDT_STATE_MAP_SAVED_AT_KEY,
   CRDT_STATE_MAP_SAVED_BY_KEY,
   CRDT_STATE_MAP_VERSION_KEY,
-  isRichTextAttribute,
 } from './types.js';
 import {
   blockToYMap,
   deltaUpdateYText,
   yMapToBlock,
 } from './block-converter.js';
+import { BlockTypeRegistry } from './block-type-registry.js';
 
 export class DocumentManager {
+  private registry: BlockTypeRegistry;
+
+  constructor(registry?: BlockTypeRegistry) {
+    this.registry = registry ?? BlockTypeRegistry.createFallback();
+  }
+
+  /**
+   * Update the registry (e.g., after fetching block types from the API).
+   */
+  setRegistry(registry: BlockTypeRegistry): void {
+    this.registry = registry;
+  }
+
+  /**
+   * Get the current block type registry.
+   */
+  getRegistry(): BlockTypeRegistry {
+    return this.registry;
+  }
+
   /**
    * Create a new Y.Doc initialized with Gutenberg's expected structure.
    */
@@ -126,7 +146,7 @@ export class DocumentManager {
       }
 
       // Insert new blocks
-      const ymaps = blocks.map((block) => blockToYMap(block));
+      const ymaps = blocks.map((block) => blockToYMap(block, this.registry));
       blocksArray.push(ymaps);
     });
   }
@@ -162,7 +182,7 @@ export class DocumentManager {
 
       if (changes.content !== undefined) {
         // 'content' is the primary rich-text attribute for most blocks
-        if (isRichTextAttribute(blockName, 'content')) {
+        if (this.registry.isRichTextAttribute(blockName, 'content')) {
           const ytext = attrMap.get('content');
           if (ytext instanceof Y.Text) {
             deltaUpdateYText(ytext, changes.content);
@@ -180,7 +200,7 @@ export class DocumentManager {
       if (changes.attributes) {
         for (const [key, value] of Object.entries(changes.attributes)) {
           if (
-            isRichTextAttribute(blockName, key) &&
+            this.registry.isRichTextAttribute(blockName, key) &&
             typeof value === 'string'
           ) {
             const existing = attrMap.get(key);
@@ -212,7 +232,7 @@ export class DocumentManager {
         blocksArray = new Y.Array<Y.Map<unknown>>();
         documentMap.set('blocks', blocksArray);
       }
-      const ymap = blockToYMap(block);
+      const ymap = blockToYMap(block, this.registry);
       blocksArray.insert(position, [ymap]);
     });
   }
@@ -246,7 +266,7 @@ export class DocumentManager {
         parentYMap.set('innerBlocks', innerBlocksArray);
       }
 
-      const ymap = blockToYMap(block);
+      const ymap = blockToYMap(block, this.registry);
       innerBlocksArray.insert(position, [ymap]);
     });
   }
@@ -286,7 +306,7 @@ export class DocumentManager {
 
       // Adjust target index if removing shifts it
       const adjustedIndex = fromIndex < toIndex ? toIndex - 1 : toIndex;
-      const ymap = blockToYMap(block);
+      const ymap = blockToYMap(block, this.registry);
       blocksArray.insert(adjustedIndex, [ymap]);
     });
   }

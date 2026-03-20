@@ -5,7 +5,8 @@
  * based on the block type's known schema.
  */
 import * as Y from 'yjs';
-import { type Block, isRichTextAttribute } from './types.js';
+import type { Block } from './types.js';
+import type { BlockTypeRegistry } from './block-type-registry.js';
 
 /**
  * Convert a plain Block object to a Y.Map suitable for insertion into the Y.Doc.
@@ -13,7 +14,7 @@ import { type Block, isRichTextAttribute } from './types.js';
  * Rich-text attributes (as determined by the block type) are stored as Y.Text.
  * All other attributes are stored as plain values.
  */
-export function blockToYMap(block: Block): Y.Map<unknown> {
+export function blockToYMap(block: Block, registry: BlockTypeRegistry): Y.Map<unknown> {
   const ymap = new Y.Map<unknown>();
 
   ymap.set('name', block.name);
@@ -30,7 +31,7 @@ export function blockToYMap(block: Block): Y.Map<unknown> {
   const attrMap = new Y.Map<unknown>();
   if (block.attributes) {
     for (const [key, value] of Object.entries(block.attributes)) {
-      if (isRichTextAttribute(block.name, key) && typeof value === 'string') {
+      if (registry.isRichTextAttribute(block.name, key) && typeof value === 'string') {
         const ytext = new Y.Text();
         ytext.insert(0, value);
         attrMap.set(key, ytext);
@@ -44,7 +45,7 @@ export function blockToYMap(block: Block): Y.Map<unknown> {
   // Inner blocks: recurse
   const innerBlocksArray = new Y.Array<Y.Map<unknown>>();
   if (block.innerBlocks && block.innerBlocks.length > 0) {
-    const innerMaps = block.innerBlocks.map((inner) => blockToYMap(inner));
+    const innerMaps = block.innerBlocks.map((inner) => blockToYMap(inner, registry));
     innerBlocksArray.push(innerMaps);
   }
   ymap.set('innerBlocks', innerBlocksArray);

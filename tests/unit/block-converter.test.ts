@@ -8,16 +8,20 @@ import {
   computeTextDelta,
   findHtmlSafeChunkEnd,
 } from '#yjs/block-converter';
+import { BlockTypeRegistry } from '#yjs/block-type-registry';
 import type { Block } from '#yjs/types';
 
 /**
  * Helper: create a Y.Map from a block and integrate it into a Y.Doc
  * so that Yjs allows reading its contents.
  */
-function integratedBlockToYMap(block: Block): Y.Map<unknown> {
+function integratedBlockToYMap(
+  block: Block,
+  registry: BlockTypeRegistry = BlockTypeRegistry.createFallback(),
+): Y.Map<unknown> {
   const doc = new Y.Doc();
   const arr = doc.getArray<Y.Map<unknown>>('blocks');
-  const ymap = blockToYMap(block);
+  const ymap = blockToYMap(block, registry);
   arr.push([ymap]);
   return arr.get(0);
 }

@@ -40,66 +40,6 @@ export interface Block {
   originalContent?: string;
 }
 
-/**
- * Block attribute schema used to determine if an attribute is rich-text.
- * Since we don't have access to @wordpress/blocks' getBlockTypes() registry,
- * we maintain our own mapping of known rich-text attributes.
- */
-export interface BlockAttributeSchema {
-  type: 'rich-text' | 'string' | 'number' | 'boolean' | 'array' | 'object';
-  role?: 'content' | 'local';
-}
-
-/**
- * Known rich-text attributes by block type.
- * This must be kept in sync with core block definitions.
- * When a block type is not in this map, all string attributes are treated as plain strings.
- */
-export const RICH_TEXT_ATTRIBUTES: Record<string, Set<string>> = {
-  'core/paragraph': new Set(['content']),
-  'core/heading': new Set(['content']),
-  'core/list-item': new Set(['content']),
-  'core/quote': new Set(['value', 'citation']),
-  'core/pullquote': new Set(['value', 'citation']),
-  'core/verse': new Set(['content']),
-  'core/preformatted': new Set(['content']),
-  'core/freeform': new Set(['content']),
-  'core/button': new Set(['text']),
-  'core/table': new Set([]), // table cells use rich-text but are nested in body array
-  'core/footnotes': new Set(['content']),
-};
-
-/**
- * Default attribute values by block type.
- *
- * Gutenberg validates blocks against their schema and marks them as invalid
- * if expected attributes are missing. This map provides the default values
- * that Gutenberg would normally set when creating a block through the editor.
- */
-export const DEFAULT_BLOCK_ATTRIBUTES: Record<string, Record<string, unknown>> = {
-  'core/paragraph': { dropCap: false },
-  'core/heading': { level: 2 },
-  'core/list': { ordered: false },
-};
-
-/**
- * Get default attributes for a block type.
- * Returns an empty object if no defaults are defined.
- */
-export function getDefaultAttributes(blockName: string): Record<string, unknown> {
-  return DEFAULT_BLOCK_ATTRIBUTES[blockName] ?? {};
-}
-
-/**
- * Check if a block attribute is rich-text typed.
- */
-export function isRichTextAttribute(
-  blockName: string,
-  attributeName: string,
-): boolean {
-  return RICH_TEXT_ATTRIBUTES[blockName]?.has(attributeName) ?? false;
-}
-
 // --- Post record in Y.Doc ---
 
 /**

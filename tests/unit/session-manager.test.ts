@@ -9,6 +9,7 @@ const mockGetPost = vi.fn<(id: number) => Promise<WPPost>>();
 const mockListPosts = vi.fn<() => Promise<WPPost[]>>();
 const mockCreatePost = vi.fn<() => Promise<WPPost>>();
 const mockSendSyncUpdate = vi.fn();
+const mockGetBlockTypes = vi.fn<() => Promise<unknown[]>>();
 
 vi.mock('../../src/wordpress/api-client.js', () => {
   return {
@@ -19,6 +20,7 @@ vi.mock('../../src/wordpress/api-client.js', () => {
       this.listPosts = mockListPosts;
       this.createPost = mockCreatePost;
       this.sendSyncUpdate = mockSendSyncUpdate;
+      this.getBlockTypes = mockGetBlockTypes;
     }),
   };
 });
@@ -109,6 +111,7 @@ describe('SessionManager', () => {
       endCursor: 0,
       queueSize: 0,
     });
+    mockGetBlockTypes.mockRejectedValue(new Error('Not available'));
     session = new SessionManager();
     session.syncWaitTimeout = 0; // Skip sync wait in tests
   });
@@ -146,6 +149,28 @@ describe('SessionManager', () => {
       mockValidateSyncEndpoint.mockRejectedValue(new Error('404 Not Found'));
 
       await expect(session.connect(fakeConfig)).rejects.toThrow('404 Not Found');
+    });
+
+    it('fetches block types during connect', async () => {
+      mockValidateConnection.mockResolvedValue(fakeUser);
+      mockValidateSyncEndpoint.mockResolvedValue(undefined);
+      mockGetBlockTypes.mockResolvedValueOnce([
+        { name: 'core/paragraph', attributes: { content: { type: 'rich-text' } } },
+      ]);
+
+      await session.connect(fakeConfig);
+
+      expect(mockGetBlockTypes).toHaveBeenCalledTimes(1);
+    });
+
+    it('falls back to hardcoded registry on API error', async () => {
+      mockValidateConnection.mockResolvedValue(fakeUser);
+      mockValidateSyncEndpoint.mockResolvedValue(undefined);
+      mockGetBlockTypes.mockRejectedValueOnce(new Error('fail'));
+
+      await session.connect(fakeConfig);
+
+      expect(session.getState()).toBe('connected');
     });
   });
 
@@ -357,6 +382,39 @@ describe('SessionManager', () => {
     });
   });
 
+  describe('insertBlock() block type validation', () => {
+    it('allows unknown block types with fallback registry (validation skipped)', async () => {
+      await connectAndOpen(session);
+
+      // core/separator is NOT in the fallback set, but the fallback registry
+      // skips the unknown block type check, so insertion should succeed.
+      await session.insertBlock(0, { name: 'core/separator' });
+
+      const text = session.readPost();
+      expect(text).toContain('core/separator');
+    });
+
+    it('rejects unknown block types with API-sourced registry', async () => {
+      // Set up mockGetBlockTypes to succeed so connect() builds an API-sourced registry
+      mockGetBlockTypes.mockResolvedValueOnce([
+        { name: 'core/paragraph', attributes: { content: { type: 'rich-text' } } },
+        { name: 'core/heading', attributes: { content: { type: 'rich-text' } } },
+        { name: 'core/list', attributes: { ordered: { type: 'boolean', default: false } } },
+        { name: 'core/list-item', attributes: { content: { type: 'rich-text' } } },
+      ]);
+
+      mockValidateConnection.mockResolvedValue(fakeUser);
+      mockValidateSyncEndpoint.mockResolvedValue(undefined);
+      await session.connect(fakeConfig);
+      mockGetPost.mockResolvedValue(fakePost);
+      await session.openPost(42);
+
+      await expect(
+        session.insertBlock(0, { name: 'custom/nonexistent-block' }),
+      ).rejects.toThrow(/Unknown block type: custom\/nonexistent-block/);
+    });
+  });
+
   describe('insertBlock() with innerBlocks', () => {
     it('inserts a list block with list-item inner blocks', async () => {
       vi.useFakeTimers();
@@ -485,6 +543,26 @@ describe('SessionManager', () => {
       expect(text).toContain('A Heading');
 
       vi.useRealTimers();
+    });
+
+    it('rejects unknown block types in replacement with API-sourced registry', async () => {
+      // Set up mockGetBlockTypes to succeed so connect() builds an API-sourced registry
+      mockGetBlockTypes.mockResolvedValueOnce([
+        { name: 'core/paragraph', attributes: { content: { type: 'rich-text' } } },
+        { name: 'core/heading', attributes: { content: { type: 'rich-text' } } },
+      ]);
+
+      mockValidateConnection.mockResolvedValue(fakeUser);
+      mockValidateSyncEndpoint.mockResolvedValue(undefined);
+      await session.connect(fakeConfig);
+      mockGetPost.mockResolvedValue(fakePost);
+      await session.openPost(42);
+
+      await expect(
+        session.replaceBlocks(0, 1, [
+          { name: 'custom/nonexistent-block' },
+        ]),
+      ).rejects.toThrow(/Unknown block type: custom\/nonexistent-block/);
     });
   });
 
@@ -693,6 +771,195 @@ describe('SessionManager', () => {
       const [, clientId] = mockSyncStart.mock.calls[0];
       expect(typeof clientId).toBe('number');
       expect(clientId).toBeGreaterThan(0);
+    });
+  });
+
+  describe('insertBlock() schema validation', () => {
+    async function connectWithBlockTypes(blockTypes: unknown[]) {
+      const s = new SessionManager();
+      s.syncWaitTimeout = 0;
+      mockGetBlockTypes.mockResolvedValueOnce(blockTypes);
+      mockValidateConnection.mockResolvedValue(fakeUser);
+      mockValidateSyncEndpoint.mockResolvedValue(undefined);
+      await s.connect(fakeConfig);
+      mockGetPost.mockResolvedValue(fakePost);
+      await s.openPost(42);
+      return s;
+    }
+
+    it('rejects content parameter for blocks without a content attribute', async () => {
+      const s = await connectWithBlockTypes([
+        { name: 'core/paragraph', attributes: { content: { type: 'rich-text' } } },
+        { name: 'core/heading', attributes: { content: { type: 'rich-text' } } },
+        {
+          name: 'core/pullquote',
+          attributes: {
+            value: { type: 'rich-text' },
+            citation: { type: 'rich-text' },
+          },
+        },
+      ]);
+
+      try {
+        await expect(
+          s.insertBlock(0, { name: 'core/pullquote', content: 'text' }),
+        ).rejects.toThrow(/does not have a "content" attribute/);
+
+        // Error message should mention available rich-text attributes
+        await expect(
+          s.insertBlock(0, { name: 'core/pullquote', content: 'text' }),
+        ).rejects.toThrow(/value/);
+
+        await expect(
+          s.insertBlock(0, { name: 'core/pullquote', content: 'text' }),
+        ).rejects.toThrow(/citation/);
+      } finally {
+        s.disconnect();
+      }
+    });
+
+    it('rejects unknown attributes', async () => {
+      const s = await connectWithBlockTypes([
+        {
+          name: 'core/paragraph',
+          attributes: {
+            content: { type: 'rich-text' },
+            dropCap: { type: 'boolean', default: false },
+          },
+        },
+        { name: 'core/heading', attributes: { content: { type: 'rich-text' } } },
+      ]);
+
+      try {
+        await expect(
+          s.insertBlock(0, {
+            name: 'core/paragraph',
+            attributes: { content: 'hello', unknownAttr: true },
+          }),
+        ).rejects.toThrow(/Unknown attribute/);
+
+        await expect(
+          s.insertBlock(0, {
+            name: 'core/paragraph',
+            attributes: { content: 'hello', unknownAttr: true },
+          }),
+        ).rejects.toThrow(/unknownAttr/);
+      } finally {
+        s.disconnect();
+      }
+    });
+
+    it('rejects inner block that violates parent constraint', async () => {
+      const s = await connectWithBlockTypes([
+        { name: 'core/paragraph', attributes: { content: { type: 'rich-text' } } },
+        { name: 'core/heading', attributes: { content: { type: 'rich-text' } } },
+        { name: 'core/list', attributes: null },
+        { name: 'core/column', attributes: null, parent: ['core/columns'] },
+      ]);
+
+      try {
+        await expect(
+          s.insertBlock(0, {
+            name: 'core/list',
+            innerBlocks: [{ name: 'core/column' }],
+          }),
+        ).rejects.toThrow(/can only be nested inside/);
+
+        await expect(
+          s.insertBlock(0, {
+            name: 'core/list',
+            innerBlocks: [{ name: 'core/column' }],
+          }),
+        ).rejects.toThrow(/core\/columns/);
+      } finally {
+        s.disconnect();
+      }
+    });
+
+    it('rejects inner block not in parent\'s allowedBlocks', async () => {
+      const s = await connectWithBlockTypes([
+        { name: 'core/paragraph', attributes: { content: { type: 'rich-text' } } },
+        { name: 'core/heading', attributes: { content: { type: 'rich-text' } } },
+        { name: 'core/list', attributes: null, allowed_blocks: ['core/list-item'] },
+        { name: 'core/list-item', attributes: { content: { type: 'rich-text' } } },
+      ]);
+
+      try {
+        await expect(
+          s.insertBlock(0, {
+            name: 'core/list',
+            innerBlocks: [{ name: 'core/paragraph', content: 'text' }],
+          }),
+        ).rejects.toThrow(/only allows these inner blocks/);
+
+        await expect(
+          s.insertBlock(0, {
+            name: 'core/list',
+            innerBlocks: [{ name: 'core/paragraph', content: 'text' }],
+          }),
+        ).rejects.toThrow(/core\/list-item/);
+      } finally {
+        s.disconnect();
+      }
+    });
+
+    it('rejects top-level insertion of block with parent constraint', async () => {
+      const s = await connectWithBlockTypes([
+        { name: 'core/paragraph', attributes: { content: { type: 'rich-text' } } },
+        { name: 'core/columns', attributes: null },
+        { name: 'core/column', attributes: null, parent: ['core/columns'] },
+      ]);
+
+      try {
+        await expect(
+          s.insertBlock(0, { name: 'core/column' }),
+        ).rejects.toThrow(/cannot be inserted at the top level/);
+
+        await expect(
+          s.insertBlock(0, { name: 'core/column' }),
+        ).rejects.toThrow(/core\/columns/);
+      } finally {
+        s.disconnect();
+      }
+    });
+
+    it('accepts valid attributes and inner blocks', async () => {
+      vi.useFakeTimers();
+
+      const s = await connectWithBlockTypes([
+        { name: 'core/paragraph', attributes: { content: { type: 'rich-text' } } },
+        { name: 'core/heading', attributes: { content: { type: 'rich-text' } } },
+        {
+          name: 'core/list',
+          attributes: { ordered: { type: 'boolean', default: false } },
+          allowed_blocks: ['core/list-item'],
+        },
+        {
+          name: 'core/list-item',
+          attributes: { content: { type: 'rich-text' } },
+          parent: ['core/list'],
+        },
+      ]);
+
+      try {
+        const promise = s.insertBlock(0, {
+          name: 'core/list',
+          innerBlocks: [
+            { name: 'core/list-item', content: 'Item one' },
+            { name: 'core/list-item', content: 'Item two' },
+          ],
+        });
+        await vi.runAllTimersAsync();
+        await promise;
+
+        const text = s.readPost();
+        expect(text).toContain('core/list');
+        expect(text).toContain('Item one');
+        expect(text).toContain('Item two');
+      } finally {
+        s.disconnect();
+        vi.useRealTimers();
+      }
     });
   });
 });

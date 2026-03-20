@@ -6,6 +6,7 @@ import { registerPostTools } from './tools/posts.js';
 import { registerReadTools } from './tools/read.js';
 import { registerEditTools } from './tools/edit.js';
 import { registerStatusTools } from './tools/status.js';
+import { registerBlockTypeTools } from './tools/block-types.js';
 
 declare const __PKG_VERSION__: string;
 
@@ -39,6 +40,7 @@ export async function startServer(): Promise<void> {
   registerReadTools(server, session);
   registerEditTools(server, session);
   registerStatusTools(server, session);
+  registerBlockTypeTools(server, session);
 
   // Start stdio transport
   const transport = new StdioServerTransport();
