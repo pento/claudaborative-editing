@@ -148,7 +148,7 @@ describe('block-types tool', () => {
   });
 
   describe('fallback warning', () => {
-    it('shows fallback warning when API was unavailable', async () => {
+    it('shows reconnect hint when connected with fallback registry', async () => {
       server = createMockServer();
       session = createSessionWithFallbackRegistry();
       registerBlockTypeTools(server as unknown as McpServer, session);
@@ -158,6 +158,22 @@ describe('block-types tool', () => {
 
       expect(result.isError).toBeUndefined();
       expect(result.content[0].text).toContain('fallback');
+      expect(result.content[0].text).toContain('disconnecting and reconnecting');
+    });
+
+    it('shows connect hint when disconnected with fallback registry', async () => {
+      server = createMockServer();
+      const registry = BlockTypeRegistry.createFallback();
+      session = createMockSession({ state: 'disconnected' });
+      (session as any).getRegistry = vi.fn().mockReturnValue(registry);
+      registerBlockTypeTools(server as unknown as McpServer, session);
+
+      const tool = server.registeredTools.get('wp_block_types')!;
+      const result = await tool.handler({});
+
+      expect(result.isError).toBeUndefined();
+      expect(result.content[0].text).toContain('fallback');
+      expect(result.content[0].text).toContain('Connect to a WordPress site');
     });
   });
 

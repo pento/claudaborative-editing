@@ -209,11 +209,15 @@ export class BlockTypeRegistry {
 
   /**
    * Get all known attribute names for a block type.
-   * Returns null if the block type is unknown or has no schema (fallback).
+   * Returns null if the block type is unknown or if using the fallback registry
+   * (which has no attribute schemas). For API-sourced registries, returns an
+   * empty Set for blocks with zero attributes so validation remains strict.
    */
   getAttributeNames(blockName: string): Set<string> | null {
     const entry = this.entries.get(blockName);
-    if (!entry || entry.attributeSchemas.size === 0) return null;
+    if (!entry) return null;
+    // Fallback registry has no attribute schemas — return null to skip validation
+    if (this.isFallback && entry.attributeSchemas.size === 0) return null;
     return new Set(entry.attributeSchemas.keys());
   }
 

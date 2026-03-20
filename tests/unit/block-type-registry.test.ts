@@ -233,6 +233,15 @@ describe('BlockTypeRegistry', () => {
     it('getAttributeNames() returns null for an unknown block type', () => {
       expect(registry.getAttributeNames('unknown/block')).toBeNull();
     });
+
+    it('getAttributeNames() returns empty Set for API block with null attributes', () => {
+      const reg = BlockTypeRegistry.fromApiResponse([
+        { name: 'core/nextpage', attributes: null },
+      ]);
+      const names = reg.getAttributeNames('core/nextpage');
+      expect(names).toBeInstanceOf(Set);
+      expect(names!.size).toBe(0);
+    });
   });
 
   describe('getParent(), getAncestor(), getAllowedBlocks()', () => {

@@ -48,11 +48,14 @@ export function registerBlockTypeTools(server: McpServer, session: SessionManage
         const registry = session.getRegistry();
 
         if (registry.isUsingFallback()) {
+          const state = session.getState();
+          const hint = state === 'disconnected'
+            ? 'Connect to a WordPress site to load full block schemas.'
+            : 'Full block schemas could not be loaded. Try disconnecting and reconnecting.';
           return {
             content: [{
               type: 'text' as const,
-              text: 'Block type registry is using fallback data (API was unavailable during connect). ' +
-                'Only basic block type information is available. Reconnect to fetch full schemas.',
+              text: `Block type registry is using fallback data. Only basic block type information is available. ${hint}`,
             }],
           };
         }
