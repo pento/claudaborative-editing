@@ -24,8 +24,9 @@ Claude Code  <--stdio-->  MCP Server (Node.js)  <--HTTP polling-->  WordPress
 
 ### Source Layout
 
-- `src/index.ts` — Entry point (stdio MCP server)
-- `src/server.ts` — MCP server setup, tool registration
+- `src/index.ts` — Entry point: CLI flags (`--version`, `--help`, `setup`) then MCP server
+- `src/server.ts` — MCP server setup, tool registration, version export
+- `src/cli/setup.ts` — Interactive setup wizard (credential validation, outputs `claude mcp add` command)
 - `src/wordpress/` — REST API client, HTTP polling sync client
 - `src/yjs/` — Y.Doc management, block ↔ Yjs conversion, sync protocol encoding
 - `src/session/` — Connection lifecycle, awareness/presence
@@ -74,6 +75,24 @@ Rich-text edits (inserts and updates) are streamed to the browser in small chunk
 ## Adding New Block Types
 
 To add rich-text support for a new block type, add it to `RICH_TEXT_ATTRIBUTES` in `src/yjs/types.ts`. The key is the block name, value is a `Set` of attribute names that are rich-text.
+
+## CLI
+
+The entry point (`src/index.ts`) handles CLI flags before starting the MCP server:
+
+- `--version` / `-v` — prints version from `package.json` (injected at build time via tsup `define`)
+- `--help` / `-h` — prints usage
+- `setup` — runs interactive setup wizard (`src/cli/setup.ts`)
+- No args — starts the MCP server (stdio transport)
+
+The version is injected at build time: `tsup.config.ts` reads `package.json` and defines `__PKG_VERSION__`, which `src/server.ts` exports as `VERSION`.
+
+## npm Publishing
+
+- `package.json` has `"files": ["dist"]` — only `dist/` ships in the tarball
+- `prepublishOnly` runs typecheck, tests, and build
+- GitHub Actions: `.github/workflows/publish.yml` publishes on GitHub release creation
+- CI: `.github/workflows/ci.yml` runs on push/PR with Node 20+22 matrix
 
 ## Environment Variables
 

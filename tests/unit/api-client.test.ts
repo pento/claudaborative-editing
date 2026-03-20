@@ -256,8 +256,8 @@ describe('WordPressApiClient', () => {
         expect(err).toBeInstanceOf(WordPressApiError);
         const apiErr = err as WordPressApiError;
         expect(apiErr.status).toBe(401);
-        expect(apiErr.message).toContain('401');
-        expect(apiErr.message).toContain('Unauthorized');
+        expect(apiErr.message).toContain('Authentication failed');
+        expect(apiErr.message).toContain('Application Password');
       }
     });
 
@@ -300,6 +300,82 @@ describe('WordPressApiClient', () => {
       } catch (err) {
         const apiErr = err as WordPressApiError;
         expect(apiErr.body).toContain('some_error');
+      }
+    });
+
+    it('gives auth-specific message for 401', async () => {
+      fetchMock.mockResolvedValue(
+        mockResponse(
+          { code: 'rest_forbidden', message: 'Sorry' },
+          { status: 401, statusText: 'Unauthorized' },
+        ),
+      );
+      const client = createClient();
+
+      try {
+        await client.getCurrentUser();
+        expect.fail('should have thrown');
+      } catch (err) {
+        const apiErr = err as WordPressApiError;
+        expect(apiErr.message).toContain('Authentication failed');
+        expect(apiErr.message).toContain('Application Password');
+      }
+    });
+
+    it('gives auth-specific message for 403', async () => {
+      fetchMock.mockResolvedValue(
+        mockResponse(
+          { code: 'rest_forbidden', message: 'Sorry' },
+          { status: 403, statusText: 'Forbidden' },
+        ),
+      );
+      const client = createClient();
+
+      try {
+        await client.getCurrentUser();
+        expect.fail('should have thrown');
+      } catch (err) {
+        const apiErr = err as WordPressApiError;
+        expect(apiErr.message).toContain('Authentication failed');
+      }
+    });
+
+    it('gives collaborative editing message for 404 on sync endpoint', async () => {
+      fetchMock.mockResolvedValue(
+        mockResponse(
+          { code: 'rest_no_route', message: 'No route' },
+          { status: 404, statusText: 'Not Found' },
+        ),
+      );
+      const client = createClient();
+
+      try {
+        await client.validateSyncEndpoint();
+        expect.fail('should have thrown');
+      } catch (err) {
+        const apiErr = err as WordPressApiError;
+        expect(apiErr.message).toContain('Collaborative editing is not enabled');
+        expect(apiErr.message).toContain('Settings');
+        expect(apiErr.message).toContain('WordPress 7.0');
+      }
+    });
+
+    it('gives generic message for 404 on non-sync endpoint', async () => {
+      fetchMock.mockResolvedValue(
+        mockResponse(
+          { code: 'rest_post_invalid_id', message: 'Invalid post ID.' },
+          { status: 404, statusText: 'Not Found' },
+        ),
+      );
+      const client = createClient();
+
+      try {
+        await client.getPost(999);
+        expect.fail('should have thrown');
+      } catch (err) {
+        const apiErr = err as WordPressApiError;
+        expect(apiErr.message).not.toContain('Collaborative editing');
+        expect(apiErr.message).toContain('404');
       }
     });
   });

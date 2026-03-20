@@ -7,13 +7,33 @@
   "bin": {
     "claudaborative-editing": "dist/index.js"
   },
+  "files": [
+    "dist"
+  ],
+  "license": "GPL-2.0-or-later",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pento/claudaborative-editing.git"
+  },
+  "keywords": [
+    "mcp",
+    "wordpress",
+    "gutenberg",
+    "collaborative-editing",
+    "yjs",
+    "claude"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
     "start": "node dist/index.js",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run typecheck && npm test && npm run build"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.27.1",

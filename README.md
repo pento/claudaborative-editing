@@ -1,62 +1,35 @@
 # claudaborative-editing
 
-An MCP server that lets Claude Code act as a Yjs client, connecting to a WordPress site and collaboratively editing posts alongside human editors using the Gutenberg block editor.
+An MCP server that lets Claude Code collaboratively edit WordPress posts in real time, alongside human editors in the Gutenberg block editor.
+
+## Quickstart
+
+```bash
+npx claudaborative-editing setup
+```
+
+The setup wizard validates your WordPress credentials and outputs the registration command:
+
+```bash
+claude mcp add claudaborative-editing -e WP_SITE_URL=https://your-site.com -e WP_USERNAME=your-user -e WP_APP_PASSWORD="xxxx xxxx xxxx xxxx" -- npx claudaborative-editing
+```
 
 ## Prerequisites
 
-- **Node.js** 20+
-- **WordPress** with Gutenberg real-time collaborative editing enabled (WordPress 7.0+)
-- **Application Password** for a WordPress user with edit_posts capability
-
-### Setting Up WordPress Application Passwords
-
-1. In WordPress admin, go to **Users → Your Profile**
-2. Scroll to **Application Passwords**
-3. Enter a name (e.g., "Claude Code") and click **Add New Application Password**
-4. Copy the generated password (it won't be shown again)
-
-## Installation
-
-```bash
-npm install
-npm run build
-```
+- **WordPress 7.0+** with collaborative editing enabled (Settings → Writing)
+- **Application Password** for a WordPress user with `edit_posts` capability
+  - In WordPress admin: Users → Your Profile → Application Passwords
+  - Enter a name (e.g., "Claude Code"), click **Add New**, copy the password
 
 ## Configuration
 
-### Option 1: Environment Variables
+Credentials are passed as environment variables via the `claude mcp add` command (as shown in the quickstart). You can also use the `wp_connect` MCP tool to connect at runtime without pre-configured credentials.
 
-Set these before starting the MCP server:
-
-```bash
-export WP_SITE_URL="https://your-wordpress-site.com"
-export WP_USERNAME="your-username"
-export WP_APP_PASSWORD="xxxx xxxx xxxx xxxx xxxx xxxx"
-```
-
-### Option 2: Claude Code MCP Config
-
-Add to your Claude Code MCP settings (`.claude/settings.json` or project settings):
-
-```json
-{
-  "mcpServers": {
-    "claudaborative-editing": {
-      "command": "node",
-      "args": ["/path/to/claudaborative-editing/dist/index.js"],
-      "env": {
-        "WP_SITE_URL": "https://your-wordpress-site.com",
-        "WP_USERNAME": "your-username",
-        "WP_APP_PASSWORD": "xxxx xxxx xxxx xxxx xxxx xxxx"
-      }
-    }
-  }
-}
-```
-
-### Option 3: Connect at Runtime
-
-If no env vars are set, use the `wp_connect` tool to connect manually.
+| Variable          | Description                    |
+| ----------------- | ------------------------------ |
+| `WP_SITE_URL`     | WordPress site URL             |
+| `WP_USERNAME`     | WordPress username             |
+| `WP_APP_PASSWORD` | WordPress Application Password |
 
 ## MCP Tools
 
@@ -116,14 +89,18 @@ If no env vars are set, use the `wp_connect` tool to connect manually.
 
 ## How It Works
 
-The server maintains a Yjs CRDT document in memory that mirrors the post being edited in WordPress. Changes made by Claude through the MCP tools are applied to the local Y.Doc and synced to WordPress via HTTP polling. Changes made by human editors in the browser are received through the same polling mechanism and applied to Claude's local Y.Doc.
-
-This means edits from Claude and human editors can happen simultaneously without conflicts — the Yjs CRDT ensures all clients converge to the same state.
+The server maintains a Yjs CRDT document that mirrors the WordPress post. Edits from Claude and human editors sync via HTTP polling and merge automatically — the CRDT ensures all clients converge to the same state. See [CLAUDE.md](CLAUDE.md) for architecture details.
 
 ## Development
 
 ```bash
-npm test             # Run tests
-npm run typecheck    # Type check
+npm install
+npm run build        # Build with tsup → dist/
+npm test             # Run vitest
+npm run typecheck    # TypeScript type check
 npm run dev          # Watch mode build
 ```
+
+## License
+
+[GPL-2.0-or-later](LICENSE)

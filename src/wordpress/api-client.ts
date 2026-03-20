@@ -105,6 +105,25 @@ export class WordPressApiClient {
   }
 
   /**
+   * Produce a human-friendly error message for common failure modes.
+   */
+  private formatErrorMessage(path: string, status: number, body: string): string {
+    if (status === 401 || status === 403) {
+      return `Authentication failed. Check your username and Application Password. (HTTP ${status})`;
+    }
+
+    if (status === 404 && path.startsWith('/wp-sync/')) {
+      return (
+        'Collaborative editing is not enabled. ' +
+        'Enable it in Settings \u2192 Writing in your WordPress admin, then try again. ' +
+        '(Requires WordPress 7.0 or later.)'
+      );
+    }
+
+    return `WordPress API error ${status}: ${body}`;
+  }
+
+  /**
    * Internal fetch helper with auth and error handling.
    */
   private async apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
@@ -136,8 +155,10 @@ export class WordPressApiClient {
         errorBody = '(unable to read response body)';
       }
 
+      const message = this.formatErrorMessage(path, response.status, errorBody);
+
       throw new WordPressApiError(
-        `WordPress API error ${response.status} ${response.statusText}: ${errorBody}`,
+        message,
         response.status,
         errorBody,
       );
