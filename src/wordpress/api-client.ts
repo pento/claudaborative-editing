@@ -1,5 +1,6 @@
 import type {
   WordPressConfig,
+  WPBlockType,
   WPPost,
   WPUser,
   SyncPayload,
@@ -91,6 +92,14 @@ export class WordPressApiClient {
       method: 'POST',
       body: JSON.stringify(data),
     });
+  }
+
+  /**
+   * Fetch all registered block types from the WordPress site.
+   * GET /wp/v2/block-types?context=edit
+   */
+  async getBlockTypes(): Promise<WPBlockType[]> {
+    return this.apiFetch<WPBlockType[]>('/wp/v2/block-types?context=edit');
   }
 
   /**

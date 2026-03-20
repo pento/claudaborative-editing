@@ -82,6 +82,29 @@ export interface WPUser {
   avatar_urls: Record<string, string>;
 }
 
+// --- Block Type API Types ---
+
+/** A single attribute definition from the block type schema. */
+export interface WPBlockTypeAttribute {
+  type: string;       // "rich-text", "string", "boolean", "number", "integer", "array", "object"
+  source?: string;    // "rich-text", "html", "attribute", "text", "query"
+  default?: unknown;
+  role?: string;
+}
+
+/** A block type as returned by GET /wp/v2/block-types. */
+export interface WPBlockType {
+  name: string;
+  title?: string;
+  attributes: Record<string, WPBlockTypeAttribute> | null;
+  /** Block types this block can be nested inside. Null/empty = any parent. */
+  parent?: string[] | null;
+  /** Ancestor blocks (more flexible than parent — any ancestor, not just direct). */
+  ancestor?: string[] | null;
+  /** Block types allowed as direct children. Null = any, string[] = restricted list. */
+  allowed_blocks?: string[] | null;
+}
+
 // --- Connection Config ---
 
 export interface WordPressConfig {

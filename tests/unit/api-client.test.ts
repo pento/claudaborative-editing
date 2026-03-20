@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { WordPressApiClient, WordPressApiError } from '../../src/wordpress/api-client.js';
-import type { SyncPayload, WPPost, WPUser } from '../../src/wordpress/types.js';
+import type { SyncPayload, WPBlockType, WPPost, WPUser } from '../../src/wordpress/types.js';
 
 // Helper to build a mock Response
 function mockResponse(body: unknown, init?: { status?: number; statusText?: string }): Response {
@@ -377,6 +377,62 @@ describe('WordPressApiClient', () => {
         expect(apiErr.message).not.toContain('Collaborative editing');
         expect(apiErr.message).toContain('404');
       }
+    });
+  });
+
+  describe('getBlockTypes', () => {
+    it('fetches /wp/v2/block-types?context=edit', async () => {
+      const fakeBlockTypes: WPBlockType[] = [
+        { name: 'core/paragraph', attributes: { content: { type: 'rich-text', source: 'rich-text' } } },
+        { name: 'core/heading', attributes: { content: { type: 'rich-text', source: 'rich-text' } } },
+      ];
+      fetchMock.mockResolvedValue(mockResponse(fakeBlockTypes));
+      const client = createClient();
+      const result = await client.getBlockTypes();
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        'https://example.com/wp-json/wp/v2/block-types?context=edit',
+        expect.anything(),
+      );
+      expect(result).toEqual(fakeBlockTypes);
+    });
+
+    it('returns block types with attributes', async () => {
+      const fakeBlockTypes: WPBlockType[] = [
+        {
+          name: 'core/paragraph',
+          attributes: {
+            content: { type: 'rich-text', source: 'rich-text' },
+            dropCap: { type: 'boolean', default: false },
+            placeholder: { type: 'string' },
+          },
+        },
+        {
+          name: 'core/image',
+          attributes: {
+            url: { type: 'string', source: 'attribute' },
+            alt: { type: 'string', source: 'attribute', default: '' },
+            caption: { type: 'rich-text', source: 'rich-text' },
+            id: { type: 'number' },
+          },
+        },
+        { name: 'core/separator', attributes: null },
+      ];
+      fetchMock.mockResolvedValue(mockResponse(fakeBlockTypes));
+      const client = createClient();
+      const result = await client.getBlockTypes();
+
+      expect(result).toHaveLength(3);
+      expect(result[0].name).toBe('core/paragraph');
+      expect(result[0].attributes).toEqual({
+        content: { type: 'rich-text', source: 'rich-text' },
+        dropCap: { type: 'boolean', default: false },
+        placeholder: { type: 'string' },
+      });
+      expect(result[1].name).toBe('core/image');
+      expect(result[1].attributes!.caption).toEqual({ type: 'rich-text', source: 'rich-text' });
+      expect(result[2].name).toBe('core/separator');
+      expect(result[2].attributes).toBeNull();
     });
   });
 

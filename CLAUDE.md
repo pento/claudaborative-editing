@@ -49,9 +49,11 @@ disconnected ──connect──→ connected ──openPost/createPost──→
 
 - **V1 encoding**: All Yjs updates use `encodeStateAsUpdate`/`applyUpdate` (V1). This matches Gutenberg's encoding. The sync_step1/step2 handshake uses y-protocols standard encoding (also V1 internally).
 - **yjs pinned to 13.6.29**: Must match the version Gutenberg uses. Different versions can produce incompatible binary updates.
-- **Rich-text attributes**: Block attributes whose type is `rich-text` in the block schema (e.g., `core/paragraph` `content`) are stored as `Y.Text` in the Y.Doc. Other attributes are plain values. The known mapping is in `src/yjs/types.ts` `RICH_TEXT_ATTRIBUTES`.
+- **Rich-text attributes**: Block attributes whose type is `rich-text` in the block schema (e.g., `core/paragraph` `content`) are stored as `Y.Text` in the Y.Doc. Other attributes are plain values. Rich-text detection is handled by `BlockTypeRegistry` in `src/yjs/block-type-registry.ts`.
 - **Room format**: `postType/{type}:{id}` (e.g., `postType/post:123`)
 - **Block-level editing**: Claude edits at block granularity to preserve CRDT merge semantics. Full-content replacement would lose concurrent edits.
+- **Dynamic block type registry**: During `connect()`, all block types are fetched from `GET /wp/v2/block-types` and a `BlockTypeRegistry` is built. This registry maps every block type to its rich-text attributes, default values, attribute schemas, and nesting constraints (`parent`, `ancestor`, `allowedBlocks`). Any block type registered on the WordPress site (core, third-party plugin, or custom) can be inserted — there is no hardcoded allowlist. If the API call fails, the registry falls back to a small hardcoded subset of core block types (with validation skipped for unknown types).
+- **Block insertion validation**: When inserting blocks (with an API-sourced registry), `prepareBlockTree()` validates: (1) block type exists, (2) `content` parameter is only used for blocks with a `content` attribute, (3) all provided attributes exist in the block schema, (4) inner blocks satisfy their `parent` constraint, (5) inner blocks are in the parent's `allowedBlocks` list. Use the `wp_block_types` tool to look up a block's schema before inserting unfamiliar block types.
 - **Delta-based text updates**: Rich-text updates use `Y.Text.applyDelta()` with a common-prefix/common-suffix diff algorithm. Delta operations are position-based (retain/delete/insert), not CRDT-item-ID-based, so they work regardless of which client created the underlying items. This is critical for live sync with Gutenberg, which creates local Y.Text items via `applyChangesToCRDTDoc` alongside remote items. The legacy `updateYText()` (full replacement) is preserved but not used in editing paths.
 
 ### Sync Protocol
@@ -81,11 +83,20 @@ Rich-text edits (inserts and updates) are streamed to the browser in small chunk
 - Each chunk is applied in its own `doc.transact()` and flushed via `SyncClient.flushQueue()`
 - `flushQueue()` cancels the scheduled poll timer and triggers an immediate poll, with re-entrancy protection to prevent concurrent HTTP requests
 - `removeBlocks()`, `moveBlock()`, and `save()` are not streamed (no text content)
-- Default block attributes (e.g., `dropCap: false` for `core/paragraph`) are applied automatically via `DEFAULT_BLOCK_ATTRIBUTES` in `src/yjs/types.ts` to prevent Gutenberg from marking blocks as invalid
+- Default block attributes (e.g., `dropCap: false` for `core/paragraph`) are applied automatically from the block type schema to prevent Gutenberg from marking blocks as invalid
 
-## Adding New Block Types
+## Block Type Support
 
-To add rich-text support for a new block type, add it to `RICH_TEXT_ATTRIBUTES` in `src/yjs/types.ts`. The key is the block name, value is a `Set` of attribute names that are rich-text.
+Block types are auto-discovered from the WordPress REST API (`GET /wp/v2/block-types`) during `connect()`. No code changes are needed to support new core blocks, third-party plugin blocks, or custom blocks — they are automatically available once registered on the WordPress site.
+
+The `BlockTypeRegistry` (`src/yjs/block-type-registry.ts`) handles:
+- **Rich-text detection**: `type === "rich-text"` OR `source === "rich-text"` OR `source === "html"`
+- **Default extraction**: Every attribute with a `"default"` field in the schema
+- **Attribute schema storage**: Full attribute schemas for validating attribute names on insertion
+- **Nesting constraints**: `parent`, `ancestor`, and `allowedBlocks` from the API for validating block hierarchy
+- **Block type lookup**: `wp_block_types` tool exposes the registry for schema inspection before inserting blocks
+
+If the API call fails (e.g., insufficient permissions), a hardcoded fallback covering ~12 core block types is used, with all validation skipped.
 
 ## CLI
 
@@ -110,3 +121,7 @@ The version is injected at build time: `tsup.config.ts` reads `package.json` and
 - `WP_SITE_URL` — WordPress site URL (optional, can use `wp_connect` tool instead)
 - `WP_USERNAME` — WordPress username
 - `WP_APP_PASSWORD` — WordPress Application Password
+
+## MCP Server Usage
+
+The MCP server reconnects to WordPress automatically on restart using stored credentials/environment variables. You generally do **not** need to call `wp_connect` — check `wp_status` first. Only use `wp_connect` if the status shows disconnected and the user explicitly provides credentials.

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import * as Y from 'yjs';
 import { DocumentManager } from '#yjs/document-manager';
+import { BlockTypeRegistry } from '#yjs/block-type-registry';
 import type { Block } from '#yjs/types';
 import {
   CRDT_RECORD_MAP_KEY,
@@ -48,6 +49,34 @@ function makeList(items: string[]): Block {
 }
 
 describe('DocumentManager', () => {
+  describe('registry', () => {
+    it('uses fallback registry by default', () => {
+      const manager = new DocumentManager();
+      expect(manager.getRegistry().isUsingFallback()).toBe(true);
+    });
+
+    it('accepts a registry in constructor', () => {
+      const registry = BlockTypeRegistry.fromApiResponse([
+        { name: 'core/paragraph', attributes: { content: { type: 'rich-text' } } },
+      ]);
+      const manager = new DocumentManager(registry);
+      expect(manager.getRegistry()).toBe(registry);
+      expect(manager.getRegistry().isUsingFallback()).toBe(false);
+    });
+
+    it('updates registry via setRegistry', () => {
+      const manager = new DocumentManager();
+      expect(manager.getRegistry().isUsingFallback()).toBe(true);
+
+      const registry = BlockTypeRegistry.fromApiResponse([
+        { name: 'core/paragraph', attributes: { content: { type: 'rich-text' } } },
+      ]);
+      manager.setRegistry(registry);
+      expect(manager.getRegistry()).toBe(registry);
+      expect(manager.getRegistry().isUsingFallback()).toBe(false);
+    });
+  });
+
   describe('createDoc', () => {
     it('creates a doc with two root maps', () => {
       const { doc } = createManager();

@@ -24,7 +24,7 @@ import { renderPost, renderBlock } from '../blocks/renderer.js';
 import { buildAwarenessState, parseCollaborators } from './awareness.js';
 import { DEFAULT_SYNC_CONFIG } from '../wordpress/types.js';
 import type { Block, CollaboratorInfo, AwarenessLocalState } from '../yjs/types.js';
-import { isRichTextAttribute, getDefaultAttributes } from '../yjs/types.js';
+import { BlockTypeRegistry } from '../yjs/block-type-registry.js';
 import type {
   WordPressConfig,
   WPUser,
@@ -75,15 +75,68 @@ interface StreamTarget {
 function prepareBlockTree(
   input: BlockInput,
   indexPrefix: string,
+  registry: BlockTypeRegistry,
+  parentName?: string,
 ): { block: Block; streamTargets: StreamTarget[] } {
-  const defaults = getDefaultAttributes(input.name);
+  // When using the API-sourced registry, validate block type existence.
+  // Skip all validation for the fallback registry — it only knows a subset.
+  if (!registry.isUsingFallback()) {
+    if (!registry.isKnownBlockType(input.name)) {
+      throw new Error(
+        `Unknown block type: ${input.name}. This block type is not registered on the WordPress site.`,
+      );
+    }
+
+    // Validate 'content' parameter: block must have a 'content' attribute
+    if (input.content !== undefined && !registry.hasAttribute(input.name, 'content')) {
+      const info = registry.getBlockTypeInfo(input.name);
+      const richTextAttrs = info?.attributes.filter((a) => a.richText).map((a) => a.name) ?? [];
+      const hint = richTextAttrs.length > 0
+        ? ` This block's rich-text attributes are: ${richTextAttrs.join(', ')}. Pass text via the "attributes" parameter instead.`
+        : '';
+      throw new Error(
+        `Block type ${input.name} does not have a "content" attribute.${hint}`,
+      );
+    }
+
+    // Validate provided attributes exist in the block schema
+    if (input.attributes) {
+      const knownAttrs = registry.getAttributeNames(input.name);
+      if (knownAttrs) {
+        const unknownAttrs = Object.keys(input.attributes).filter((k) => !knownAttrs.has(k));
+        if (unknownAttrs.length > 0) {
+          throw new Error(
+            `Unknown attribute${unknownAttrs.length > 1 ? 's' : ''} for ${input.name}: ${unknownAttrs.join(', ')}. ` +
+            `Known attributes: ${[...knownAttrs].sort().join(', ')}`,
+          );
+        }
+      }
+    }
+
+    // Validate parent constraint
+    const parentConstraint = registry.getParent(input.name);
+    if (parentConstraint) {
+      if (!parentName) {
+        throw new Error(
+          `Block type ${input.name} cannot be inserted at the top level. It must be nested inside: ${parentConstraint.join(', ')}`,
+        );
+      }
+      if (!parentConstraint.includes(parentName)) {
+        throw new Error(
+          `Block type ${input.name} can only be nested inside: ${parentConstraint.join(', ')} (got ${parentName})`,
+        );
+      }
+    }
+  }
+
+  const defaults = registry.getDefaultAttributes(input.name);
   const attrs = { ...defaults, ...input.attributes };
   const streamTargets: StreamTarget[] = [];
 
   // Handle 'content' field
   if (input.content !== undefined) {
     if (
-      isRichTextAttribute(input.name, 'content') &&
+      registry.isRichTextAttribute(input.name, 'content') &&
       input.content.length >= STREAM_THRESHOLD
     ) {
       streamTargets.push({ blockIndex: indexPrefix, attrName: 'content', value: input.content });
@@ -97,7 +150,7 @@ function prepareBlockTree(
   for (const [key, value] of Object.entries(attrs)) {
     if (
       key !== 'content' &&
-      isRichTextAttribute(input.name, key) &&
+      registry.isRichTextAttribute(input.name, key) &&
       typeof value === 'string' &&
       value.length >= STREAM_THRESHOLD
     ) {
@@ -106,12 +159,26 @@ function prepareBlockTree(
     }
   }
 
-  // Recurse into inner blocks
+  // Recurse into inner blocks with parent/allowedBlocks validation
   const innerBlocks: Block[] = [];
   if (input.innerBlocks) {
+    // Validate parent's allowedBlocks constraint
+    if (!registry.isUsingFallback()) {
+      const allowedBlocks = registry.getAllowedBlocks(input.name);
+      if (allowedBlocks) {
+        for (const inner of input.innerBlocks) {
+          if (!allowedBlocks.includes(inner.name)) {
+            throw new Error(
+              `Block type ${input.name} only allows these inner blocks: ${allowedBlocks.join(', ')} (got ${inner.name})`,
+            );
+          }
+        }
+      }
+    }
+
     for (let i = 0; i < input.innerBlocks.length; i++) {
       const childIndex = `${indexPrefix}.${i}`;
-      const prepared = prepareBlockTree(input.innerBlocks[i], childIndex);
+      const prepared = prepareBlockTree(input.innerBlocks[i], childIndex, registry, input.name);
       innerBlocks.push(prepared.block);
       streamTargets.push(...prepared.streamTargets);
     }
@@ -132,6 +199,7 @@ export class SessionManager {
   private apiClient: WordPressApiClient | null = null;
   private syncClient: SyncClient | null = null;
   private documentManager: DocumentManager;
+  private registry: BlockTypeRegistry;
   private doc: Y.Doc | null = null;
   private user: WPUser | null = null;
   private currentPost: WPPost | null = null;
@@ -144,7 +212,8 @@ export class SessionManager {
   syncWaitTimeout = 5000;
 
   constructor() {
-    this.documentManager = new DocumentManager();
+    this.registry = BlockTypeRegistry.createFallback();
+    this.documentManager = new DocumentManager(this.registry);
   }
 
   // --- Connection ---
@@ -162,6 +231,15 @@ export class SessionManager {
 
     // Validate sync endpoint is available
     await this.apiClient.validateSyncEndpoint();
+
+    // Fetch block type registry from the API; fall back to hardcoded if unavailable
+    try {
+      const blockTypes = await this.apiClient.getBlockTypes();
+      this.registry = BlockTypeRegistry.fromApiResponse(blockTypes);
+    } catch {
+      this.registry = BlockTypeRegistry.createFallback();
+    }
+    this.documentManager.setRegistry(this.registry);
 
     // Build awareness state from user info
     this.awarenessState = buildAwarenessState(user);
@@ -421,7 +499,7 @@ export class SessionManager {
 
     // Check 'content' field
     if (changes.content !== undefined) {
-      if (isRichTextAttribute(block.name, 'content') && changes.content.length >= STREAM_THRESHOLD) {
+      if (this.registry.isRichTextAttribute(block.name, 'content') && changes.content.length >= STREAM_THRESHOLD) {
         streamTargets.push({ attrName: 'content', newValue: changes.content });
       } else {
         atomicChanges.content = changes.content;
@@ -433,7 +511,7 @@ export class SessionManager {
       const atomicAttrs: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(changes.attributes)) {
         if (
-          isRichTextAttribute(block.name, key) &&
+          this.registry.isRichTextAttribute(block.name, key) &&
           typeof value === 'string' &&
           value.length >= STREAM_THRESHOLD
         ) {
@@ -486,7 +564,7 @@ export class SessionManager {
     this.requireState('editing');
 
     const blockIndex = String(position);
-    const { block: fullBlock, streamTargets } = prepareBlockTree(block, blockIndex);
+    const { block: fullBlock, streamTargets } = prepareBlockTree(block, blockIndex, this.registry);
 
     // Insert block structure atomically
     this.doc!.transact(() => {
@@ -534,7 +612,7 @@ export class SessionManager {
     const allStreamTargets: StreamTarget[] = [];
     const fullBlocks: Block[] = newBlocks.map((b, i) => {
       const blockIndex = String(startIndex + i);
-      const { block, streamTargets } = prepareBlockTree(b, blockIndex);
+      const { block, streamTargets } = prepareBlockTree(b, blockIndex, this.registry);
       allStreamTargets.push(...streamTargets);
       return block;
     });
@@ -566,7 +644,7 @@ export class SessionManager {
     this.requireState('editing');
 
     const blockIndex = `${parentIndex}.${position}`;
-    const { block: fullBlock, streamTargets } = prepareBlockTree(block, blockIndex);
+    const { block: fullBlock, streamTargets } = prepareBlockTree(block, blockIndex, this.registry);
 
     this.doc!.transact(() => {
       this.documentManager.insertInnerBlock(this.doc!, parentIndex, position, fullBlock);
@@ -658,6 +736,10 @@ export class SessionManager {
 
   getUser(): WPUser | null {
     return this.user;
+  }
+
+  getRegistry(): BlockTypeRegistry {
+    return this.registry;
   }
 
   /**

@@ -13,8 +13,10 @@ interface BlockInput {
   innerBlocks?: BlockInput[];
 }
 
+const blockTypeDescription = 'Block type name (e.g., "core/paragraph", "core/heading", "core/separator")';
+
 const blockInputSchema: z.ZodType<BlockInput> = z.object({
-  name: z.string().describe('Block type name (e.g., "core/paragraph", "core/list-item")'),
+  name: z.string().describe(blockTypeDescription),
   content: z.string().optional().describe('Text content for the block'),
   attributes: z.record(z.unknown()).optional().describe('Block attributes (key-value pairs)'),
   innerBlocks: z.lazy(() => z.array(blockInputSchema)).optional()
@@ -51,7 +53,7 @@ export function registerEditTools(server: McpServer, session: SessionManager): v
     'Insert a new block at a position in the post. Supports nested blocks via innerBlocks.',
     {
       position: z.number().describe('Position to insert the block (0-based index)'),
-      name: z.string().describe('Block type name (e.g., "core/paragraph", "core/heading", "core/list")'),
+      name: z.string().describe(blockTypeDescription),
       content: z.string().optional().describe('Text content for the block'),
       attributes: z.record(z.unknown()).optional().describe('Block attributes (key-value pairs)'),
       innerBlocks: z.array(blockInputSchema).optional()
@@ -78,7 +80,7 @@ export function registerEditTools(server: McpServer, session: SessionManager): v
     {
       parentIndex: z.string().describe('Dot-notation index of the parent block (e.g., "0", "2.1")'),
       position: z.number().describe('Position within the parent\'s inner blocks (0-based)'),
-      name: z.string().describe('Block type name (e.g., "core/list-item")'),
+      name: z.string().describe(blockTypeDescription),
       content: z.string().optional().describe('Text content for the block'),
       attributes: z.record(z.unknown()).optional().describe('Block attributes (key-value pairs)'),
       innerBlocks: z.array(blockInputSchema).optional()
