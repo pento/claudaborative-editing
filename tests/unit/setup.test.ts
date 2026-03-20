@@ -38,6 +38,7 @@ function createTestDeps(answers: string[]): { deps: SetupDeps; logs: string[]; e
       exit: ((code: number) => {
         throw new SetupExitError(code);
       }) as (code: number) => never,
+      cleanup: () => {},
     },
     logs,
     errors,

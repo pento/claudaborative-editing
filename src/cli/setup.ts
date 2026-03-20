@@ -13,6 +13,7 @@ export interface SetupDeps {
   log: (message: string) => void;
   error: (message: string) => void;
   exit: (code: number) => never;
+  cleanup: () => void;
 }
 
 function defaultDeps(): SetupDeps {
@@ -29,11 +30,12 @@ function defaultDeps(): SetupDeps {
       rl.close();
       return process.exit(code);
     },
+    cleanup: () => rl.close(),
   };
 }
 
 export async function runSetup(deps: SetupDeps = defaultDeps()): Promise<void> {
-  const { prompt, log, error, exit } = deps;
+  const { prompt, log, error, exit, cleanup } = deps;
 
   log('');
   log('claudaborative-editing setup');
@@ -127,6 +129,8 @@ export async function runSetup(deps: SetupDeps = defaultDeps()): Promise<void> {
 
   log(`  claude mcp add claudaborative-editing ${envFlags} -- npx claudaborative-editing`);
   log('');
+
+  cleanup();
 }
 
 /**
