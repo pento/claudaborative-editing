@@ -1,8 +1,13 @@
 name: Publish
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  id-token: write
+  contents: read
 
 jobs:
   publish:
@@ -21,4 +26,4 @@ jobs:
       - run: npm run typecheck
       - run: npm run build
       - run: npm test
-      - run: npm publish
+      - run: npm publish --provenance
