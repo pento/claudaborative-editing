@@ -45,6 +45,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.19.15",
+    "@vitest/coverage-v8": "^4.1.0",
     "@wordpress/env": "^11.2.0",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3",
