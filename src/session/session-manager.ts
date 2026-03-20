@@ -346,6 +346,8 @@ export class SessionManager {
    * Close the currently open post (stop sync).
    */
   closePost(): void {
+    this.requireState('editing');
+
     if (this.syncClient) {
       this.syncClient.stop();
       this.syncClient = null;

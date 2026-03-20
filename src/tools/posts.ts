@@ -66,6 +66,28 @@ export function registerPostTools(server: McpServer, session: SessionManager): v
   );
 
   server.tool(
+    'wp_close_post',
+    'Close the current post and stop syncing, without disconnecting from WordPress',
+    {},
+    async () => {
+      try {
+        session.closePost();
+        return {
+          content: [{
+            type: 'text' as const,
+            text: 'Post closed. You can now open another post with wp_open_post or wp_create_post.',
+          }],
+        };
+      } catch (error) {
+        return {
+          content: [{ type: 'text' as const, text: `Failed to close post: ${error instanceof Error ? error.message : String(error)}` }],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  server.tool(
     'wp_create_post',
     'Create a new WordPress post and open it for editing',
     {
