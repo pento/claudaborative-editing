@@ -131,7 +131,7 @@ export class WordPressApiClient {
 
   /**
    * Update an existing post's fields.
-   * POST /wp/v2/posts/{id}
+   * POST /wp/v2/posts/{id}?context=edit
    */
   async updatePost(
     id: number,

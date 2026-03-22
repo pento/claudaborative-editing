@@ -1337,25 +1337,32 @@ export class SessionManager {
   // --- Internal ---
 
   /**
-   * Shared helper for metadata updates: update Y.Doc properties, call REST API, refresh currentPost.
-   * Each key in `fields` is set as a Y.Doc property AND sent to the REST API.
+   * Shared helper for metadata updates: call REST API first, then update Y.Doc.
+   * REST-first ensures the Y.Doc only reflects committed state — if the API call
+   * fails, neither the collaborative doc nor currentPost are modified.
    */
   private async updatePostMeta(fields: Record<string, unknown>): Promise<WPPost> {
-    // Update Y.Doc properties for collaborative sync
+    // Persist via REST API first — fail fast before touching collaborative state
+    const updated = await this.apiClient!.updatePost(this.currentPost!.id, fields);
+    this.currentPost = updated;
+
+    // Update Y.Doc properties to reflect the committed state.
+    // Use WordPress-returned values for scalar fields (e.g., slug may be deduplicated),
+    // but keep the caller's value for fields where the API returns a different shape
+    // (e.g., excerpt returns { rendered, raw } but Y.Doc stores a plain string).
     this.doc!.transact(() => {
       for (const [key, value] of Object.entries(fields)) {
-        this.documentManager.setProperty(this.doc!, key, value);
+        const canonical = (updated as unknown as Record<string, unknown>)[key];
+        const useCanonical = canonical !== undefined && typeof canonical === typeof value;
+        this.documentManager.setProperty(this.doc!, key, useCanonical ? canonical : value);
       }
     }, LOCAL_ORIGIN);
 
-    // Flush sync queue so collaborators see the change immediately
+    // Flush sync queue so collaborators see the change
     if (this.syncClient) {
       this.syncClient.flushQueue();
     }
 
-    // Persist via REST API and refresh currentPost
-    const updated = await this.apiClient!.updatePost(this.currentPost!.id, fields);
-    this.currentPost = updated;
     return updated;
   }
 

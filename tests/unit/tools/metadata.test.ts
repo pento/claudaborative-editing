@@ -16,26 +16,14 @@ describe('metadata tools', () => {
       post: fakePost,
     });
 
-    // Add metadata methods not present in the base mock
-    (session as any).setPostStatus = vi.fn().mockResolvedValue(fakePost);
-    (session as any).setCategories = vi.fn().mockResolvedValue({
+    // Override defaults from createMockSession where tests need non-empty return values
+    (session.setCategories as ReturnType<typeof vi.fn>).mockResolvedValue({
       post: fakePost,
       resolved: [{ name: 'Uncategorized', id: 1, created: false }],
     });
-    (session as any).setTags = vi.fn().mockResolvedValue({
-      post: fakePost,
-      resolved: [],
-    });
-    (session as any).setExcerpt = vi.fn().mockResolvedValue(fakePost);
-    (session as any).setFeaturedImage = vi.fn().mockResolvedValue(fakePost);
-    (session as any).setDate = vi.fn().mockResolvedValue(fakePost);
-    (session as any).setSlug = vi.fn().mockResolvedValue(fakePost);
-    (session as any).setSticky = vi.fn().mockResolvedValue(fakePost);
-    (session as any).setCommentStatus = vi.fn().mockResolvedValue(fakePost);
-    (session as any).listCategories = vi.fn().mockResolvedValue([
+    (session.listCategories as ReturnType<typeof vi.fn>).mockResolvedValue([
       { id: 1, name: 'Uncategorized', slug: 'uncategorized', taxonomy: 'category', count: 5 },
     ]);
-    (session as any).listTags = vi.fn().mockResolvedValue([]);
 
     registerMetadataTools(server as unknown as McpServer, session);
   });
