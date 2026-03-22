@@ -590,6 +590,18 @@ describe('WordPressApiClient', () => {
 
         await expect(client.checkNotesSupport()).rejects.toThrow('fetch failed');
       });
+
+      it('re-throws 5xx server errors instead of returning false', async () => {
+        fetchMock.mockResolvedValue(
+          mockResponse(
+            { code: 'internal_error', message: 'Internal Server Error' },
+            { status: 500, statusText: 'Internal Server Error' },
+          ),
+        );
+        const client = createClient();
+
+        await expect(client.checkNotesSupport()).rejects.toThrow(/500/);
+      });
     });
 
     describe('listNotes', () => {
@@ -603,6 +615,7 @@ describe('WordPressApiClient', () => {
         expect(url).toContain('type=note');
         expect(url).toContain('context=edit');
         expect(url).toContain('per_page=100');
+        expect(url).toContain('page=1');
         expect(result).toEqual([fakeNote]);
       });
 
@@ -613,6 +626,36 @@ describe('WordPressApiClient', () => {
 
         const url = fetchMock.mock.calls[0][0] as string;
         expect(url).toContain('/wp/v2/comments?');
+      });
+
+      it('paginates when first page is full', async () => {
+        const fullPage = Array.from({ length: 100 }, (_, i) => ({
+          ...fakeNote,
+          id: i + 1,
+        }));
+        const secondPage = [{ ...fakeNote, id: 101 }];
+
+        fetchMock
+          .mockResolvedValueOnce(mockResponse(fullPage))
+          .mockResolvedValueOnce(mockResponse(secondPage));
+
+        const client = createClient();
+        const result = await client.listNotes(42);
+
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+        const url1 = fetchMock.mock.calls[0][0] as string;
+        const url2 = fetchMock.mock.calls[1][0] as string;
+        expect(url1).toContain('page=1');
+        expect(url2).toContain('page=2');
+        expect(result).toHaveLength(101);
+      });
+
+      it('does not paginate when first page is partial', async () => {
+        fetchMock.mockResolvedValue(mockResponse([fakeNote]));
+        const client = createClient();
+        await client.listNotes(42);
+
+        expect(fetchMock).toHaveBeenCalledTimes(1);
       });
     });
 

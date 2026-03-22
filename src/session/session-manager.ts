@@ -816,14 +816,22 @@ export class SessionManager {
 
     const notes = await this.apiClient!.listNotes(this.currentPost!.id);
 
-    // Build noteId-to-blockIndex map by scanning all blocks
+    // Build noteId-to-blockIndex map with a single pass over all blocks
     const noteBlockMap: Record<number, string> = {};
-    for (const note of notes) {
-      const blockIndex = this.findBlockIndexByNoteId(note.id);
-      if (blockIndex) {
-        noteBlockMap[note.id] = blockIndex;
+    const blocks = this.documentManager.getBlocks(this.doc!);
+    const scanBlocks = (blockList: Block[], prefix: string) => {
+      for (let i = 0; i < blockList.length; i++) {
+        const idx = prefix ? `${prefix}.${i}` : String(i);
+        const metadata = blockList[i].attributes.metadata as Record<string, unknown> | undefined;
+        if (metadata?.noteId != null) {
+          noteBlockMap[metadata.noteId as number] = idx;
+        }
+        if (blockList[i].innerBlocks.length > 0) {
+          scanBlocks(blockList[i].innerBlocks, idx);
+        }
       }
-    }
+    };
+    scanBlocks(blocks, '');
 
     return { notes, noteBlockMap };
   }
@@ -895,13 +903,35 @@ export class SessionManager {
       throw new Error('Notes are not supported. This feature requires WordPress 6.9 or later.');
     }
 
-    // Delete all replies first, then the note itself (prevents orphaned replies)
+    // Delete all descendants (replies, replies-to-replies, etc.) then the note itself
     const allNotes = await this.apiClient!.listNotes(this.currentPost!.id);
-    const replies = allNotes.filter(n => n.parent === noteId);
-    for (const reply of replies) {
-      await this.apiClient!.deleteNote(reply.id);
+    const childrenByParent = new Map<number, number[]>();
+    for (const note of allNotes) {
+      if (note.parent !== 0) {
+        const siblings = childrenByParent.get(note.parent) ?? [];
+        siblings.push(note.id);
+        childrenByParent.set(note.parent, siblings);
+      }
     }
 
+    // Collect all descendant IDs via DFS
+    const descendantIds: number[] = [];
+    const stack = [noteId];
+    while (stack.length > 0) {
+      const currentId = stack.pop()!;
+      const children = childrenByParent.get(currentId);
+      if (children) {
+        for (const childId of children) {
+          descendantIds.push(childId);
+          stack.push(childId);
+        }
+      }
+    }
+
+    // Delete descendants first (leaves before parents), then the root note
+    for (const id of descendantIds.reverse()) {
+      await this.apiClient!.deleteNote(id);
+    }
     await this.apiClient!.deleteNote(noteId);
 
     // Find and remove the noteId from whichever block has it

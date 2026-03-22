@@ -131,14 +131,16 @@ export class WordPressApiClient {
   /**
    * Check whether the site supports notes (block comments).
    * GET /wp/v2/comments?type=note&per_page=1
-   * Returns true if the endpoint accepts type=note, false on 4xx errors.
+   * Returns true if the endpoint accepts type=note, false if the endpoint
+   * rejects the type parameter (400) or doesn't exist (404).
+   * Other errors (auth, server) are re-thrown so callers get actionable errors.
    */
   async checkNotesSupport(): Promise<boolean> {
     try {
       await this.apiFetch<unknown>('/wp/v2/comments?type=note&per_page=1');
       return true;
     } catch (err) {
-      if (err instanceof WordPressApiError) {
+      if (err instanceof WordPressApiError && (err.status === 400 || err.status === 404)) {
         return false;
       }
       throw err;
@@ -146,21 +148,31 @@ export class WordPressApiClient {
   }
 
   /**
-   * List notes (block comments) for a given post.
-   * GET /wp/v2/comments?post={postId}&type=note&context=edit&per_page=100
-   *
-   * Note: Returns at most 100 notes (the WP REST API maximum per page).
-   * Posts with more than 100 notes will have results silently truncated.
+   * List all notes (block comments) for a given post.
+   * Paginates automatically (100 per page, the WP REST API maximum).
    */
   async listNotes(postId: number): Promise<WPNote[]> {
-    const params = new URLSearchParams({
-      post: String(postId),
-      type: 'note',
-      context: 'edit',
-      per_page: '100',
-    });
+    const perPage = 100;
+    const allNotes: WPNote[] = [];
+    let page = 1;
 
-    return this.apiFetch<WPNote[]>(`/wp/v2/comments?${params.toString()}`);
+    while (true) {
+      const params = new URLSearchParams({
+        post: String(postId),
+        type: 'note',
+        context: 'edit',
+        per_page: String(perPage),
+        page: String(page),
+      });
+
+      const notes = await this.apiFetch<WPNote[]>(`/wp/v2/comments?${params.toString()}`);
+      allNotes.push(...notes);
+
+      if (notes.length < perPage) break;
+      page++;
+    }
+
+    return allNotes;
   }
 
   /**
