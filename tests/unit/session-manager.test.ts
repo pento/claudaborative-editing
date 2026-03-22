@@ -290,11 +290,15 @@ describe('SessionManager', () => {
 
     it('throws when not in editing state', async () => {
       await connectSession(session);
-      expect(() => session.closePost()).toThrow(/requires state/);
+      expect(() => {
+        session.closePost();
+      }).toThrow(/requires state/);
     });
 
     it('throws when disconnected', () => {
-      expect(() => session.closePost()).toThrow(/requires state/);
+      expect(() => {
+        session.closePost();
+      }).toThrow(/requires state/);
     });
 
     it('returns to connected state', async () => {
@@ -363,7 +367,8 @@ describe('SessionManager', () => {
       vi.useFakeTimers();
       await connectAndOpen(session);
 
-      const longContent = 'This is a long paragraph that should be streamed in chunks to the browser.';
+      const longContent =
+        'This is a long paragraph that should be streamed in chunks to the browser.';
       const promise = session.updateBlock('0', { content: longContent });
 
       // Advance through all streaming delays
@@ -395,7 +400,10 @@ describe('SessionManager', () => {
       vi.useFakeTimers();
       await connectAndOpen(session);
 
-      const promise = session.insertBlock(0, { name: 'core/paragraph', content: 'New first paragraph' });
+      const promise = session.insertBlock(0, {
+        name: 'core/paragraph',
+        content: 'New first paragraph',
+      });
       await vi.runAllTimersAsync();
       await promise;
 
@@ -419,7 +427,8 @@ describe('SessionManager', () => {
       vi.useFakeTimers();
       await connectAndOpen(session);
 
-      const longContent = 'This is a long paragraph that exceeds the streaming threshold for testing.';
+      const longContent =
+        'This is a long paragraph that exceeds the streaming threshold for testing.';
       const promise = session.insertBlock(0, { name: 'core/paragraph', content: longContent });
       await vi.runAllTimersAsync();
       await promise;
@@ -461,9 +470,9 @@ describe('SessionManager', () => {
       mockGetPost.mockResolvedValue(fakePost);
       await session.openPost(42);
 
-      await expect(
-        session.insertBlock(0, { name: 'custom/nonexistent-block' }),
-      ).rejects.toThrow(/Unknown block type: custom\/nonexistent-block/);
+      await expect(session.insertBlock(0, { name: 'custom/nonexistent-block' })).rejects.toThrow(
+        /Unknown block type: custom\/nonexistent-block/,
+      );
     });
   });
 
@@ -499,9 +508,7 @@ describe('SessionManager', () => {
       // First, insert a list with one item
       const insertPromise = session.insertBlock(0, {
         name: 'core/list',
-        innerBlocks: [
-          { name: 'core/list-item', content: 'Existing item' },
-        ],
+        innerBlocks: [{ name: 'core/list-item', content: 'Existing item' }],
       });
       await vi.runAllTimersAsync();
       await insertPromise;
@@ -611,9 +618,7 @@ describe('SessionManager', () => {
       await session.openPost(42);
 
       await expect(
-        session.replaceBlocks(0, 1, [
-          { name: 'custom/nonexistent-block' },
-        ]),
+        session.replaceBlocks(0, 1, [{ name: 'custom/nonexistent-block' }]),
       ).rejects.toThrow(/Unknown block type: custom\/nonexistent-block/);
     });
   });
@@ -660,7 +665,9 @@ describe('SessionManager', () => {
 
     it('throws when not editing', async () => {
       await connectSession(session);
-      expect(() => session.save()).toThrow(/requires state/);
+      expect(() => {
+        session.save();
+      }).toThrow(/requires state/);
     });
   });
 
@@ -853,18 +860,18 @@ describe('SessionManager', () => {
       ]);
 
       try {
-        await expect(
-          s.insertBlock(0, { name: 'core/pullquote', content: 'text' }),
-        ).rejects.toThrow(/does not have a "content" attribute/);
+        await expect(s.insertBlock(0, { name: 'core/pullquote', content: 'text' })).rejects.toThrow(
+          /does not have a "content" attribute/,
+        );
 
         // Error message should mention available rich-text attributes
-        await expect(
-          s.insertBlock(0, { name: 'core/pullquote', content: 'text' }),
-        ).rejects.toThrow(/value/);
+        await expect(s.insertBlock(0, { name: 'core/pullquote', content: 'text' })).rejects.toThrow(
+          /value/,
+        );
 
-        await expect(
-          s.insertBlock(0, { name: 'core/pullquote', content: 'text' }),
-        ).rejects.toThrow(/citation/);
+        await expect(s.insertBlock(0, { name: 'core/pullquote', content: 'text' })).rejects.toThrow(
+          /citation/,
+        );
       } finally {
         s.disconnect();
       }
@@ -928,7 +935,7 @@ describe('SessionManager', () => {
       }
     });
 
-    it('rejects inner block not in parent\'s allowedBlocks', async () => {
+    it("rejects inner block not in parent's allowedBlocks", async () => {
       const s = await connectWithBlockTypes([
         { name: 'core/paragraph', attributes: { content: { type: 'rich-text' } } },
         { name: 'core/heading', attributes: { content: { type: 'rich-text' } } },
@@ -963,13 +970,11 @@ describe('SessionManager', () => {
       ]);
 
       try {
-        await expect(
-          s.insertBlock(0, { name: 'core/column' }),
-        ).rejects.toThrow(/cannot be inserted at the top level/);
+        await expect(s.insertBlock(0, { name: 'core/column' })).rejects.toThrow(
+          /cannot be inserted at the top level/,
+        );
 
-        await expect(
-          s.insertBlock(0, { name: 'core/column' }),
-        ).rejects.toThrow(/core\/columns/);
+        await expect(s.insertBlock(0, { name: 'core/column' })).rejects.toThrow(/core\/columns/);
       } finally {
         s.disconnect();
       }
@@ -1075,12 +1080,11 @@ describe('SessionManager', () => {
         caption: 'At dusk',
       });
 
-      expect(mockUploadMedia).toHaveBeenCalledWith(
-        expect.any(Buffer),
-        'photo.jpg',
-        'image/jpeg',
-        { altText: 'Scenic view', title: 'Sunset', caption: 'At dusk' },
-      );
+      expect(mockUploadMedia).toHaveBeenCalledWith(expect.any(Buffer), 'photo.jpg', 'image/jpeg', {
+        altText: 'Scenic view',
+        title: 'Sunset',
+        caption: 'At dusk',
+      });
     });
 
     it('detects MIME type from file extension', async () => {
@@ -1139,7 +1143,7 @@ describe('SessionManager', () => {
     describe('openPost() metadata loading', () => {
       it('loads categories into Y.Doc', async () => {
         await connectAndOpenWithMeta(session);
-        const text = session.readPost();
+        session.readPost();
         // categories and tags IDs are stored in Y.Doc but rendered output
         // shows only the fields renderPost() exposes (status, date, slug, sticky, commentStatus, excerpt).
         // We verify via the internal state rather than rendered output for array properties.
@@ -1378,11 +1382,14 @@ describe('SessionManager', () => {
         // Search returns no results
         mockSearchTerms.mockResolvedValue([]);
         mockCreateTerm.mockResolvedValue({
-          id: 10, name: 'New Category', slug: 'new-category', taxonomy: 'category',
+          id: 10,
+          name: 'New Category',
+          slug: 'new-category',
+          taxonomy: 'category',
         });
         mockUpdatePost.mockResolvedValue(updatedPost({ categories: [10] }));
 
-        const { post, resolved } = await session.setCategories(['New Category']);
+        const { resolved } = await session.setCategories(['New Category']);
 
         expect(resolved).toEqual([{ name: 'New Category', id: 10, created: true }]);
         expect(mockCreateTerm).toHaveBeenCalledWith('categories', 'New Category');
@@ -1396,7 +1403,10 @@ describe('SessionManager', () => {
           { id: 7, name: 'Fair', slug: 'fair', taxonomy: 'category' },
         ]);
         mockCreateTerm.mockResolvedValue({
-          id: 11, name: 'AI', slug: 'ai', taxonomy: 'category',
+          id: 11,
+          name: 'AI',
+          slug: 'ai',
+          taxonomy: 'category',
         });
         mockUpdatePost.mockResolvedValue(updatedPost({ categories: [11] }));
 
@@ -1429,7 +1439,10 @@ describe('SessionManager', () => {
         // Second call: "Science" does not exist
         mockSearchTerms.mockResolvedValueOnce([]);
         mockCreateTerm.mockResolvedValue({
-          id: 12, name: 'Science', slug: 'science', taxonomy: 'category',
+          id: 12,
+          name: 'Science',
+          slug: 'science',
+          taxonomy: 'category',
         });
         mockUpdatePost.mockResolvedValue(updatedPost({ categories: [3, 12] }));
 
@@ -1467,7 +1480,10 @@ describe('SessionManager', () => {
         await connectAndOpenWithMeta(session);
         mockSearchTerms.mockResolvedValue([]);
         mockCreateTerm.mockResolvedValue({
-          id: 20, name: 'Rust', slug: 'rust', taxonomy: 'post_tag',
+          id: 20,
+          name: 'Rust',
+          slug: 'rust',
+          taxonomy: 'post_tag',
         });
         mockUpdatePost.mockResolvedValue(updatedPost({ tags: [20] }));
 
@@ -1958,7 +1974,10 @@ describe('SessionManager', () => {
     describe('updateNote()', () => {
       it('delegates to API client', async () => {
         await connectAndOpenWithNotes(session);
-        const updatedNote = { ...fakeNote, content: { rendered: '<p>Updated</p>', raw: 'Updated' } };
+        const updatedNote = {
+          ...fakeNote,
+          content: { rendered: '<p>Updated</p>', raw: 'Updated' },
+        };
         mockUpdateNote.mockResolvedValue(updatedNote);
 
         const result = await session.updateNote(10, 'Updated');

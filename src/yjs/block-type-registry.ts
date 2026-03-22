@@ -72,10 +72,7 @@ export class BlockTypeRegistry {
   /** Whether this registry was built from the API or is a fallback. */
   private isFallback: boolean;
 
-  private constructor(
-    entries: Map<string, BlockTypeEntry>,
-    isFallback: boolean,
-  ) {
+  private constructor(entries: Map<string, BlockTypeEntry>, isFallback: boolean) {
     this.entries = entries;
     this.isFallback = isFallback;
   }

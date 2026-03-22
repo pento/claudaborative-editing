@@ -19,21 +19,31 @@ function buildInsertionHint(media: WPMediaItem): string {
       if (media.alt_text) imageAttrs.alt = media.alt_text;
       lines.push('To insert as a block, use wp_insert_block with:');
       lines.push(`  name: "core/image", attributes: ${JSON.stringify(imageAttrs)}`);
-      lines.push('Other blocks that accept images: core/cover (id + url), core/media-text (mediaId + mediaUrl + mediaType: "image")');
+      lines.push(
+        'Other blocks that accept images: core/cover (id + url), core/media-text (mediaId + mediaUrl + mediaType: "image")',
+      );
       break;
     }
     case 'video':
       lines.push('To insert as a block, use wp_insert_block with:');
-      lines.push(`  name: "core/video", attributes: { "id": ${media.id}, "src": "${media.source_url}" }`);
-      lines.push('Other blocks that accept videos: core/cover (id + url + backgroundType: "video"), core/media-text (mediaId + mediaUrl + mediaType: "video")');
+      lines.push(
+        `  name: "core/video", attributes: { "id": ${media.id}, "src": "${media.source_url}" }`,
+      );
+      lines.push(
+        'Other blocks that accept videos: core/cover (id + url + backgroundType: "video"), core/media-text (mediaId + mediaUrl + mediaType: "video")',
+      );
       break;
     case 'audio':
       lines.push('To insert as a block, use wp_insert_block with:');
-      lines.push(`  name: "core/audio", attributes: { "id": ${media.id}, "src": "${media.source_url}" }`);
+      lines.push(
+        `  name: "core/audio", attributes: { "id": ${media.id}, "src": "${media.source_url}" }`,
+      );
       break;
     default:
       lines.push('To insert as a block, use wp_insert_block with:');
-      lines.push(`  name: "core/file", attributes: { "id": ${media.id}, "href": "${media.source_url}" }`);
+      lines.push(
+        `  name: "core/file", attributes: { "id": ${media.id}, "href": "${media.source_url}" }`,
+      );
       break;
   }
 
@@ -41,14 +51,20 @@ function buildInsertionHint(media: WPMediaItem): string {
 }
 
 export function registerMediaTools(server: McpServer, session: SessionManager): void {
-  server.tool(
+  server.registerTool(
     'wp_upload_media',
-    'Upload a local file to the WordPress media library. Returns the attachment ID and URL for use with wp_insert_block (e.g., core/image, core/video, core/audio, core/file).',
     {
-      filePath: z.string().describe('Absolute path to the local file to upload'),
-      altText: z.string().optional().describe('Alt text for the media (important for image accessibility)'),
-      title: z.string().optional().describe('Title for the media item'),
-      caption: z.string().optional().describe('Caption for the media item'),
+      description:
+        'Upload a local file to the WordPress media library. Returns the attachment ID and URL for use with wp_insert_block (e.g., core/image, core/video, core/audio, core/file).',
+      inputSchema: {
+        filePath: z.string().describe('Absolute path to the local file to upload'),
+        altText: z
+          .string()
+          .optional()
+          .describe('Alt text for the media (important for image accessibility)'),
+        title: z.string().optional().describe('Title for the media item'),
+        caption: z.string().optional().describe('Caption for the media item'),
+      },
     },
     async ({ filePath, altText, title, caption }) => {
       try {
@@ -77,10 +93,12 @@ export function registerMediaTools(server: McpServer, session: SessionManager): 
         };
       } catch (error) {
         return {
-          content: [{
-            type: 'text' as const,
-            text: `Failed to upload media: ${error instanceof Error ? error.message : String(error)}`,
-          }],
+          content: [
+            {
+              type: 'text' as const,
+              text: `Failed to upload media: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
           isError: true,
         };
       }

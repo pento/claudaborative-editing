@@ -46,11 +46,10 @@ export function parseCollaborators(
     if (clientId === ownClientId) {
       continue;
     }
-    if (state === null || state === undefined) {
+    if (state === null) {
       continue;
     }
-    const info = (state as { collaboratorInfo?: CollaboratorInfo })
-      .collaboratorInfo;
+    const info = (state as { collaboratorInfo?: CollaboratorInfo }).collaboratorInfo;
     if (info) {
       collaborators.push(info);
     }

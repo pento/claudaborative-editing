@@ -15,7 +15,9 @@ export interface RegisteredTool {
   name: string;
   description: string;
   schema: Record<string, unknown>;
-  handler: (params: Record<string, unknown>) => Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }>;
+  handler: (
+    params: Record<string, unknown>,
+  ) => Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }>;
 }
 
 /**
@@ -26,9 +28,18 @@ export function createMockServer(): McpServer & { registeredTools: Map<string, R
 
   const server = {
     registeredTools,
-    tool: vi.fn(
-      (name: string, description: string, schema: Record<string, unknown>, handler: RegisteredTool['handler']) => {
-        registeredTools.set(name, { name, description, schema, handler });
+    registerTool: vi.fn(
+      (
+        name: string,
+        config: { description: string; inputSchema?: Record<string, unknown> },
+        handler: RegisteredTool['handler'],
+      ) => {
+        registeredTools.set(name, {
+          name,
+          description: config.description,
+          schema: config.inputSchema ?? {},
+          handler,
+        });
       },
     ),
   };
@@ -96,15 +107,17 @@ export const fakeNote: WPNote = {
 /**
  * Create a mock SessionManager with configurable state and return values.
  */
-export function createMockSession(overrides: {
-  state?: SessionState;
-  user?: WPUser | null;
-  post?: WPPost | null;
-  collaborators?: CollaboratorInfo[];
-  syncStatus?: { isPolling: boolean; hasCollaborators: boolean; queueSize: number } | null;
-  postContent?: string;
-  blockContent?: string;
-} = {}): SessionManager {
+export function createMockSession(
+  overrides: {
+    state?: SessionState;
+    user?: WPUser | null;
+    post?: WPPost | null;
+    collaborators?: CollaboratorInfo[];
+    syncStatus?: { isPolling: boolean; hasCollaborators: boolean; queueSize: number } | null;
+    postContent?: string;
+    blockContent?: string;
+  } = {},
+): SessionManager {
   const state = overrides.state ?? 'disconnected';
   const user = overrides.user ?? null;
   const post = overrides.post ?? null;
@@ -132,10 +145,40 @@ export function createMockSession(overrides: {
     setTitle: vi.fn().mockResolvedValue(undefined),
     uploadMedia: vi.fn().mockResolvedValue(fakeMediaItem),
     listNotes: vi.fn().mockResolvedValue({ notes: [], noteBlockMap: {} }),
-    addNote: vi.fn().mockResolvedValue({ id: 1, post: 42, parent: 0, author: 1, author_name: 'Gary', date: '2026-03-22', content: { rendered: 'Test note', raw: 'Test note' }, status: 'hold', type: 'note' }),
-    replyToNote: vi.fn().mockResolvedValue({ id: 2, post: 42, parent: 1, author: 1, author_name: 'Gary', date: '2026-03-22', content: { rendered: 'Test reply', raw: 'Test reply' }, status: 'hold', type: 'note' }),
+    addNote: vi.fn().mockResolvedValue({
+      id: 1,
+      post: 42,
+      parent: 0,
+      author: 1,
+      author_name: 'Gary',
+      date: '2026-03-22',
+      content: { rendered: 'Test note', raw: 'Test note' },
+      status: 'hold',
+      type: 'note',
+    }),
+    replyToNote: vi.fn().mockResolvedValue({
+      id: 2,
+      post: 42,
+      parent: 1,
+      author: 1,
+      author_name: 'Gary',
+      date: '2026-03-22',
+      content: { rendered: 'Test reply', raw: 'Test reply' },
+      status: 'hold',
+      type: 'note',
+    }),
     resolveNote: vi.fn().mockResolvedValue(undefined),
-    updateNote: vi.fn().mockResolvedValue({ id: 1, post: 42, parent: 0, author: 1, author_name: 'Gary', date: '2026-03-22', content: { rendered: 'Updated note', raw: 'Updated note' }, status: 'hold', type: 'note' }),
+    updateNote: vi.fn().mockResolvedValue({
+      id: 1,
+      post: 42,
+      parent: 0,
+      author: 1,
+      author_name: 'Gary',
+      date: '2026-03-22',
+      content: { rendered: 'Updated note', raw: 'Updated note' },
+      status: 'hold',
+      type: 'note',
+    }),
     getNotesSupported: vi.fn().mockReturnValue(true),
     save: vi.fn(),
     setPostStatus: vi.fn().mockResolvedValue(fakePost),

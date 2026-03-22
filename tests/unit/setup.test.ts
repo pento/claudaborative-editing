@@ -52,9 +52,7 @@ describe('setup wizard', () => {
 
   it('outputs mcp add command on successful validation', async () => {
     fetchMock
-      .mockResolvedValueOnce(
-        mockResponse({ id: 1, name: 'admin', slug: 'admin', avatar_urls: {} }),
-      )
+      .mockResolvedValueOnce(mockResponse({ id: 1, name: 'admin', slug: 'admin', avatar_urls: {} }))
       .mockResolvedValueOnce(mockResponse({ rooms: [] }));
 
     const { deps, logs } = createTestDeps(['https://example.com', 'admin', 'xxxx xxxx xxxx']);
@@ -86,9 +84,7 @@ describe('setup wizard', () => {
 
   it('exits with error when sync endpoint returns 404', async () => {
     fetchMock
-      .mockResolvedValueOnce(
-        mockResponse({ id: 1, name: 'admin', slug: 'admin', avatar_urls: {} }),
-      )
+      .mockResolvedValueOnce(mockResponse({ id: 1, name: 'admin', slug: 'admin', avatar_urls: {} }))
       .mockResolvedValueOnce(
         mockResponse(
           { code: 'rest_no_route', message: 'No route' },
@@ -113,16 +109,10 @@ describe('setup wizard', () => {
 
   it('quotes values with spaces in the mcp add command', async () => {
     fetchMock
-      .mockResolvedValueOnce(
-        mockResponse({ id: 1, name: 'admin', slug: 'admin', avatar_urls: {} }),
-      )
+      .mockResolvedValueOnce(mockResponse({ id: 1, name: 'admin', slug: 'admin', avatar_urls: {} }))
       .mockResolvedValueOnce(mockResponse({ rooms: [] }));
 
-    const { deps, logs } = createTestDeps([
-      'https://example.com',
-      'admin',
-      'xxxx xxxx xxxx xxxx',
-    ]);
+    const { deps, logs } = createTestDeps(['https://example.com', 'admin', 'xxxx xxxx xxxx xxxx']);
 
     await runSetup(deps);
 

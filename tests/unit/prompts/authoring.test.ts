@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import { createMockServer, createMockSession, fakePost } from './helpers.js';
 import { registerAuthoringPrompts } from '../../../src/prompts/authoring.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { RegisteredPrompt } from './helpers.js';
 
 describe('draft', () => {
   describe('when disconnected', () => {

@@ -92,17 +92,17 @@ export interface WPTerm {
 /** WordPress user as returned by /wp/v2/users/me. */
 export interface WPUser {
   id: number;
-  name: string;
+  name: string | null;
   slug: string;
-  avatar_urls: Record<string, string>;
+  avatar_urls: Record<string, string> | null;
 }
 
 // --- Block Type API Types ---
 
 /** A single attribute definition from the block type schema. */
 export interface WPBlockTypeAttribute {
-  type: string;       // "rich-text", "string", "boolean", "number", "integer", "array", "object"
-  source?: string;    // "rich-text", "html", "attribute", "text", "query"
+  type: string; // "rich-text", "string", "boolean", "number", "integer", "array", "object"
+  source?: string; // "rich-text", "html", "attribute", "text", "query"
   default?: unknown;
   role?: string;
 }

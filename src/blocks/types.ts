@@ -11,7 +11,7 @@
  */
 export interface RawParsedBlock {
   blockName: string | null;
-  attrs: Record<string, unknown>;
+  attrs: Record<string, unknown> | null;
   innerBlocks: RawParsedBlock[];
   innerHTML: string;
   innerContent: (string | null)[];

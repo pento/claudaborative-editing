@@ -241,7 +241,9 @@ describe('deltaUpdateYText', () => {
 
     // Track if any delta is applied
     let updateCount = 0;
-    doc.on('update', () => { updateCount++; });
+    doc.on('update', () => {
+      updateCount++;
+    });
 
     deltaUpdateYText(ytext, 'Hello world');
     expect(ytext.toString()).toBe('Hello world');
@@ -319,9 +321,13 @@ describe('deltaUpdateYText', () => {
     ytext1.insert(0, 'Hello world');
 
     const updates1: Uint8Array[] = [];
-    doc1.on('update', (update: Uint8Array) => { updates1.push(update); });
+    doc1.on('update', (update: Uint8Array) => {
+      updates1.push(update);
+    });
     const updates2: Uint8Array[] = [];
-    doc2.on('update', (update: Uint8Array) => { updates2.push(update); });
+    doc2.on('update', (update: Uint8Array) => {
+      updates2.push(update);
+    });
 
     // Sync initial state
     Y.applyUpdate(doc2, Y.encodeStateAsUpdate(doc1));
@@ -350,9 +356,13 @@ describe('deltaUpdateYText', () => {
     Y.applyUpdate(doc2, Y.encodeStateAsUpdate(doc1));
 
     const updates1: Uint8Array[] = [];
-    doc1.on('update', (update: Uint8Array) => { updates1.push(update); });
+    doc1.on('update', (update: Uint8Array) => {
+      updates1.push(update);
+    });
     const updates2: Uint8Array[] = [];
-    doc2.on('update', (update: Uint8Array) => { updates2.push(update); });
+    doc2.on('update', (update: Uint8Array) => {
+      updates2.push(update);
+    });
 
     // Doc1 changes prefix: "AAA" → "XXX"
     deltaUpdateYText(doc1.getText('test'), 'XXXBBBCCC');

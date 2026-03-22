@@ -22,15 +22,23 @@ function defaultDeps(): SetupDeps {
   return {
     prompt: (question: string) =>
       new Promise((resolve) => {
-        rl.question(question, (answer) => resolve(answer.trim()));
+        rl.question(question, (answer) => {
+          resolve(answer.trim());
+        });
       }),
-    log: (msg) => console.log(msg),
-    error: (msg) => console.error(`Error: ${msg}`),
+    log: (msg) => {
+      console.log(msg);
+    },
+    error: (msg) => {
+      console.error(`Error: ${msg}`);
+    },
     exit: (code) => {
       rl.close();
       return process.exit(code);
     },
-    cleanup: () => rl.close(),
+    cleanup: () => {
+      rl.close();
+    },
   };
 }
 

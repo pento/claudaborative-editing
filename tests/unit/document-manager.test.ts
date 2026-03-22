@@ -133,10 +133,7 @@ describe('DocumentManager', () => {
 
     it('sets and gets paragraph blocks', () => {
       const { manager, doc } = createManager();
-      const blocks = [
-        makeParagraph('First paragraph'),
-        makeParagraph('Second paragraph'),
-      ];
+      const blocks = [makeParagraph('First paragraph'), makeParagraph('Second paragraph')];
 
       manager.setBlocks(doc, blocks);
       const result = manager.getBlocks(doc);
@@ -219,11 +216,7 @@ describe('DocumentManager', () => {
   describe('removeBlocks', () => {
     it('removes a single block', () => {
       const { manager, doc } = createManager();
-      manager.setBlocks(doc, [
-        makeParagraph('A'),
-        makeParagraph('B'),
-        makeParagraph('C'),
-      ]);
+      manager.setBlocks(doc, [makeParagraph('A'), makeParagraph('B'), makeParagraph('C')]);
       manager.removeBlocks(doc, 1, 1);
 
       const result = manager.getBlocks(doc);
@@ -252,11 +245,7 @@ describe('DocumentManager', () => {
   describe('moveBlock', () => {
     it('moves a block forward', () => {
       const { manager, doc } = createManager();
-      manager.setBlocks(doc, [
-        makeParagraph('A'),
-        makeParagraph('B'),
-        makeParagraph('C'),
-      ]);
+      manager.setBlocks(doc, [makeParagraph('A'), makeParagraph('B'), makeParagraph('C')]);
       // Move block 0 (A) to position 2
       manager.moveBlock(doc, 0, 2);
 
@@ -268,11 +257,7 @@ describe('DocumentManager', () => {
 
     it('moves a block backward', () => {
       const { manager, doc } = createManager();
-      manager.setBlocks(doc, [
-        makeParagraph('A'),
-        makeParagraph('B'),
-        makeParagraph('C'),
-      ]);
+      manager.setBlocks(doc, [makeParagraph('A'), makeParagraph('B'), makeParagraph('C')]);
       // Move block 2 (C) to position 0
       manager.moveBlock(doc, 2, 0);
 
@@ -286,10 +271,7 @@ describe('DocumentManager', () => {
   describe('getBlockByIndex', () => {
     it('gets a top-level block by index', () => {
       const { manager, doc } = createManager();
-      manager.setBlocks(doc, [
-        makeParagraph('First'),
-        makeParagraph('Second'),
-      ]);
+      manager.setBlocks(doc, [makeParagraph('First'), makeParagraph('Second')]);
 
       const block = manager.getBlockByIndex(doc, '1');
       expect(block).not.toBeNull();
@@ -409,9 +391,9 @@ describe('DocumentManager', () => {
         innerBlocks: [],
       };
 
-      expect(() => manager.insertInnerBlock(doc, '5', 0, newChild)).toThrow(
-        'Block not found at index 5',
-      );
+      expect(() => {
+        manager.insertInnerBlock(doc, '5', 0, newChild);
+      }).toThrow('Block not found at index 5');
     });
   });
 
@@ -444,9 +426,9 @@ describe('DocumentManager', () => {
       const { manager, doc } = createManager();
       manager.setBlocks(doc, [makeParagraph('Only one')]);
 
-      expect(() => manager.removeInnerBlocks(doc, '5', 0, 1)).toThrow(
-        'Block not found at index 5',
-      );
+      expect(() => {
+        manager.removeInnerBlocks(doc, '5', 0, 1);
+      }).toThrow('Block not found at index 5');
     });
 
     it('throws when removing from a block with empty inner blocks', () => {
@@ -455,7 +437,9 @@ describe('DocumentManager', () => {
       // an empty Y.Array. Attempting to delete from it throws from Yjs.
       manager.setBlocks(doc, [makeParagraph('No children')]);
 
-      expect(() => manager.removeInnerBlocks(doc, '0', 0, 1)).toThrow();
+      expect(() => {
+        manager.removeInnerBlocks(doc, '0', 0, 1);
+      }).toThrow();
     });
   });
 
@@ -631,9 +615,9 @@ describe('DocumentManager', () => {
       const { manager, doc } = createManager();
       manager.setBlocks(doc, [makeParagraph('Only one')]);
 
-      expect(() => manager.setBlockNoteId(doc, '5', 42)).toThrow(
-        'Block not found at index 5',
-      );
+      expect(() => {
+        manager.setBlockNoteId(doc, '5', 42);
+      }).toThrow('Block not found at index 5');
     });
 
     it('removeBlockNoteId removes noteId from block metadata', () => {
@@ -693,9 +677,9 @@ describe('DocumentManager', () => {
       const { manager, doc } = createManager();
       manager.setBlocks(doc, [makeParagraph('Only one')]);
 
-      expect(() => manager.removeBlockNoteId(doc, '5')).toThrow(
-        'Block not found at index 5',
-      );
+      expect(() => {
+        manager.removeBlockNoteId(doc, '5');
+      }).toThrow('Block not found at index 5');
     });
   });
 

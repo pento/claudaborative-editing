@@ -2,10 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { SyncClient } from '../../src/wordpress/sync-client.js';
 import type { SyncCallbacks, RoomCallbacks } from '../../src/wordpress/sync-client.js';
 import type { WordPressApiClient } from '../../src/wordpress/api-client.js';
-import {
-  SyncUpdateType,
-  DEFAULT_SYNC_CONFIG,
-} from '../../src/wordpress/types.js';
+import { SyncUpdateType, DEFAULT_SYNC_CONFIG } from '../../src/wordpress/types.js';
 import type {
   SyncPayload,
   SyncResponse,
@@ -274,10 +271,12 @@ describe('SyncClient', () => {
             '200': { cursor: { x: 1, y: 1 } },
           }),
         )
-        .mockResolvedValue(emptyRoomResponse('postType/post:1', 3, {
-          '100': { cursor: null },
-          '200': { cursor: { x: 1, y: 1 } },
-        }));
+        .mockResolvedValue(
+          emptyRoomResponse('postType/post:1', 3, {
+            '100': { cursor: null },
+            '200': { cursor: { x: 1, y: 1 } },
+          }),
+        );
 
       const callbacks = createMockCallbacks();
       syncClient.start('postType/post:1', 100, [], callbacks);
@@ -484,9 +483,9 @@ describe('SyncClient', () => {
       syncClient.start('postType/post:1', 100, [], callbacks);
 
       const update: SyncUpdate = { type: SyncUpdateType.UPDATE, data: 'test' };
-      expect(() => syncClient.queueUpdate('unknown-room', update)).toThrow(
-        "Room 'unknown-room' is not registered",
-      );
+      expect(() => {
+        syncClient.queueUpdate('unknown-room', update);
+      }).toThrow("Room 'unknown-room' is not registered");
     });
   });
 
@@ -531,7 +530,11 @@ describe('SyncClient', () => {
       // Use a delayed mock to simulate a slow poll
       let resolvePoll!: (value: SyncResponse) => void;
       apiClient.sendSyncUpdate
-        .mockReturnValueOnce(new Promise<SyncResponse>((resolve) => { resolvePoll = resolve; }))
+        .mockReturnValueOnce(
+          new Promise<SyncResponse>((resolve) => {
+            resolvePoll = resolve;
+          }),
+        )
         .mockResolvedValue(emptyRoomResponse('postType/post:1', 2));
 
       const callbacks = createMockCallbacks();
@@ -541,7 +544,10 @@ describe('SyncClient', () => {
       await vi.advanceTimersByTimeAsync(0);
 
       // Now call flushQueue while poll is in progress
-      syncClient.queueUpdate('postType/post:1', { type: SyncUpdateType.UPDATE, data: 'during-poll' });
+      syncClient.queueUpdate('postType/post:1', {
+        type: SyncUpdateType.UPDATE,
+        data: 'during-poll',
+      });
       syncClient.flushQueue();
 
       // Resolve the pending poll
@@ -556,7 +562,11 @@ describe('SyncClient', () => {
     it('re-entrancy guard prevents concurrent polls', async () => {
       let resolvePoll!: (value: SyncResponse) => void;
       apiClient.sendSyncUpdate
-        .mockReturnValueOnce(new Promise<SyncResponse>((resolve) => { resolvePoll = resolve; }))
+        .mockReturnValueOnce(
+          new Promise<SyncResponse>((resolve) => {
+            resolvePoll = resolve;
+          }),
+        )
         .mockResolvedValue(emptyRoomResponse('postType/post:1', 2));
 
       const callbacks = createMockCallbacks();
@@ -634,9 +644,7 @@ describe('SyncClient', () => {
     });
 
     it('removeRoom removes a room from poll payload', async () => {
-      apiClient.sendSyncUpdate.mockResolvedValue(
-        emptyRoomResponse(ROOM_A, 1),
-      );
+      apiClient.sendSyncUpdate.mockResolvedValue(emptyRoomResponse(ROOM_A, 1));
 
       const callbacks = createMockCallbacks();
       syncClient.start(ROOM_A, 100, [], callbacks);
@@ -666,9 +674,9 @@ describe('SyncClient', () => {
       syncClient.start(ROOM_A, 100, [], callbacks);
 
       const roomCallbacks = createMockRoomCallbacks();
-      expect(() => syncClient.addRoom(ROOM_A, 200, [], roomCallbacks)).toThrow(
-        `Room '${ROOM_A}' is already registered`,
-      );
+      expect(() => {
+        syncClient.addRoom(ROOM_A, 200, [], roomCallbacks);
+      }).toThrow(`Room '${ROOM_A}' is already registered`);
     });
 
     it('per-room cursor tracking', async () => {
@@ -759,7 +767,7 @@ describe('SyncClient', () => {
       expect(callbacksB.onAwareness).toHaveBeenCalledWith({});
     });
 
-    it('error recovery restores all rooms\' queues', async () => {
+    it("error recovery restores all rooms' queues", async () => {
       apiClient.sendSyncUpdate
         .mockResolvedValueOnce(
           multiRoomResponse([

@@ -2,8 +2,8 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { SessionManager } from '../session/session-manager.js';
 import type { WPNote } from '../wordpress/types.js';
 
-function formatNotes(notes: WPNote[], noteBlockMap: Record<number, string>): string {
-  const topLevel = notes.filter(n => n.parent === 0);
+function formatNotes(notes: WPNote[], noteBlockMap: Partial<Record<number, string>>): string {
+  const topLevel = notes.filter((n) => n.parent === 0);
   const replyMap = new Map<number, WPNote[]>();
   for (const note of notes) {
     if (note.parent !== 0) {
@@ -28,7 +28,7 @@ function formatNotes(notes: WPNote[], noteBlockMap: Record<number, string>): str
 
   for (const note of topLevel) {
     const blockIdx = noteBlockMap[note.id];
-    const blockInfo = blockIdx != null ? ` (block [${blockIdx}])` : ' (unlinked)';
+    const blockInfo = blockIdx !== undefined ? ` (block [${blockIdx}])` : ' (unlinked)';
     lines.push(`Note #${note.id} by ${note.author_name}${blockInfo} — ${note.date}`);
     const rawContent = note.content.raw ?? stripHtml(note.content.rendered);
     lines.push(`  "${rawContent}"`);
@@ -39,35 +39,42 @@ function formatNotes(notes: WPNote[], noteBlockMap: Record<number, string>): str
 }
 
 export function registerReviewPrompts(server: McpServer, session: SessionManager): void {
-  server.prompt(
+  server.registerPrompt(
     'review',
-    'Review a WordPress post and leave editorial feedback as notes on individual blocks.',
+    {
+      description:
+        'Review a WordPress post and leave editorial feedback as notes on individual blocks.',
+    },
     async () => {
       const state = session.getState();
 
       if (state === 'disconnected') {
         return {
           description: 'Review a WordPress post',
-          messages: [{
-            role: 'user' as const,
-            content: {
-              type: 'text' as const,
-              text: 'I want to review a WordPress post. Please connect to WordPress first using wp_connect, then open a post with wp_open_post.',
+          messages: [
+            {
+              role: 'user' as const,
+              content: {
+                type: 'text' as const,
+                text: 'I want to review a WordPress post. Please connect to WordPress first using wp_connect, then open a post with wp_open_post.',
+              },
             },
-          }],
+          ],
         };
       }
 
       if (state === 'connected') {
         return {
           description: 'Review a WordPress post',
-          messages: [{
-            role: 'user' as const,
-            content: {
-              type: 'text' as const,
-              text: 'I want to review a WordPress post. Please open a post with wp_open_post first.',
+          messages: [
+            {
+              role: 'user' as const,
+              content: {
+                type: 'text' as const,
+                text: 'I want to review a WordPress post. Please open a post with wp_open_post first.',
+              },
             },
-          }],
+          ],
         };
       }
 
@@ -79,11 +86,12 @@ export function registerReviewPrompts(server: McpServer, session: SessionManager
       if (!notesSupported) {
         return {
           description: `Review "${post?.title.raw ?? 'Untitled'}"`,
-          messages: [{
-            role: 'user' as const,
-            content: {
-              type: 'text' as const,
-              text: `Review the following WordPress post and provide editorial feedback.
+          messages: [
+            {
+              role: 'user' as const,
+              content: {
+                type: 'text' as const,
+                text: `Review the following WordPress post and provide editorial feedback.
 
 Note: This WordPress site does not support notes (requires WordPress 6.9+). Please provide your feedback as a text summary instead.
 
@@ -101,18 +109,20 @@ Please review for:
 - Post metadata: are categories, tags, and excerpt set appropriately?
 
 Provide your feedback as a structured summary, written in the same language as the post content.`,
+              },
             },
-          }],
+          ],
         };
       }
 
       return {
         description: `Review "${post?.title.raw ?? 'Untitled'}"`,
-        messages: [{
-          role: 'user' as const,
-          content: {
-            type: 'text' as const,
-            text: `Review the following WordPress post and leave editorial notes on individual blocks.
+        messages: [
+          {
+            role: 'user' as const,
+            content: {
+              type: 'text' as const,
+              text: `Review the following WordPress post and leave editorial notes on individual blocks.
 
 Here is the current post content:
 
@@ -127,41 +137,49 @@ Instructions:
 - Not every block needs a note — only flag issues worth addressing.
 - Write all notes in the same language as the post content.
 - After leaving all notes, provide a brief summary of your overall assessment.`,
+            },
           },
-        }],
+        ],
       };
     },
   );
 
-  server.prompt(
+  server.registerPrompt(
     'respond-to-notes',
-    'Address editorial notes on a WordPress post — read each note, make the requested changes, and resolve notes when done.',
+    {
+      description:
+        'Address editorial notes on a WordPress post — read each note, make the requested changes, and resolve notes when done.',
+    },
     async () => {
       const state = session.getState();
 
       if (state === 'disconnected') {
         return {
           description: 'Respond to editorial notes',
-          messages: [{
-            role: 'user' as const,
-            content: {
-              type: 'text' as const,
-              text: 'I want to respond to editorial notes on a WordPress post. Please connect to WordPress first using wp_connect, then open a post with wp_open_post.',
+          messages: [
+            {
+              role: 'user' as const,
+              content: {
+                type: 'text' as const,
+                text: 'I want to respond to editorial notes on a WordPress post. Please connect to WordPress first using wp_connect, then open a post with wp_open_post.',
+              },
             },
-          }],
+          ],
         };
       }
 
       if (state === 'connected') {
         return {
           description: 'Respond to editorial notes',
-          messages: [{
-            role: 'user' as const,
-            content: {
-              type: 'text' as const,
-              text: 'I want to respond to editorial notes on a WordPress post. Please open a post with wp_open_post first.',
+          messages: [
+            {
+              role: 'user' as const,
+              content: {
+                type: 'text' as const,
+                text: 'I want to respond to editorial notes on a WordPress post. Please open a post with wp_open_post first.',
+              },
             },
-          }],
+          ],
         };
       }
 
@@ -171,13 +189,15 @@ Instructions:
       if (!notesSupported) {
         return {
           description: 'Respond to editorial notes',
-          messages: [{
-            role: 'user' as const,
-            content: {
-              type: 'text' as const,
-              text: 'This WordPress site does not support notes (requires WordPress 6.9+). There are no notes to respond to.',
+          messages: [
+            {
+              role: 'user' as const,
+              content: {
+                type: 'text' as const,
+                text: 'This WordPress site does not support notes (requires WordPress 6.9+). There are no notes to respond to.',
+              },
             },
-          }],
+          ],
         };
       }
 
@@ -188,13 +208,15 @@ Instructions:
       if (notes.length === 0) {
         return {
           description: 'Respond to editorial notes',
-          messages: [{
-            role: 'user' as const,
-            content: {
-              type: 'text' as const,
-              text: 'There are no notes on this post. No action needed.',
+          messages: [
+            {
+              role: 'user' as const,
+              content: {
+                type: 'text' as const,
+                text: 'There are no notes on this post. No action needed.',
+              },
             },
-          }],
+          ],
         };
       }
 
@@ -202,11 +224,12 @@ Instructions:
 
       return {
         description: `Respond to notes on "${post?.title.raw ?? 'Untitled'}"`,
-        messages: [{
-          role: 'user' as const,
-          content: {
-            type: 'text' as const,
-            text: `Address the editorial notes on this WordPress post. Read each note, make the requested changes, and resolve notes when done.
+        messages: [
+          {
+            role: 'user' as const,
+            content: {
+              type: 'text' as const,
+              text: `Address the editorial notes on this WordPress post. Read each note, make the requested changes, and resolve notes when done.
 
 Here is the current post content:
 
@@ -227,8 +250,9 @@ Instructions:
 - Write all replies in the same language as the post content.
 - Use wp_read_post to verify your changes after editing.
 - After addressing all notes, use wp_save to save the post.`,
+            },
           },
-        }],
+        ],
       };
     },
   );

@@ -3,57 +3,68 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { SessionManager } from '../session/session-manager.js';
 
 export function registerEditingPrompts(server: McpServer, session: SessionManager): void {
-  server.prompt(
+  server.registerPrompt(
     'edit',
-    'Edit a WordPress post. Optionally specify an editing focus (tone, structure, expand, condense, rewrite, etc.).',
     {
-      editing_focus: z.string().optional().describe(
-        'Type of editing: "tone", "structure", "expand", "condense", "rewrite", or a custom focus',
-      ),
+      description:
+        'Edit a WordPress post. Optionally specify an editing focus (tone, structure, expand, condense, rewrite, etc.).',
+      argsSchema: {
+        editingFocus: z
+          .string()
+          .optional()
+          .describe(
+            'Type of editing: "tone", "structure", "expand", "condense", "rewrite", or a custom focus',
+          ),
+      },
     },
-    async ({ editing_focus }) => {
+    async ({ editingFocus }) => {
       const state = session.getState();
 
       if (state === 'disconnected') {
         return {
           description: 'Edit a WordPress post',
-          messages: [{
-            role: 'user' as const,
-            content: {
-              type: 'text' as const,
-              text: 'I want to edit a WordPress post. Please connect to WordPress first using wp_connect, then open a post with wp_open_post.',
+          messages: [
+            {
+              role: 'user' as const,
+              content: {
+                type: 'text' as const,
+                text: 'I want to edit a WordPress post. Please connect to WordPress first using wp_connect, then open a post with wp_open_post.',
+              },
             },
-          }],
+          ],
         };
       }
 
       if (state === 'connected') {
         return {
           description: 'Edit a WordPress post',
-          messages: [{
-            role: 'user' as const,
-            content: {
-              type: 'text' as const,
-              text: 'I want to edit a WordPress post. Please open a post with wp_open_post first, then I\'ll tell you what changes to make.',
+          messages: [
+            {
+              role: 'user' as const,
+              content: {
+                type: 'text' as const,
+                text: "I want to edit a WordPress post. Please open a post with wp_open_post first, then I'll tell you what changes to make.",
+              },
             },
-          }],
+          ],
         };
       }
 
       // state === 'editing'
       const postContent = session.readPost();
       const post = session.getCurrentPost();
-      const focusInstruction = editing_focus
-        ? `Focus on: ${editing_focus}`
-        : 'Ask me what kind of editing I\'d like (e.g., tone, structure, expand, condense, rewrite).';
+      const focusInstruction = editingFocus
+        ? `Focus on: ${editingFocus}`
+        : "Ask me what kind of editing I'd like (e.g., tone, structure, expand, condense, rewrite).";
 
       return {
         description: `Edit "${post?.title.raw ?? 'Untitled'}"`,
-        messages: [{
-          role: 'user' as const,
-          content: {
-            type: 'text' as const,
-            text: `Edit the following WordPress post. ${focusInstruction}
+        messages: [
+          {
+            role: 'user' as const,
+            content: {
+              type: 'text' as const,
+              text: `Edit the following WordPress post. ${focusInstruction}
 
 Here is the current post content:
 
@@ -71,41 +82,49 @@ Available tools:
 - wp_read_post — re-read the post after making changes
 
 Work block by block. Do not try to replace the entire post at once. Preserve the overall structure unless restructuring was requested. After completing edits, use wp_save to save the post.`,
+            },
           },
-        }],
+        ],
       };
     },
   );
 
-  server.prompt(
+  server.registerPrompt(
     'proofread',
-    'Proofread a WordPress post for grammar, spelling, punctuation, and style issues.',
+    {
+      description:
+        'Proofread a WordPress post for grammar, spelling, punctuation, and style issues.',
+    },
     async () => {
       const state = session.getState();
 
       if (state === 'disconnected') {
         return {
           description: 'Proofread a WordPress post',
-          messages: [{
-            role: 'user' as const,
-            content: {
-              type: 'text' as const,
-              text: 'I want to proofread a WordPress post. Please connect to WordPress first using wp_connect, then open a post with wp_open_post.',
+          messages: [
+            {
+              role: 'user' as const,
+              content: {
+                type: 'text' as const,
+                text: 'I want to proofread a WordPress post. Please connect to WordPress first using wp_connect, then open a post with wp_open_post.',
+              },
             },
-          }],
+          ],
         };
       }
 
       if (state === 'connected') {
         return {
           description: 'Proofread a WordPress post',
-          messages: [{
-            role: 'user' as const,
-            content: {
-              type: 'text' as const,
-              text: 'I want to proofread a WordPress post. Please open a post with wp_open_post first.',
+          messages: [
+            {
+              role: 'user' as const,
+              content: {
+                type: 'text' as const,
+                text: 'I want to proofread a WordPress post. Please open a post with wp_open_post first.',
+              },
             },
-          }],
+          ],
         };
       }
 
@@ -115,11 +134,12 @@ Work block by block. Do not try to replace the entire post at once. Preserve the
 
       return {
         description: `Proofread "${post?.title.raw ?? 'Untitled'}"`,
-        messages: [{
-          role: 'user' as const,
-          content: {
-            type: 'text' as const,
-            text: `Proofread the following WordPress post. Fix any grammar, spelling, punctuation, and style issues directly.
+        messages: [
+          {
+            role: 'user' as const,
+            content: {
+              type: 'text' as const,
+              text: `Proofread the following WordPress post. Fix any grammar, spelling, punctuation, and style issues directly.
 
 Here is the current post content:
 
@@ -136,8 +156,9 @@ Instructions:
 - Do NOT change the title unless it has a clear error.
 - Work through every block systematically — do not skip any.
 - After completing all fixes, use wp_save to save the post.`,
+            },
           },
-        }],
+        ],
       };
     },
   );

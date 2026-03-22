@@ -36,12 +36,21 @@ function formatBlockTypeInfo(info: BlockTypeInfo): string {
 }
 
 export function registerBlockTypeTools(server: McpServer, session: SessionManager): void {
-  server.tool(
+  server.registerTool(
     'wp_block_types',
-    'Look up block type schemas — attributes, defaults, nesting constraints. Use before inserting unfamiliar block types.',
     {
-      name: z.string().optional().describe('Exact block type name (e.g., "core/pullquote") for full details'),
-      search: z.string().optional().describe('Search block types by name (e.g., "quote", "media")'),
+      description:
+        'Look up block type schemas — attributes, defaults, nesting constraints. Use before inserting unfamiliar block types.',
+      inputSchema: {
+        name: z
+          .string()
+          .optional()
+          .describe('Exact block type name (e.g., "core/pullquote") for full details'),
+        search: z
+          .string()
+          .optional()
+          .describe('Search block types by name (e.g., "quote", "media")'),
+      },
     },
     async ({ name, search }) => {
       try {
@@ -49,14 +58,17 @@ export function registerBlockTypeTools(server: McpServer, session: SessionManage
 
         if (registry.isUsingFallback()) {
           const state = session.getState();
-          const hint = state === 'disconnected'
-            ? 'Connect to a WordPress site to load full block schemas.'
-            : 'Full block schemas could not be loaded. Try disconnecting and reconnecting.';
+          const hint =
+            state === 'disconnected'
+              ? 'Connect to a WordPress site to load full block schemas.'
+              : 'Full block schemas could not be loaded. Try disconnecting and reconnecting.';
           return {
-            content: [{
-              type: 'text' as const,
-              text: `Block type registry is using fallback data. Only basic block type information is available. ${hint}`,
-            }],
+            content: [
+              {
+                type: 'text' as const,
+                text: `Block type registry is using fallback data. Only basic block type information is available. ${hint}`,
+              },
+            ],
           };
         }
 
@@ -65,10 +77,12 @@ export function registerBlockTypeTools(server: McpServer, session: SessionManage
           const info = registry.getBlockTypeInfo(name);
           if (!info) {
             return {
-              content: [{
-                type: 'text' as const,
-                text: `Block type "${name}" not found. Use search to find block types.`,
-              }],
+              content: [
+                {
+                  type: 'text' as const,
+                  text: `Block type "${name}" not found. Use search to find block types.`,
+                },
+              ],
               isError: true,
             };
           }
@@ -82,35 +96,43 @@ export function registerBlockTypeTools(server: McpServer, session: SessionManage
           const results = registry.searchBlockTypes(search);
           if (results.length === 0) {
             return {
-              content: [{
-                type: 'text' as const,
-                text: `No block types matching "${search}".`,
-              }],
+              content: [
+                {
+                  type: 'text' as const,
+                  text: `No block types matching "${search}".`,
+                },
+              ],
             };
           }
           const text = results.map((r) => `${r.name} — ${r.title}`).join('\n');
           return {
-            content: [{
-              type: 'text' as const,
-              text: `Found ${results.length} block type${results.length !== 1 ? 's' : ''}:\n${text}`,
-            }],
+            content: [
+              {
+                type: 'text' as const,
+                text: `Found ${results.length} block type${results.length !== 1 ? 's' : ''}:\n${text}`,
+              },
+            ],
           };
         }
 
         // No arguments: list all block type names
         const allNames = registry.getKnownBlockTypeNames();
         return {
-          content: [{
-            type: 'text' as const,
-            text: `${allNames.length} registered block types:\n${allNames.join('\n')}`,
-          }],
+          content: [
+            {
+              type: 'text' as const,
+              text: `${allNames.length} registered block types:\n${allNames.join('\n')}`,
+            },
+          ],
         };
       } catch (error) {
         return {
-          content: [{
-            type: 'text' as const,
-            text: `Failed to look up block types: ${error instanceof Error ? error.message : String(error)}`,
-          }],
+          content: [
+            {
+              type: 'text' as const,
+              text: `Failed to look up block types: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
           isError: true,
         };
       }

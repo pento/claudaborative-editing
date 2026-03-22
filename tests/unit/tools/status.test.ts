@@ -8,7 +8,6 @@ import {
   fakeCollaborator,
 } from './helpers.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { SessionManager } from '../../../src/session/session-manager.js';
 
 describe('status tools', () => {
   let server: ReturnType<typeof createMockServer>;

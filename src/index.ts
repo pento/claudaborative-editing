@@ -32,7 +32,7 @@ if (args[0] === 'setup') {
   await runSetup();
 } else {
   const { startServer } = await import('./server.js');
-  startServer().catch((error) => {
+  startServer().catch((error: unknown) => {
     console.error('Failed to start server:', error);
     process.exit(1);
   });

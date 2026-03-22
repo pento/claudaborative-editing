@@ -29,22 +29,20 @@ export function blockToYMap(block: Block, registry: BlockTypeRegistry): Y.Map<un
 
   // Attributes: rich-text ones become Y.Text, others stay as plain values
   const attrMap = new Y.Map<unknown>();
-  if (block.attributes) {
-    for (const [key, value] of Object.entries(block.attributes)) {
-      if (registry.isRichTextAttribute(block.name, key) && typeof value === 'string') {
-        const ytext = new Y.Text();
-        ytext.insert(0, value);
-        attrMap.set(key, ytext);
-      } else {
-        attrMap.set(key, value);
-      }
+  for (const [key, value] of Object.entries(block.attributes)) {
+    if (registry.isRichTextAttribute(block.name, key) && typeof value === 'string') {
+      const ytext = new Y.Text();
+      ytext.insert(0, value);
+      attrMap.set(key, ytext);
+    } else {
+      attrMap.set(key, value);
     }
   }
   ymap.set('attributes', attrMap);
 
   // Inner blocks: recurse
   const innerBlocksArray = new Y.Array<Y.Map<unknown>>();
-  if (block.innerBlocks && block.innerBlocks.length > 0) {
+  if (block.innerBlocks.length > 0) {
     const innerMaps = block.innerBlocks.map((inner) => blockToYMap(inner, registry));
     innerBlocksArray.push(innerMaps);
   }
@@ -76,9 +74,7 @@ export function yMapToBlock(ymap: Y.Map<unknown>): Block {
   }
 
   // Read inner blocks recursively
-  const innerBlocksArray = ymap.get('innerBlocks') as
-    | Y.Array<Y.Map<unknown>>
-    | undefined;
+  const innerBlocksArray = ymap.get('innerBlocks') as Y.Array<Y.Map<unknown>> | undefined;
   const innerBlocks: Block[] = [];
   if (innerBlocksArray) {
     for (let i = 0; i < innerBlocksArray.length; i++) {
@@ -156,8 +152,7 @@ export function computeTextDelta(oldValue: string, newValue: string): TextDelta 
   while (
     suffixLen < oldValue.length - prefixLen &&
     suffixLen < newValue.length - prefixLen &&
-    oldValue[oldValue.length - 1 - suffixLen] ===
-      newValue[newValue.length - 1 - suffixLen]
+    oldValue[oldValue.length - 1 - suffixLen] === newValue[newValue.length - 1 - suffixLen]
   ) {
     suffixLen++;
   }

@@ -71,8 +71,9 @@ describe('media tools', () => {
         source_url: 'https://example.com/wp-content/uploads/2026/03/clip.mp4',
         media_details: { width: 1920, height: 1080, sizes: {} },
       };
-      (session.uploadMedia as ReturnType<typeof import('vitest').vi.fn>)
-        .mockResolvedValueOnce(videoMedia);
+      (session.uploadMedia as ReturnType<typeof import('vitest').vi.fn>).mockResolvedValueOnce(
+        videoMedia,
+      );
 
       const tool = server.registeredTools.get('wp_upload_media')!;
       const result = await tool.handler({ filePath: '/path/to/clip.mp4' });
@@ -91,8 +92,9 @@ describe('media tools', () => {
         source_url: 'https://example.com/wp-content/uploads/2026/03/song.mp3',
         media_details: {},
       };
-      (session.uploadMedia as ReturnType<typeof import('vitest').vi.fn>)
-        .mockResolvedValueOnce(audioMedia);
+      (session.uploadMedia as ReturnType<typeof import('vitest').vi.fn>).mockResolvedValueOnce(
+        audioMedia,
+      );
 
       const tool = server.registeredTools.get('wp_upload_media')!;
       const result = await tool.handler({ filePath: '/path/to/song.mp3' });
@@ -112,8 +114,9 @@ describe('media tools', () => {
         source_url: 'https://example.com/wp-content/uploads/2026/03/doc.pdf',
         media_details: {},
       };
-      (session.uploadMedia as ReturnType<typeof import('vitest').vi.fn>)
-        .mockResolvedValueOnce(pdfMedia);
+      (session.uploadMedia as ReturnType<typeof import('vitest').vi.fn>).mockResolvedValueOnce(
+        pdfMedia,
+      );
 
       const tool = server.registeredTools.get('wp_upload_media')!;
       const result = await tool.handler({ filePath: '/path/to/doc.pdf' });
@@ -135,8 +138,9 @@ describe('media tools', () => {
     });
 
     it('returns error when upload fails', async () => {
-      (session.uploadMedia as ReturnType<typeof import('vitest').vi.fn>)
-        .mockRejectedValueOnce(new Error('File not found'));
+      (session.uploadMedia as ReturnType<typeof import('vitest').vi.fn>).mockRejectedValueOnce(
+        new Error('File not found'),
+      );
 
       const tool = server.registeredTools.get('wp_upload_media')!;
       const result = await tool.handler({ filePath: '/path/to/missing.jpg' });
@@ -147,8 +151,9 @@ describe('media tools', () => {
     });
 
     it('returns error for unsupported file type', async () => {
-      (session.uploadMedia as ReturnType<typeof import('vitest').vi.fn>)
-        .mockRejectedValueOnce(new Error('Unsupported file type: .xyz'));
+      (session.uploadMedia as ReturnType<typeof import('vitest').vi.fn>).mockRejectedValueOnce(
+        new Error('Unsupported file type: .xyz'),
+      );
 
       const tool = server.registeredTools.get('wp_upload_media')!;
       const result = await tool.handler({ filePath: '/path/to/file.xyz' });
