@@ -16,6 +16,16 @@ npm run format:check # Check formatting without writing
 npm run dev          # Watch mode build
 ```
 
+## Git Hooks
+
+Pre-commit hook auto-formats (Prettier) and lints (ESLint, markdownlint) staged files.
+
+```bash
+git config core.hooksPath .githooks   # One-time setup
+```
+
+The test suite verifies this is configured (skipped in CI).
+
 ## Architecture
 
 ```txt

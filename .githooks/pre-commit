@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Collect staged TypeScript/JavaScript files (excluding deletions).
+ts_files=$(git diff --cached --name-only --diff-filter=d -- '*.ts' '*.js')
+
+# Collect staged Markdown files (excluding deletions).
+md_files=$(git diff --cached --name-only --diff-filter=d -- '*.md')
+
+# Exit early if nothing relevant is staged.
+if [[ -z "$ts_files" && -z "$md_files" ]]; then
+  exit 0
+fi
+
+# Combine all staged files.
+all_files=""
+[[ -n "$ts_files" ]] && all_files="$ts_files"
+if [[ -n "$md_files" ]]; then
+  [[ -n "$all_files" ]] && all_files="$all_files"$'\n'"$md_files" || all_files="$md_files"
+fi
+
+# 1. Format staged files with Prettier and re-stage any changes.
+echo "$all_files" | xargs npx prettier --write
+echo "$all_files" | xargs git add
+
+# 2. Lint all staged files with ESLint — block the commit on any issues.
+if ! echo "$all_files" | xargs npx eslint --max-warnings 0; then
+  echo ""
+  echo "ESLint found issues — commit blocked. Fix them and try again."
+  exit 1
+fi
+
+# 3. Lint staged Markdown files with markdownlint.
+if [[ -n "$md_files" ]]; then
+  if ! echo "$md_files" | xargs npx markdownlint-cli2; then
+    echo ""
+    echo "markdownlint found issues — commit blocked. Fix them and try again."
+    exit 1
+  fi
+fi
