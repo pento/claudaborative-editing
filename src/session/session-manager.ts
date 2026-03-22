@@ -31,6 +31,7 @@ import { getMimeType } from '../wordpress/mime-types.js';
 import type {
   WordPressConfig,
   WPMediaItem,
+  WPNote,
   WPUser,
   WPPost,
 } from '../wordpress/types.js';
@@ -210,6 +211,7 @@ export class SessionManager {
   private state: SessionState = 'disconnected';
   private awarenessState: AwarenessLocalState | null = null;
   private collaborators: CollaboratorInfo[] = [];
+  private notesSupported = false;
   private updateHandler: ((update: Uint8Array, origin: unknown) => void) | null = null;
 
   /** Max time (ms) to wait for sync to populate the doc before loading from REST API. Set to 0 in tests. */
@@ -252,6 +254,13 @@ export class SessionManager {
     }
     this.documentManager.setRegistry(this.registry);
 
+    // Check if the site supports notes (block comments)
+    try {
+      this.notesSupported = await this.apiClient.checkNotesSupport();
+    } catch {
+      this.notesSupported = false;
+    }
+
     // Build awareness state from user info
     this.awarenessState = buildAwarenessState(user);
 
@@ -271,6 +280,7 @@ export class SessionManager {
     this.user = null;
     this.awarenessState = null;
     this.collaborators = [];
+    this.notesSupported = false;
     this.state = 'disconnected';
   }
 
@@ -734,6 +744,119 @@ export class SessionManager {
     return this.apiClient!.uploadMedia(fileData, fileName, mimeType, options);
   }
 
+  // --- Notes ---
+
+  /**
+   * List all notes (block comments) on the current post, along with a map
+   * from noteId to the block index where the note is attached.
+   */
+  async listNotes(): Promise<{ notes: WPNote[]; noteBlockMap: Record<number, string> }> {
+    this.requireState('editing');
+    if (!this.notesSupported) {
+      throw new Error('Notes are not supported. This feature requires WordPress 6.9 or later.');
+    }
+
+    const notes = await this.apiClient!.listNotes(this.currentPost!.id);
+
+    // Build noteId-to-blockIndex map by scanning all blocks
+    const noteBlockMap: Record<number, string> = {};
+    for (const note of notes) {
+      const blockIndex = this.findBlockIndexByNoteId(note.id);
+      if (blockIndex) {
+        noteBlockMap[note.id] = blockIndex;
+      }
+    }
+
+    return { notes, noteBlockMap };
+  }
+
+  /**
+   * Add a note (block comment) to a specific block.
+   * Creates the note via the REST API and sets `metadata.noteId` on the block.
+   */
+  async addNote(blockIndex: string, content: string): Promise<WPNote> {
+    this.requireState('editing');
+    if (!this.notesSupported) {
+      throw new Error('Notes are not supported. This feature requires WordPress 6.9 or later.');
+    }
+
+    const block = this.documentManager.getBlockByIndex(this.doc!, blockIndex);
+    if (!block) {
+      throw new Error(`Block not found at index ${blockIndex}`);
+    }
+
+    const existingNoteId = (block.attributes.metadata as Record<string, unknown> | undefined)?.noteId;
+    if (existingNoteId != null) {
+      throw new Error(`Block at index ${blockIndex} already has a note (ID: ${existingNoteId}). Reply to the existing note instead.`);
+    }
+
+    const note = await this.apiClient!.createNote({ post: this.currentPost!.id, content });
+
+    this.doc!.transact(() => {
+      this.documentManager.setBlockNoteId(this.doc!, blockIndex, note.id);
+    }, LOCAL_ORIGIN);
+
+    if (this.syncClient) {
+      this.syncClient.flushQueue();
+    }
+
+    return note;
+  }
+
+  /**
+   * Reply to an existing note.
+   */
+  async replyToNote(parentNoteId: number, content: string): Promise<WPNote> {
+    this.requireState('editing');
+    if (!this.notesSupported) {
+      throw new Error('Notes are not supported. This feature requires WordPress 6.9 or later.');
+    }
+
+    return this.apiClient!.createNote({ post: this.currentPost!.id, content, parent: parentNoteId });
+  }
+
+  /**
+   * Resolve (delete) a note and remove its metadata linkage from the block.
+   */
+  async resolveNote(noteId: number): Promise<void> {
+    this.requireState('editing');
+    if (!this.notesSupported) {
+      throw new Error('Notes are not supported. This feature requires WordPress 6.9 or later.');
+    }
+
+    // Delete all replies first, then the note itself (prevents orphaned replies)
+    const allNotes = await this.apiClient!.listNotes(this.currentPost!.id);
+    const replies = allNotes.filter(n => n.parent === noteId);
+    for (const reply of replies) {
+      await this.apiClient!.deleteNote(reply.id);
+    }
+
+    await this.apiClient!.deleteNote(noteId);
+
+    // Find and remove the noteId from whichever block has it
+    const blockIndex = this.findBlockIndexByNoteId(noteId);
+    if (blockIndex) {
+      this.doc!.transact(() => {
+        this.documentManager.removeBlockNoteId(this.doc!, blockIndex);
+      }, LOCAL_ORIGIN);
+      if (this.syncClient) {
+        this.syncClient.flushQueue();
+      }
+    }
+  }
+
+  /**
+   * Update an existing note's content.
+   */
+  async updateNote(noteId: number, content: string): Promise<WPNote> {
+    this.requireState('editing');
+    if (!this.notesSupported) {
+      throw new Error('Notes are not supported. This feature requires WordPress 6.9 or later.');
+    }
+
+    return this.apiClient!.updateNote(noteId, { content });
+  }
+
   // --- Status ---
 
   getState(): SessionState {
@@ -770,6 +893,10 @@ export class SessionManager {
 
   getRegistry(): BlockTypeRegistry {
     return this.registry;
+  }
+
+  getNotesSupported(): boolean {
+    return this.notesSupported;
   }
 
   /**
@@ -965,5 +1092,27 @@ export class SessionManager {
         `Operation requires state ${allowed.join(' or ')}, but current state is '${this.state}'`,
       );
     }
+  }
+
+  /**
+   * Scan all blocks (including nested inner blocks) to find the block
+   * whose metadata.noteId matches the given noteId.
+   * Returns the block index (dot-notation) or null if not found.
+   */
+  private findBlockIndexByNoteId(noteId: number): string | null {
+    const blocks = this.documentManager.getBlocks(this.doc!);
+    const scan = (blockList: Block[], prefix: string): string | null => {
+      for (let i = 0; i < blockList.length; i++) {
+        const idx = prefix ? `${prefix}.${i}` : String(i);
+        const metadata = blockList[i].attributes.metadata as Record<string, unknown> | undefined;
+        if (metadata?.noteId === noteId) return idx;
+        if (blockList[i].innerBlocks.length > 0) {
+          const found = scan(blockList[i].innerBlocks, idx);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+    return scan(blocks, '');
   }
 }

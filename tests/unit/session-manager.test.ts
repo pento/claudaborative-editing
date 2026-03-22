@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { SessionManager } from '../../src/session/session-manager.js';
-import type { WordPressConfig, WPPost, WPUser } from '../../src/wordpress/types.js';
+import type { WordPressConfig, WPNote, WPPost, WPUser } from '../../src/wordpress/types.js';
 
 // --- Mock the WordPress API client ---
 const mockValidateConnection = vi.fn<() => Promise<WPUser>>();
@@ -11,6 +11,11 @@ const mockCreatePost = vi.fn<() => Promise<WPPost>>();
 const mockSendSyncUpdate = vi.fn();
 const mockGetBlockTypes = vi.fn<() => Promise<unknown[]>>();
 const mockUploadMedia = vi.fn();
+const mockCheckNotesSupport = vi.fn<() => Promise<boolean>>();
+const mockListNotes = vi.fn<() => Promise<WPNote[]>>();
+const mockCreateNote = vi.fn<() => Promise<WPNote>>();
+const mockUpdateNote = vi.fn<() => Promise<WPNote>>();
+const mockDeleteNote = vi.fn<() => Promise<void>>();
 
 vi.mock('../../src/wordpress/api-client.js', () => {
   return {
@@ -23,6 +28,11 @@ vi.mock('../../src/wordpress/api-client.js', () => {
       this.sendSyncUpdate = mockSendSyncUpdate;
       this.getBlockTypes = mockGetBlockTypes;
       this.uploadMedia = mockUploadMedia;
+      this.checkNotesSupport = mockCheckNotesSupport;
+      this.listNotes = mockListNotes;
+      this.createNote = mockCreateNote;
+      this.updateNote = mockUpdateNote;
+      this.deleteNote = mockDeleteNote;
     }),
   };
 });
@@ -120,6 +130,7 @@ describe('SessionManager', () => {
       queueSize: 0,
     });
     mockGetBlockTypes.mockRejectedValue(new Error('Not available'));
+    mockCheckNotesSupport.mockResolvedValue(false);
     session = new SessionManager();
     session.syncWaitTimeout = 0; // Skip sync wait in tests
   });
@@ -1085,6 +1096,311 @@ describe('SessionManager', () => {
       mockReadFile.mockRejectedValueOnce(new Error('ENOENT: no such file'));
 
       await expect(session.uploadMedia('/path/to/missing.jpg')).rejects.toThrow('ENOENT');
+    });
+  });
+
+  describe('notes', () => {
+    const fakeNote: WPNote = {
+      id: 10,
+      post: 42,
+      parent: 0,
+      author: 1,
+      author_name: 'admin',
+      date: '2026-03-22T00:00:00',
+      content: { rendered: '<p>A note</p>', raw: 'A note' },
+      status: 'hold',
+      type: 'note',
+    };
+
+    const fakeReply: WPNote = {
+      id: 11,
+      post: 42,
+      parent: 10,
+      author: 1,
+      author_name: 'admin',
+      date: '2026-03-22T00:01:00',
+      content: { rendered: '<p>Reply</p>', raw: 'Reply' },
+      status: 'hold',
+      type: 'note',
+    };
+
+    /** Connect and open a post with notes support enabled. */
+    async function connectAndOpenWithNotes(s: SessionManager): Promise<void> {
+      mockValidateConnection.mockResolvedValue(fakeUser);
+      mockValidateSyncEndpoint.mockResolvedValue(undefined);
+      mockCheckNotesSupport.mockResolvedValue(true);
+      await s.connect(fakeConfig);
+      mockGetPost.mockResolvedValue(fakePost);
+      await s.openPost(42);
+    }
+
+    describe('getNotesSupported()', () => {
+      it('returns false by default', () => {
+        expect(session.getNotesSupported()).toBe(false);
+      });
+
+      it('returns true after connecting to a site that supports notes', async () => {
+        mockValidateConnection.mockResolvedValue(fakeUser);
+        mockValidateSyncEndpoint.mockResolvedValue(undefined);
+        mockCheckNotesSupport.mockResolvedValue(true);
+
+        await session.connect(fakeConfig);
+
+        expect(session.getNotesSupported()).toBe(true);
+      });
+
+      it('returns false after connecting to a site that does not support notes', async () => {
+        mockValidateConnection.mockResolvedValue(fakeUser);
+        mockValidateSyncEndpoint.mockResolvedValue(undefined);
+        mockCheckNotesSupport.mockResolvedValue(false);
+
+        await session.connect(fakeConfig);
+
+        expect(session.getNotesSupported()).toBe(false);
+      });
+
+      it('returns false when checkNotesSupport throws', async () => {
+        mockValidateConnection.mockResolvedValue(fakeUser);
+        mockValidateSyncEndpoint.mockResolvedValue(undefined);
+        mockCheckNotesSupport.mockRejectedValue(new Error('network error'));
+
+        await session.connect(fakeConfig);
+
+        expect(session.getNotesSupported()).toBe(false);
+      });
+
+      it('resets to false on disconnect', async () => {
+        mockValidateConnection.mockResolvedValue(fakeUser);
+        mockValidateSyncEndpoint.mockResolvedValue(undefined);
+        mockCheckNotesSupport.mockResolvedValue(true);
+
+        await session.connect(fakeConfig);
+        expect(session.getNotesSupported()).toBe(true);
+
+        session.disconnect();
+        expect(session.getNotesSupported()).toBe(false);
+      });
+    });
+
+    describe('listNotes()', () => {
+      it('delegates to API client and returns notes with noteBlockMap', async () => {
+        await connectAndOpenWithNotes(session);
+        mockListNotes.mockResolvedValue([fakeNote]);
+
+        const result = await session.listNotes();
+
+        expect(result.notes).toEqual([fakeNote]);
+        expect(mockListNotes).toHaveBeenCalledWith(42);
+      });
+
+      it('builds noteBlockMap from block metadata', async () => {
+        await connectAndOpenWithNotes(session);
+
+        // Add a note to block 0 to create metadata.noteId
+        mockCreateNote.mockResolvedValue(fakeNote);
+        await session.addNote('0', 'A note');
+
+        mockListNotes.mockResolvedValue([fakeNote]);
+        const result = await session.listNotes();
+
+        expect(result.noteBlockMap[10]).toBe('0');
+      });
+
+      it('returns empty noteBlockMap when no blocks have noteId metadata', async () => {
+        await connectAndOpenWithNotes(session);
+        mockListNotes.mockResolvedValue([fakeNote]);
+
+        const result = await session.listNotes();
+
+        expect(result.noteBlockMap).toEqual({});
+      });
+
+      it('throws when not in editing state', async () => {
+        mockValidateConnection.mockResolvedValue(fakeUser);
+        mockValidateSyncEndpoint.mockResolvedValue(undefined);
+        mockCheckNotesSupport.mockResolvedValue(true);
+        await session.connect(fakeConfig);
+
+        await expect(session.listNotes()).rejects.toThrow(/requires state/);
+      });
+
+      it('throws when notes not supported', async () => {
+        await connectAndOpen(session);
+
+        await expect(session.listNotes()).rejects.toThrow(
+          'Notes are not supported. This feature requires WordPress 6.9 or later.',
+        );
+      });
+    });
+
+    describe('addNote()', () => {
+      it('creates note via API and sets metadata on block', async () => {
+        await connectAndOpenWithNotes(session);
+        mockCreateNote.mockResolvedValue(fakeNote);
+
+        const result = await session.addNote('0', 'A note');
+
+        expect(result).toEqual(fakeNote);
+        expect(mockCreateNote).toHaveBeenCalledWith({ post: 42, content: 'A note' });
+
+        // Verify block metadata was set
+        const block = session.readBlock('0');
+        expect(block).toContain('note');
+      });
+
+      it('flushes the sync queue after setting metadata', async () => {
+        await connectAndOpenWithNotes(session);
+        mockCreateNote.mockResolvedValue(fakeNote);
+
+        await session.addNote('0', 'A note');
+
+        expect(mockSyncFlushQueue).toHaveBeenCalled();
+      });
+
+      it('throws when block not found', async () => {
+        await connectAndOpenWithNotes(session);
+
+        await expect(session.addNote('999', 'A note')).rejects.toThrow(
+          'Block not found at index 999',
+        );
+      });
+
+      it('throws when block already has a note', async () => {
+        await connectAndOpenWithNotes(session);
+        mockCreateNote.mockResolvedValue(fakeNote);
+
+        await session.addNote('0', 'First note');
+
+        await expect(session.addNote('0', 'Second note')).rejects.toThrow(
+          /already has a note.*ID: 10.*Reply to the existing note/,
+        );
+      });
+
+      it('throws when not in editing state', async () => {
+        mockValidateConnection.mockResolvedValue(fakeUser);
+        mockValidateSyncEndpoint.mockResolvedValue(undefined);
+        mockCheckNotesSupport.mockResolvedValue(true);
+        await session.connect(fakeConfig);
+
+        await expect(session.addNote('0', 'A note')).rejects.toThrow(/requires state/);
+      });
+
+      it('throws when notes not supported', async () => {
+        await connectAndOpen(session);
+
+        await expect(session.addNote('0', 'A note')).rejects.toThrow(
+          'Notes are not supported. This feature requires WordPress 6.9 or later.',
+        );
+      });
+    });
+
+    describe('replyToNote()', () => {
+      it('creates reply with parent set', async () => {
+        await connectAndOpenWithNotes(session);
+        mockCreateNote.mockResolvedValue(fakeReply);
+
+        const result = await session.replyToNote(10, 'Reply text');
+
+        expect(result).toEqual(fakeReply);
+        expect(mockCreateNote).toHaveBeenCalledWith({
+          post: 42,
+          content: 'Reply text',
+          parent: 10,
+        });
+      });
+
+      it('throws when not in editing state', async () => {
+        mockValidateConnection.mockResolvedValue(fakeUser);
+        mockValidateSyncEndpoint.mockResolvedValue(undefined);
+        mockCheckNotesSupport.mockResolvedValue(true);
+        await session.connect(fakeConfig);
+
+        await expect(session.replyToNote(10, 'Reply')).rejects.toThrow(/requires state/);
+      });
+
+      it('throws when notes not supported', async () => {
+        await connectAndOpen(session);
+
+        await expect(session.replyToNote(10, 'Reply')).rejects.toThrow(
+          'Notes are not supported. This feature requires WordPress 6.9 or later.',
+        );
+      });
+    });
+
+    describe('resolveNote()', () => {
+      it('deletes note via API and removes metadata from block', async () => {
+        await connectAndOpenWithNotes(session);
+        mockCreateNote.mockResolvedValue(fakeNote);
+        mockDeleteNote.mockResolvedValue(undefined);
+
+        // First add a note so the metadata exists
+        await session.addNote('0', 'A note');
+        mockSyncFlushQueue.mockClear();
+
+        await session.resolveNote(10);
+
+        expect(mockDeleteNote).toHaveBeenCalledWith(10);
+        expect(mockSyncFlushQueue).toHaveBeenCalled();
+      });
+
+      it('handles case where noteId is not linked to any block', async () => {
+        await connectAndOpenWithNotes(session);
+        mockDeleteNote.mockResolvedValue(undefined);
+
+        // Resolve a note that isn't linked to any block - should still delete via API
+        await session.resolveNote(999);
+
+        expect(mockDeleteNote).toHaveBeenCalledWith(999);
+        // flushQueue should NOT have been called since no block metadata was changed
+        expect(mockSyncFlushQueue).not.toHaveBeenCalled();
+      });
+
+      it('throws when not in editing state', async () => {
+        mockValidateConnection.mockResolvedValue(fakeUser);
+        mockValidateSyncEndpoint.mockResolvedValue(undefined);
+        mockCheckNotesSupport.mockResolvedValue(true);
+        await session.connect(fakeConfig);
+
+        await expect(session.resolveNote(10)).rejects.toThrow(/requires state/);
+      });
+
+      it('throws when notes not supported', async () => {
+        await connectAndOpen(session);
+
+        await expect(session.resolveNote(10)).rejects.toThrow(
+          'Notes are not supported. This feature requires WordPress 6.9 or later.',
+        );
+      });
+    });
+
+    describe('updateNote()', () => {
+      it('delegates to API client', async () => {
+        await connectAndOpenWithNotes(session);
+        const updatedNote = { ...fakeNote, content: { rendered: '<p>Updated</p>', raw: 'Updated' } };
+        mockUpdateNote.mockResolvedValue(updatedNote);
+
+        const result = await session.updateNote(10, 'Updated');
+
+        expect(result).toEqual(updatedNote);
+        expect(mockUpdateNote).toHaveBeenCalledWith(10, { content: 'Updated' });
+      });
+
+      it('throws when not in editing state', async () => {
+        mockValidateConnection.mockResolvedValue(fakeUser);
+        mockValidateSyncEndpoint.mockResolvedValue(undefined);
+        mockCheckNotesSupport.mockResolvedValue(true);
+        await session.connect(fakeConfig);
+
+        await expect(session.updateNote(10, 'Updated')).rejects.toThrow(/requires state/);
+      });
+
+      it('throws when notes not supported', async () => {
+        await connectAndOpen(session);
+
+        await expect(session.updateNote(10, 'Updated')).rejects.toThrow(
+          'Notes are not supported. This feature requires WordPress 6.9 or later.',
+        );
+      });
     });
   });
 });

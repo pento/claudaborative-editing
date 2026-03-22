@@ -8,7 +8,7 @@
 import { vi } from 'vitest';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { SessionManager, SessionState } from '../../../src/session/session-manager.js';
-import type { WPMediaItem, WPPost, WPUser } from '../../../src/wordpress/types.js';
+import type { WPMediaItem, WPNote, WPPost, WPUser } from '../../../src/wordpress/types.js';
 import type { CollaboratorInfo } from '../../../src/yjs/types.js';
 
 export interface RegisteredTool {
@@ -78,6 +78,18 @@ export const fakeCollaborator: CollaboratorInfo = {
   enteredAt: Date.now(),
 };
 
+export const fakeNote: WPNote = {
+  id: 1,
+  post: 42,
+  parent: 0,
+  author: 1,
+  author_name: 'Gary',
+  date: '2026-03-22T00:00:00',
+  content: { rendered: '<p>Test note</p>', raw: 'Test note' },
+  status: 'hold',
+  type: 'note',
+};
+
 /**
  * Create a mock SessionManager with configurable state and return values.
  */
@@ -116,6 +128,12 @@ export function createMockSession(overrides: {
     replaceBlocks: vi.fn().mockResolvedValue(undefined),
     setTitle: vi.fn().mockResolvedValue(undefined),
     uploadMedia: vi.fn().mockResolvedValue(fakeMediaItem),
+    listNotes: vi.fn().mockResolvedValue({ notes: [], noteBlockMap: {} }),
+    addNote: vi.fn().mockResolvedValue({ id: 1, post: 42, parent: 0, author: 1, author_name: 'Gary', date: '2026-03-22', content: { rendered: 'Test note', raw: 'Test note' }, status: 'hold', type: 'note' }),
+    replyToNote: vi.fn().mockResolvedValue({ id: 2, post: 42, parent: 1, author: 1, author_name: 'Gary', date: '2026-03-22', content: { rendered: 'Test reply', raw: 'Test reply' }, status: 'hold', type: 'note' }),
+    resolveNote: vi.fn().mockResolvedValue(undefined),
+    updateNote: vi.fn().mockResolvedValue({ id: 1, post: 42, parent: 0, author: 1, author_name: 'Gary', date: '2026-03-22', content: { rendered: 'Updated note', raw: 'Updated note' }, status: 'hold', type: 'note' }),
+    getNotesSupported: vi.fn().mockReturnValue(true),
     save: vi.fn(),
     getState: vi.fn().mockReturnValue(state),
     getSyncStatus: vi.fn().mockReturnValue(syncStatus),

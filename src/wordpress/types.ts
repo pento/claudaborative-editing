@@ -122,6 +122,21 @@ export interface WPMediaItem {
   };
 }
 
+// --- Notes (Block Comments) API Types ---
+
+/** WordPress note (comment_type = 'note') as returned by /wp/v2/comments. */
+export interface WPNote {
+  id: number;
+  post: number;
+  parent: number; // 0 = top-level, >0 = reply to that note ID
+  author: number;
+  author_name: string;
+  date: string;
+  content: { rendered: string; raw?: string };
+  status: string; // 'hold', 'approved', etc.
+  type: string; // always 'note'
+}
+
 // --- Connection Config ---
 
 export interface WordPressConfig {

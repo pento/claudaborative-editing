@@ -19,6 +19,8 @@ export function registerStatusTools(server: McpServer, session: SessionManager):
         lines.push('Connection: connected');
         lines.push(`User: ${user?.name ?? 'unknown'} (ID: ${user?.id ?? '?'})`);
 
+        lines.push(`Notes: ${session.getNotesSupported() ? 'supported' : 'not supported (requires WordPress 6.9+)'}`);
+
         const post = session.getCurrentPost();
         if (state === 'editing' && post) {
           const syncStatus = session.getSyncStatus();

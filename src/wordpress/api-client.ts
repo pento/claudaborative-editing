@@ -2,6 +2,7 @@ import type {
   WordPressConfig,
   WPBlockType,
   WPMediaItem,
+  WPNote,
   WPPost,
   WPUser,
   SyncPayload,
@@ -124,6 +125,78 @@ export class WordPressApiClient {
     return this.apiFetch<WPMediaItem>('/wp/v2/media', {
       method: 'POST',
       body: formData,
+    });
+  }
+
+  /**
+   * Check whether the site supports notes (block comments).
+   * GET /wp/v2/comments?type=note&per_page=1
+   * Returns true if the endpoint accepts type=note, false on 4xx errors.
+   */
+  async checkNotesSupport(): Promise<boolean> {
+    try {
+      await this.apiFetch<unknown>('/wp/v2/comments?type=note&per_page=1');
+      return true;
+    } catch (err) {
+      if (err instanceof WordPressApiError) {
+        return false;
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * List notes (block comments) for a given post.
+   * GET /wp/v2/comments?post={postId}&type=note&context=edit&per_page=100
+   *
+   * Note: Returns at most 100 notes (the WP REST API maximum per page).
+   * Posts with more than 100 notes will have results silently truncated.
+   */
+  async listNotes(postId: number): Promise<WPNote[]> {
+    const params = new URLSearchParams({
+      post: String(postId),
+      type: 'note',
+      context: 'edit',
+      per_page: '100',
+    });
+
+    return this.apiFetch<WPNote[]>(`/wp/v2/comments?${params.toString()}`);
+  }
+
+  /**
+   * Create a new note (block comment) on a post.
+   * POST /wp/v2/comments
+   */
+  async createNote(data: { post: number; content: string; parent?: number }): Promise<WPNote> {
+    return this.apiFetch<WPNote>('/wp/v2/comments', {
+      method: 'POST',
+      body: JSON.stringify({
+        post: data.post,
+        content: data.content,
+        type: 'note',
+        ...(data.parent ? { parent: data.parent } : {}),
+      }),
+    });
+  }
+
+  /**
+   * Update an existing note's content.
+   * POST /wp/v2/comments/{noteId}
+   */
+  async updateNote(noteId: number, data: { content: string }): Promise<WPNote> {
+    return this.apiFetch<WPNote>(`/wp/v2/comments/${noteId}`, {
+      method: 'POST',
+      body: JSON.stringify({ content: data.content }),
+    });
+  }
+
+  /**
+   * Delete a note permanently.
+   * DELETE /wp/v2/comments/{noteId}?force=true
+   */
+  async deleteNote(noteId: number): Promise<void> {
+    await this.apiFetch<unknown>(`/wp/v2/comments/${noteId}?force=true`, {
+      method: 'DELETE',
     });
   }
 

@@ -596,6 +596,109 @@ describe('DocumentManager', () => {
     });
   });
 
+  describe('block metadata', () => {
+    it('setBlockNoteId sets noteId on a block that has no metadata', () => {
+      const { manager, doc } = createManager();
+      manager.setBlocks(doc, [makeParagraph('Hello')]);
+
+      manager.setBlockNoteId(doc, '0', 42);
+
+      const block = manager.getBlockByIndex(doc, '0');
+      expect(block!.attributes.metadata).toEqual({ noteId: 42 });
+    });
+
+    it('setBlockNoteId preserves existing metadata keys when adding noteId', () => {
+      const { manager, doc } = createManager();
+      manager.setBlocks(doc, [makeParagraph('Hello')]);
+
+      // Manually set some existing metadata
+      const documentMap = manager.getDocumentMap(doc);
+      const blocksArray = documentMap.get('blocks') as Y.Array<Y.Map<unknown>>;
+      const attrMap = blocksArray.get(0).get('attributes') as Y.Map<unknown>;
+      attrMap.set('metadata', { customKey: 'customValue', priority: 1 });
+
+      manager.setBlockNoteId(doc, '0', 99);
+
+      const block = manager.getBlockByIndex(doc, '0');
+      expect(block!.attributes.metadata).toEqual({
+        customKey: 'customValue',
+        priority: 1,
+        noteId: 99,
+      });
+    });
+
+    it('setBlockNoteId throws when block index is invalid', () => {
+      const { manager, doc } = createManager();
+      manager.setBlocks(doc, [makeParagraph('Only one')]);
+
+      expect(() => manager.setBlockNoteId(doc, '5', 42)).toThrow(
+        'Block not found at index 5',
+      );
+    });
+
+    it('removeBlockNoteId removes noteId from block metadata', () => {
+      const { manager, doc } = createManager();
+      manager.setBlocks(doc, [makeParagraph('Hello')]);
+
+      // Set metadata with noteId and another key
+      const documentMap = manager.getDocumentMap(doc);
+      const blocksArray = documentMap.get('blocks') as Y.Array<Y.Map<unknown>>;
+      const attrMap = blocksArray.get(0).get('attributes') as Y.Map<unknown>;
+      attrMap.set('metadata', { noteId: 42, otherKey: 'keep' });
+
+      manager.removeBlockNoteId(doc, '0');
+
+      const block = manager.getBlockByIndex(doc, '0');
+      expect(block!.attributes.metadata).toEqual({ otherKey: 'keep' });
+    });
+
+    it('removeBlockNoteId removes entire metadata key when noteId was the only key', () => {
+      const { manager, doc } = createManager();
+      manager.setBlocks(doc, [makeParagraph('Hello')]);
+
+      manager.setBlockNoteId(doc, '0', 42);
+      manager.removeBlockNoteId(doc, '0');
+
+      const block = manager.getBlockByIndex(doc, '0');
+      expect(block!.attributes.metadata).toBeUndefined();
+    });
+
+    it('removeBlockNoteId preserves other metadata keys when removing noteId', () => {
+      const { manager, doc } = createManager();
+      manager.setBlocks(doc, [makeParagraph('Hello')]);
+
+      const documentMap = manager.getDocumentMap(doc);
+      const blocksArray = documentMap.get('blocks') as Y.Array<Y.Map<unknown>>;
+      const attrMap = blocksArray.get(0).get('attributes') as Y.Map<unknown>;
+      attrMap.set('metadata', { noteId: 7, author: 'claude', version: 3 });
+
+      manager.removeBlockNoteId(doc, '0');
+
+      const block = manager.getBlockByIndex(doc, '0');
+      expect(block!.attributes.metadata).toEqual({ author: 'claude', version: 3 });
+    });
+
+    it('removeBlockNoteId is a no-op when block has no metadata', () => {
+      const { manager, doc } = createManager();
+      manager.setBlocks(doc, [makeParagraph('Hello')]);
+
+      // Should not throw
+      manager.removeBlockNoteId(doc, '0');
+
+      const block = manager.getBlockByIndex(doc, '0');
+      expect(block!.attributes.metadata).toBeUndefined();
+    });
+
+    it('removeBlockNoteId throws when block index is invalid', () => {
+      const { manager, doc } = createManager();
+      manager.setBlocks(doc, [makeParagraph('Only one')]);
+
+      expect(() => manager.removeBlockNoteId(doc, '5')).toThrow(
+        'Block not found at index 5',
+      );
+    });
+  });
+
   describe('properties', () => {
     it('gets and sets scalar properties', () => {
       const { manager, doc } = createManager();

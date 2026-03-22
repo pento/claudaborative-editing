@@ -178,3 +178,70 @@ describe('renderBlock', () => {
     expect(output).not.toContain('body=');
   });
 });
+
+describe('note indicators', () => {
+  it('should show [has note] for a block with metadata.noteId', () => {
+    const block: Block = {
+      name: 'core/paragraph',
+      clientId: 'test-id',
+      attributes: { content: 'Hello', metadata: { noteId: 42 } },
+      innerBlocks: [],
+    };
+
+    const output = renderBlock(block, '0');
+
+    expect(output).toContain('[0] core/paragraph [has note]');
+  });
+
+  it('should show [has note] after display attributes', () => {
+    const block: Block = {
+      name: 'core/heading',
+      clientId: 'test-id',
+      attributes: { content: 'Title', level: 2, metadata: { noteId: 42 } },
+      innerBlocks: [],
+    };
+
+    const output = renderBlock(block, '0');
+
+    expect(output).toContain('[0] core/heading (level=2) [has note]');
+  });
+
+  it('should not show [has note] when there is no metadata', () => {
+    const block: Block = {
+      name: 'core/paragraph',
+      clientId: 'test-id',
+      attributes: { content: 'Hello' },
+      innerBlocks: [],
+    };
+
+    const output = renderBlock(block, '0');
+
+    expect(output).not.toContain('[has note]');
+  });
+
+  it('should not show [has note] when metadata has no noteId', () => {
+    const block: Block = {
+      name: 'core/paragraph',
+      clientId: 'test-id',
+      attributes: { content: 'Hello', metadata: {} },
+      innerBlocks: [],
+    };
+
+    const output = renderBlock(block, '0');
+
+    expect(output).not.toContain('[has note]');
+  });
+
+  it('should not show metadata as a display attribute', () => {
+    const block: Block = {
+      name: 'core/paragraph',
+      clientId: 'test-id',
+      attributes: { content: 'Hello', metadata: { noteId: 42 } },
+      innerBlocks: [],
+    };
+
+    const output = renderBlock(block, '0');
+
+    expect(output).not.toContain('metadata=');
+  });
+});
