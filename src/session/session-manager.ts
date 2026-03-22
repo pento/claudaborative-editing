@@ -5,6 +5,8 @@
  * Lifecycle: connect → openPost → edit/read → closePost → disconnect
  */
 
+import { readFile } from 'node:fs/promises';
+import { basename } from 'node:path';
 import * as Y from 'yjs';
 import { DocumentManager } from '../yjs/document-manager.js';
 import { WordPressApiClient } from '../wordpress/api-client.js';
@@ -25,8 +27,10 @@ import { buildAwarenessState, parseCollaborators } from './awareness.js';
 import { DEFAULT_SYNC_CONFIG } from '../wordpress/types.js';
 import type { Block, CollaboratorInfo, AwarenessLocalState } from '../yjs/types.js';
 import { BlockTypeRegistry } from '../yjs/block-type-registry.js';
+import { getMimeType } from '../wordpress/mime-types.js';
 import type {
   WordPressConfig,
+  WPMediaItem,
   WPUser,
   WPPost,
 } from '../wordpress/types.js';
@@ -709,6 +713,25 @@ export class SessionManager {
     this.doc!.transact(() => {
       this.documentManager.markSaved(this.doc!);
     }, LOCAL_ORIGIN);
+  }
+
+  // --- Media ---
+
+  /**
+   * Upload a local file to the WordPress media library.
+   * Returns the created media item with ID, URL, and metadata.
+   */
+  async uploadMedia(
+    filePath: string,
+    options?: { altText?: string; caption?: string; title?: string },
+  ): Promise<WPMediaItem> {
+    this.requireState('connected', 'editing');
+
+    const fileName = basename(filePath);
+    const mimeType = getMimeType(fileName);
+    const fileData = await readFile(filePath);
+
+    return this.apiClient!.uploadMedia(fileData, fileName, mimeType, options);
   }
 
   // --- Status ---

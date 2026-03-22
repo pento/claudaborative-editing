@@ -105,6 +105,23 @@ export interface WPBlockType {
   allowed_blocks?: string[] | null;
 }
 
+// --- Media API Types ---
+
+/** WordPress media item as returned by POST /wp/v2/media. */
+export interface WPMediaItem {
+  id: number;
+  source_url: string;
+  title: { rendered: string; raw?: string };
+  caption: { rendered: string; raw?: string };
+  alt_text: string;
+  mime_type: string;
+  media_details: {
+    width?: number;
+    height?: number;
+    sizes?: Record<string, { source_url: string; width: number; height: number }>;
+  };
+}
+
 // --- Connection Config ---
 
 export interface WordPressConfig {

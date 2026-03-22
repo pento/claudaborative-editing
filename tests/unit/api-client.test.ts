@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { WordPressApiClient, WordPressApiError } from '../../src/wordpress/api-client.js';
-import type { SyncPayload, WPBlockType, WPPost, WPUser } from '../../src/wordpress/types.js';
+import type { SyncPayload, WPBlockType, WPMediaItem, WPPost, WPUser } from '../../src/wordpress/types.js';
 
 // Helper to build a mock Response
 function mockResponse(body: unknown, init?: { status?: number; statusText?: string }): Response {
@@ -377,6 +377,104 @@ describe('WordPressApiClient', () => {
         expect(apiErr.message).not.toContain('Collaborative editing');
         expect(apiErr.message).toContain('404');
       }
+    });
+  });
+
+  describe('uploadMedia', () => {
+    const fakeMediaItem: WPMediaItem = {
+      id: 101,
+      source_url: 'https://example.com/wp-content/uploads/2026/03/test.jpg',
+      title: { rendered: 'test', raw: 'test' },
+      caption: { rendered: '', raw: '' },
+      alt_text: 'A test image',
+      mime_type: 'image/jpeg',
+      media_details: { width: 800, height: 600, sizes: {} },
+    };
+
+    it('posts to /wp/v2/media with FormData body', async () => {
+      fetchMock.mockResolvedValue(mockResponse(fakeMediaItem));
+      const client = createClient();
+      const fileData = Buffer.from('fake image data');
+      const result = await client.uploadMedia(fileData, 'test.jpg', 'image/jpeg');
+
+      const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(url).toBe('https://example.com/wp-json/wp/v2/media');
+      expect(options.method).toBe('POST');
+      expect(options.body).toBeInstanceOf(FormData);
+      expect(result).toEqual(fakeMediaItem);
+    });
+
+    it('does not manually set Content-Type for FormData', async () => {
+      fetchMock.mockResolvedValue(mockResponse(fakeMediaItem));
+      const client = createClient();
+      await client.uploadMedia(Buffer.from('data'), 'test.jpg', 'image/jpeg');
+
+      const options = fetchMock.mock.calls[0][1] as RequestInit;
+      expect((options.headers as Record<string, string>)['Content-Type']).toBeUndefined();
+    });
+
+    it('includes Authorization header', async () => {
+      fetchMock.mockResolvedValue(mockResponse(fakeMediaItem));
+      const client = createClient();
+      await client.uploadMedia(Buffer.from('data'), 'test.jpg', 'image/jpeg');
+
+      const expectedAuth = `Basic ${btoa('admin:xxxx yyyy zzzz')}`;
+      const options = fetchMock.mock.calls[0][1] as RequestInit;
+      expect((options.headers as Record<string, string>).Authorization).toBe(expectedAuth);
+    });
+
+    it('appends optional metadata to FormData', async () => {
+      fetchMock.mockResolvedValue(mockResponse(fakeMediaItem));
+      const client = createClient();
+      await client.uploadMedia(Buffer.from('data'), 'test.jpg', 'image/jpeg', {
+        altText: 'Alt text',
+        title: 'My Image',
+        caption: 'A caption',
+      });
+
+      const options = fetchMock.mock.calls[0][1] as RequestInit;
+      const formData = options.body as FormData;
+      expect(formData.get('alt_text')).toBe('Alt text');
+      expect(formData.get('title')).toBe('My Image');
+      expect(formData.get('caption')).toBe('A caption');
+    });
+
+    it('does not append undefined optional fields', async () => {
+      fetchMock.mockResolvedValue(mockResponse(fakeMediaItem));
+      const client = createClient();
+      await client.uploadMedia(Buffer.from('data'), 'test.jpg', 'image/jpeg');
+
+      const options = fetchMock.mock.calls[0][1] as RequestInit;
+      const formData = options.body as FormData;
+      expect(formData.get('alt_text')).toBeNull();
+      expect(formData.get('title')).toBeNull();
+      expect(formData.get('caption')).toBeNull();
+    });
+
+    it('throws on auth failure', async () => {
+      fetchMock.mockResolvedValue(
+        mockResponse(
+          { code: 'rest_forbidden', message: 'Forbidden' },
+          { status: 401, statusText: 'Unauthorized' },
+        ),
+      );
+      const client = createClient();
+      await expect(
+        client.uploadMedia(Buffer.from('data'), 'test.jpg', 'image/jpeg'),
+      ).rejects.toThrow(WordPressApiError);
+    });
+
+    it('throws on server error (e.g., file too large)', async () => {
+      fetchMock.mockResolvedValue(
+        mockResponse(
+          { code: 'rest_upload_file_too_big', message: 'File too large' },
+          { status: 413, statusText: 'Payload Too Large' },
+        ),
+      );
+      const client = createClient();
+      await expect(
+        client.uploadMedia(Buffer.from('data'), 'test.jpg', 'image/jpeg'),
+      ).rejects.toThrow(WordPressApiError);
     });
   });
 
