@@ -21,6 +21,7 @@ describe('edit tools', () => {
 
   it('registers all edit tools', () => {
     expect(server.registeredTools.has('wp_update_block')).toBe(true);
+    expect(server.registeredTools.has('wp_edit_block_text')).toBe(true);
     expect(server.registeredTools.has('wp_insert_block')).toBe(true);
     expect(server.registeredTools.has('wp_remove_blocks')).toBe(true);
     expect(server.registeredTools.has('wp_move_block')).toBe(true);
@@ -68,6 +69,183 @@ describe('edit tools', () => {
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain('Failed to update block');
+    });
+  });
+
+  describe('wp_edit_block_text', () => {
+    it('calls editBlockText and returns success message', async () => {
+      const tool = server.registeredTools.get('wp_edit_block_text')!;
+      const result = await tool.handler({
+        index: '0',
+        edits: [{ find: 'old', replace: 'new' }],
+      });
+
+      expect(session.editBlockText).toHaveBeenCalledWith(
+        '0',
+        [{ find: 'old', replace: 'new' }],
+        undefined,
+      );
+      expect(result.content[0].text).toContain('Applied 1 edit.');
+      expect(result.isError).toBeFalsy();
+    });
+
+    it('passes attribute parameter through', async () => {
+      const tool = server.registeredTools.get('wp_edit_block_text')!;
+      await tool.handler({
+        index: '2',
+        attribute: 'citation',
+        edits: [{ find: 'Someone', replace: 'Nobody' }],
+      });
+
+      expect(session.editBlockText).toHaveBeenCalledWith(
+        '2',
+        [{ find: 'Someone', replace: 'Nobody' }],
+        'citation',
+      );
+    });
+
+    it('passes occurrence parameter through', async () => {
+      const tool = server.registeredTools.get('wp_edit_block_text')!;
+      await tool.handler({
+        index: '0',
+        edits: [{ find: 'the', replace: 'a', occurrence: 2 }],
+      });
+
+      expect(session.editBlockText).toHaveBeenCalledWith(
+        '0',
+        [{ find: 'the', replace: 'a', occurrence: 2 }],
+        undefined,
+      );
+    });
+
+    it('reports partial failures with detail', async () => {
+      const partialSession = createMockSession({
+        state: 'editing',
+        user: fakeUser,
+        post: fakePost,
+        editBlockTextResult: {
+          edits: [
+            { find: 'good', replace: 'great', applied: true },
+            {
+              find: 'missing',
+              replace: 'found',
+              applied: false,
+              error: '"missing" not found in current content.',
+            },
+          ],
+          appliedCount: 1,
+          failedCount: 1,
+          updatedText: 'great text',
+        },
+      });
+      const partialServer = createMockServer();
+      registerEditTools(partialServer as unknown as McpServer, partialSession);
+
+      const tool = partialServer.registeredTools.get('wp_edit_block_text')!;
+      const result = await tool.handler({
+        index: '0',
+        edits: [
+          { find: 'good', replace: 'great' },
+          { find: 'missing', replace: 'found' },
+        ],
+      });
+
+      expect(result.content[0].text).toContain('Applied 1/2 edits.');
+      expect(result.content[0].text).toContain('FAILED: find "missing"');
+      // Partial success is not isError
+      expect(result.isError).toBeFalsy();
+    });
+
+    it('sets isError when all edits fail', async () => {
+      const failSession = createMockSession({
+        state: 'editing',
+        user: fakeUser,
+        post: fakePost,
+        editBlockTextResult: {
+          edits: [
+            {
+              find: 'missing',
+              replace: 'found',
+              applied: false,
+              error: '"missing" not found in current content.',
+            },
+          ],
+          appliedCount: 0,
+          failedCount: 1,
+          updatedText: 'unchanged text',
+        },
+      });
+      const failServer = createMockServer();
+      registerEditTools(failServer as unknown as McpServer, failSession);
+
+      const tool = failServer.registeredTools.get('wp_edit_block_text')!;
+      const result = await tool.handler({
+        index: '0',
+        edits: [{ find: 'missing', replace: 'found' }],
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Applied 0/1 edit.');
+    });
+
+    it('returns error when editBlockText throws', async () => {
+      (session.editBlockText as ReturnType<typeof import('vitest').vi.fn>).mockImplementation(
+        () => {
+          throw new Error('Block 999 not found.');
+        },
+      );
+
+      const tool = server.registeredTools.get('wp_edit_block_text')!;
+      const result = await tool.handler({
+        index: '999',
+        edits: [{ find: 'test', replace: 'test2' }],
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Failed to edit block text');
+      expect(result.content[0].text).toContain('Block 999 not found');
+    });
+
+    it('includes updated block content in response', async () => {
+      const tool = server.registeredTools.get('wp_edit_block_text')!;
+      const result = await tool.handler({
+        index: '0',
+        edits: [{ find: 'old', replace: 'new' }],
+      });
+
+      expect(session.readBlock).toHaveBeenCalledWith('0');
+      // The blockContent from the mock is included in the response
+      expect(result.content[0].text).toContain('Updated content');
+    });
+
+    it('pluralizes edit count correctly for multiple edits', async () => {
+      const multiSession = createMockSession({
+        state: 'editing',
+        user: fakeUser,
+        post: fakePost,
+        editBlockTextResult: {
+          edits: [
+            { find: 'a', replace: 'b', applied: true },
+            { find: 'c', replace: 'd', applied: true },
+          ],
+          appliedCount: 2,
+          failedCount: 0,
+          updatedText: 'updated',
+        },
+      });
+      const multiServer = createMockServer();
+      registerEditTools(multiServer as unknown as McpServer, multiSession);
+
+      const tool = multiServer.registeredTools.get('wp_edit_block_text')!;
+      const result = await tool.handler({
+        index: '0',
+        edits: [
+          { find: 'a', replace: 'b' },
+          { find: 'c', replace: 'd' },
+        ],
+      });
+
+      expect(result.content[0].text).toContain('Applied 2 edits.');
     });
   });
 
