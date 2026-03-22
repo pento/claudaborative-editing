@@ -10,6 +10,7 @@ const mockListPosts = vi.fn<() => Promise<WPPost[]>>();
 const mockCreatePost = vi.fn<() => Promise<WPPost>>();
 const mockSendSyncUpdate = vi.fn();
 const mockGetBlockTypes = vi.fn<() => Promise<unknown[]>>();
+const mockUploadMedia = vi.fn();
 
 vi.mock('../../src/wordpress/api-client.js', () => {
   return {
@@ -21,9 +22,16 @@ vi.mock('../../src/wordpress/api-client.js', () => {
       this.createPost = mockCreatePost;
       this.sendSyncUpdate = mockSendSyncUpdate;
       this.getBlockTypes = mockGetBlockTypes;
+      this.uploadMedia = mockUploadMedia;
     }),
   };
 });
+
+// --- Mock node:fs/promises for uploadMedia tests ---
+const mockReadFile = vi.fn<() => Promise<Buffer>>();
+vi.mock('node:fs/promises', () => ({
+  readFile: (...args: unknown[]) => mockReadFile(...args),
+}));
 
 // --- Mock the sync client ---
 const mockSyncStart = vi.fn();
@@ -981,6 +989,102 @@ describe('SessionManager', () => {
         s.disconnect();
         vi.useRealTimers();
       }
+    });
+  });
+
+  describe('uploadMedia()', () => {
+    const fakeMediaResponse = {
+      id: 101,
+      source_url: 'https://example.com/wp-content/uploads/2026/03/test.jpg',
+      title: { rendered: 'test', raw: 'test' },
+      caption: { rendered: '', raw: '' },
+      alt_text: '',
+      mime_type: 'image/jpeg',
+      media_details: { width: 800, height: 600, sizes: {} },
+    };
+
+    beforeEach(() => {
+      mockReadFile.mockResolvedValue(Buffer.from('fake image data'));
+      mockUploadMedia.mockResolvedValue(fakeMediaResponse);
+    });
+
+    it('requires connected or editing state', async () => {
+      await expect(session.uploadMedia('/path/to/file.jpg')).rejects.toThrow(
+        /requires state connected or editing/,
+      );
+    });
+
+    it('works in connected state', async () => {
+      await connectSession(session);
+
+      const result = await session.uploadMedia('/path/to/photo.jpg');
+
+      expect(result).toEqual(fakeMediaResponse);
+      expect(mockReadFile).toHaveBeenCalledWith('/path/to/photo.jpg');
+      expect(mockUploadMedia).toHaveBeenCalledWith(
+        Buffer.from('fake image data'),
+        'photo.jpg',
+        'image/jpeg',
+        undefined,
+      );
+    });
+
+    it('works in editing state', async () => {
+      await connectAndOpen(session);
+
+      const result = await session.uploadMedia('/path/to/photo.png');
+
+      expect(result).toEqual(fakeMediaResponse);
+      expect(mockUploadMedia).toHaveBeenCalledWith(
+        expect.any(Buffer),
+        'photo.png',
+        'image/png',
+        undefined,
+      );
+    });
+
+    it('passes optional metadata to API client', async () => {
+      await connectSession(session);
+
+      await session.uploadMedia('/path/to/photo.jpg', {
+        altText: 'Scenic view',
+        title: 'Sunset',
+        caption: 'At dusk',
+      });
+
+      expect(mockUploadMedia).toHaveBeenCalledWith(
+        expect.any(Buffer),
+        'photo.jpg',
+        'image/jpeg',
+        { altText: 'Scenic view', title: 'Sunset', caption: 'At dusk' },
+      );
+    });
+
+    it('detects MIME type from file extension', async () => {
+      await connectSession(session);
+
+      await session.uploadMedia('/path/to/clip.mp4');
+      expect(mockUploadMedia).toHaveBeenCalledWith(
+        expect.any(Buffer),
+        'clip.mp4',
+        'video/mp4',
+        undefined,
+      );
+    });
+
+    it('throws for unsupported file types', async () => {
+      await connectSession(session);
+
+      await expect(session.uploadMedia('/path/to/file.xyz')).rejects.toThrow(
+        /Unsupported file type/,
+      );
+    });
+
+    it('propagates file read errors', async () => {
+      await connectSession(session);
+      mockReadFile.mockRejectedValueOnce(new Error('ENOENT: no such file'));
+
+      await expect(session.uploadMedia('/path/to/missing.jpg')).rejects.toThrow('ENOENT');
     });
   });
 });

@@ -27,10 +27,10 @@ Claude Code  <--stdio-->  MCP Server (Node.js)  <--HTTP polling-->  WordPress
 - `src/index.ts` — Entry point: CLI flags (`--version`, `--help`, `setup`) then MCP server
 - `src/server.ts` — MCP server setup, tool registration, version export
 - `src/cli/setup.ts` — Interactive setup wizard (credential validation, outputs `claude mcp add` command)
-- `src/wordpress/` — REST API client, HTTP polling sync client
+- `src/wordpress/` — REST API client, HTTP polling sync client, MIME type detection
 - `src/yjs/` — Y.Doc management, block ↔ Yjs conversion, sync protocol encoding
 - `src/session/` — Connection lifecycle, awareness/presence
-- `src/tools/` — MCP tool handlers (connect, posts [open/close/create], read, edit, status)
+- `src/tools/` — MCP tool handlers (connect, posts [open/close/create], read, edit, media, status)
 - `src/blocks/` — Gutenberg HTML parser, Claude-friendly renderer
 - `tests/` — Unit and integration tests
 
@@ -122,6 +122,24 @@ The version is injected at build time: `tsup.config.ts` reads `package.json` and
 - `WP_SITE_URL` — WordPress site URL (optional, can use `wp_connect` tool instead)
 - `WP_USERNAME` — WordPress username
 - `WP_APP_PASSWORD` — WordPress Application Password
+
+## Media Upload
+
+The `wp_upload_media` tool uploads a local file to the WordPress media library via `POST /wp/v2/media`. It returns the attachment ID, URL, MIME type, and dimensions, along with block insertion hints.
+
+Different media block types use different attribute names for the media reference:
+
+| Block | ID attr | URL attr | Extra required attrs |
+|-------|---------|----------|---------------------|
+| `core/image` | `id` | `url` | |
+| `core/video` | `id` | `src` | |
+| `core/audio` | `id` | `src` | |
+| `core/cover` | `id` | `url` | `backgroundType: "image"/"video"` |
+| `core/media-text` | `mediaId` | `mediaUrl` | `mediaType: "image"/"video"` |
+| `core/file` | `id` | `href` | |
+| `core/gallery` | N/A | N/A | Uses inner `core/image` blocks |
+
+The tool response includes a context-appropriate insertion hint based on the uploaded file's MIME type. MIME type detection is handled by `src/wordpress/mime-types.ts` using a static extension-to-MIME map (no external dependencies). Supported formats include common image, video, audio, and document types.
 
 ## MCP Server Usage
 

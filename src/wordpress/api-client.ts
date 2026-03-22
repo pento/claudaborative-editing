@@ -1,6 +1,7 @@
 import type {
   WordPressConfig,
   WPBlockType,
+  WPMediaItem,
   WPPost,
   WPUser,
   SyncPayload,
@@ -103,6 +104,30 @@ export class WordPressApiClient {
   }
 
   /**
+   * Upload a file to the WordPress media library.
+   * POST /wp/v2/media (multipart/form-data)
+   */
+  async uploadMedia(
+    fileData: Buffer,
+    fileName: string,
+    mimeType: string,
+    options?: { altText?: string; caption?: string; title?: string },
+  ): Promise<WPMediaItem> {
+    const formData = new FormData();
+    const blob = new Blob([fileData], { type: mimeType });
+    formData.append('file', blob, fileName);
+
+    if (options?.title) formData.append('title', options.title);
+    if (options?.altText) formData.append('alt_text', options.altText);
+    if (options?.caption) formData.append('caption', options.caption);
+
+    return this.apiFetch<WPMediaItem>('/wp/v2/media', {
+      method: 'POST',
+      body: formData,
+    });
+  }
+
+  /**
    * Send a sync payload and receive response.
    * POST /wp-sync/v1/updates
    */
@@ -143,8 +168,11 @@ export class WordPressApiClient {
       Accept: 'application/json',
     };
 
-    // Add Content-Type for requests with a body
-    if (options?.method === 'POST' || options?.method === 'PUT') {
+    // Add Content-Type for JSON requests (skip for FormData — fetch auto-sets the boundary)
+    if (
+      (options?.method === 'POST' || options?.method === 'PUT') &&
+      !(options?.body instanceof FormData)
+    ) {
       headers['Content-Type'] = 'application/json';
     }
 

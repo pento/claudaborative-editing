@@ -8,7 +8,7 @@
 import { vi } from 'vitest';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { SessionManager, SessionState } from '../../../src/session/session-manager.js';
-import type { WPPost, WPUser } from '../../../src/wordpress/types.js';
+import type { WPMediaItem, WPPost, WPUser } from '../../../src/wordpress/types.js';
 import type { CollaboratorInfo } from '../../../src/yjs/types.js';
 
 export interface RegisteredTool {
@@ -59,6 +59,16 @@ export const fakePost: WPPost = {
   modified: '2026-01-01T00:00:00',
 };
 
+export const fakeMediaItem: WPMediaItem = {
+  id: 101,
+  source_url: 'https://example.com/wp-content/uploads/2026/03/test.jpg',
+  title: { rendered: 'test', raw: 'test' },
+  caption: { rendered: '', raw: '' },
+  alt_text: 'A test image',
+  mime_type: 'image/jpeg',
+  media_details: { width: 800, height: 600, sizes: {} },
+};
+
 export const fakeCollaborator: CollaboratorInfo = {
   id: 2,
   name: 'Alice',
@@ -105,6 +115,7 @@ export function createMockSession(overrides: {
     moveBlock: vi.fn(),
     replaceBlocks: vi.fn().mockResolvedValue(undefined),
     setTitle: vi.fn().mockResolvedValue(undefined),
+    uploadMedia: vi.fn().mockResolvedValue(fakeMediaItem),
     save: vi.fn(),
     getState: vi.fn().mockReturnValue(state),
     getSyncStatus: vi.fn().mockReturnValue(syncStatus),
