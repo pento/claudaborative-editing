@@ -52,4 +52,23 @@ export async function startServer(): Promise<void> {
   // Start stdio transport
   const transport = new StdioServerTransport();
   await server.connect(transport);
+
+  // Graceful shutdown: prevent the default SIGTERM/SIGINT behavior (immediate
+  // exit) so the MCP SDK can finish responding to any pending shutdown request.
+  // Also handle stdin EOF — the StdioServerTransport doesn't detect it, and the
+  // SyncClient polling timer would otherwise keep the process alive forever.
+  let shutdownInProgress = false;
+
+  const cleanup = async () => {
+    if (shutdownInProgress) return;
+    shutdownInProgress = true;
+
+    session.disconnect();
+    await server.close();
+    process.exit(0);
+  };
+
+  process.on('SIGTERM', () => { cleanup(); });
+  process.on('SIGINT', () => { cleanup(); });
+  process.stdin.on('end', () => { cleanup(); });
 }
