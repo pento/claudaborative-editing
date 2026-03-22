@@ -17,7 +17,7 @@ export function buildAwarenessState(user: WPUser): AwarenessLocalState {
   return {
     collaboratorInfo: {
       id: user.id,
-      name: `${user.name} (Claude)`,
+      name: `${user.name ?? user.slug} (Claude)`,
       slug: user.slug,
       avatar_urls: user.avatar_urls ?? {},
       browserType: 'Claude Code MCP',
@@ -46,11 +46,10 @@ export function parseCollaborators(
     if (clientId === ownClientId) {
       continue;
     }
-    if (state === null || state === undefined) {
+    if (state === null) {
       continue;
     }
-    const info = (state as { collaboratorInfo?: CollaboratorInfo })
-      .collaboratorInfo;
+    const info = (state as { collaboratorInfo?: CollaboratorInfo }).collaboratorInfo;
     if (info) {
       collaborators.push(info);
     }

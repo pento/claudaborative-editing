@@ -1,6 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { WordPressApiClient, WordPressApiError } from '../../src/wordpress/api-client.js';
-import type { SyncPayload, WPBlockType, WPMediaItem, WPNote, WPPost, WPTerm, WPUser } from '../../src/wordpress/types.js';
+import type {
+  SyncPayload,
+  WPBlockType,
+  WPMediaItem,
+  WPNote,
+  WPPost,
+  WPTerm,
+  WPUser,
+} from '../../src/wordpress/types.js';
 
 // Helper to build a mock Response
 function mockResponse(body: unknown, init?: { status?: number; statusText?: string }): Response {
@@ -26,7 +34,10 @@ const fakeUser: WPUser = {
 const fakePost: WPPost = {
   id: 42,
   title: { rendered: 'Hello', raw: 'Hello' },
-  content: { rendered: '<p>World</p>', raw: '<!-- wp:paragraph --><p>World</p><!-- /wp:paragraph -->' },
+  content: {
+    rendered: '<p>World</p>',
+    raw: '<!-- wp:paragraph --><p>World</p><!-- /wp:paragraph -->',
+  },
   excerpt: { rendered: '', raw: '' },
   status: 'draft',
   type: 'post',
@@ -88,7 +99,10 @@ describe('WordPressApiClient', () => {
 
     it('throws on auth failure', async () => {
       fetchMock.mockResolvedValue(
-        mockResponse({ code: 'rest_forbidden', message: 'Forbidden' }, { status: 401, statusText: 'Unauthorized' }),
+        mockResponse(
+          { code: 'rest_forbidden', message: 'Forbidden' },
+          { status: 401, statusText: 'Unauthorized' },
+        ),
       );
       const client = createClient();
       await expect(client.validateConnection()).rejects.toThrow(WordPressApiError);
@@ -214,7 +228,9 @@ describe('WordPressApiClient', () => {
 
   describe('sendSyncUpdate', () => {
     it('posts correct payload to sync endpoint', async () => {
-      const syncResponse = { rooms: [{ room: 'postType/post:42', end_cursor: 5, awareness: {}, updates: [] }] };
+      const syncResponse = {
+        rooms: [{ room: 'postType/post:42', end_cursor: 5, awareness: {}, updates: [] }],
+      };
       fetchMock.mockResolvedValue(mockResponse(syncResponse));
 
       const client = createClient();
@@ -481,8 +497,14 @@ describe('WordPressApiClient', () => {
   describe('getBlockTypes', () => {
     it('fetches /wp/v2/block-types?context=edit', async () => {
       const fakeBlockTypes: WPBlockType[] = [
-        { name: 'core/paragraph', attributes: { content: { type: 'rich-text', source: 'rich-text' } } },
-        { name: 'core/heading', attributes: { content: { type: 'rich-text', source: 'rich-text' } } },
+        {
+          name: 'core/paragraph',
+          attributes: { content: { type: 'rich-text', source: 'rich-text' } },
+        },
+        {
+          name: 'core/heading',
+          attributes: { content: { type: 'rich-text', source: 'rich-text' } },
+        },
       ];
       fetchMock.mockResolvedValue(mockResponse(fakeBlockTypes));
       const client = createClient();
@@ -702,7 +724,10 @@ describe('WordPressApiClient', () => {
 
     describe('updateNote', () => {
       it('posts to /wp/v2/comments/{noteId} with content', async () => {
-        const updatedNote: WPNote = { ...fakeNote, content: { rendered: '<p>Updated</p>', raw: 'Updated' } };
+        const updatedNote: WPNote = {
+          ...fakeNote,
+          content: { rendered: '<p>Updated</p>', raw: 'Updated' },
+        };
         fetchMock.mockResolvedValue(mockResponse(updatedNote));
         const client = createClient();
         const result = await client.updateNote(10, { content: 'Updated' });
@@ -868,7 +893,12 @@ describe('WordPressApiClient', () => {
   });
 
   describe('createTerm', () => {
-    const fakeCat: WPTerm = { id: 5, name: 'New Category', slug: 'new-category', taxonomy: 'category' };
+    const fakeCat: WPTerm = {
+      id: 5,
+      name: 'New Category',
+      slug: 'new-category',
+      taxonomy: 'category',
+    };
     const fakeTag: WPTerm = { id: 6, name: 'New Tag', slug: 'new-tag', taxonomy: 'post_tag' };
 
     it('creates a category with POST and JSON body', async () => {
@@ -928,9 +958,7 @@ describe('WordPressApiClient', () => {
     });
 
     it('fetches tags by IDs', async () => {
-      const fakeTags: WPTerm[] = [
-        { id: 10, name: 'JS', slug: 'js', taxonomy: 'post_tag' },
-      ];
+      const fakeTags: WPTerm[] = [{ id: 10, name: 'JS', slug: 'js', taxonomy: 'post_tag' }];
       fetchMock.mockResolvedValue(mockResponse(fakeTags));
       const client = createClient();
       const result = await client.getTerms('tags', [10]);

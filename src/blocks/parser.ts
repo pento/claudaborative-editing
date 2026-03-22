@@ -37,19 +37,13 @@ export function parsedBlockToBlock(parsed: ParsedBlock): Block {
 function normalizeParsedBlock(raw: RawParsedBlock): ParsedBlock {
   const blockName = raw.blockName ?? 'core/freeform';
   const commentAttrs = raw.attrs ?? {};
-  const extractedAttrs = extractAttributesFromHTML(
-    blockName,
-    raw.innerHTML,
-    commentAttrs,
-  );
+  const extractedAttrs = extractAttributesFromHTML(blockName, raw.innerHTML, commentAttrs);
 
   return {
     name: blockName,
     attributes: { ...commentAttrs, ...extractedAttrs },
     innerBlocks: raw.innerBlocks
-      .filter(
-        (block) => block.blockName !== null || block.innerHTML.trim() !== '',
-      )
+      .filter((block) => block.blockName !== null || block.innerHTML.trim() !== '')
       .map(normalizeParsedBlock),
     originalContent: raw.innerHTML,
   };

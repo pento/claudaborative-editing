@@ -60,7 +60,7 @@ describe('edit', () => {
 
     it('includes editing focus when provided', async () => {
       setup();
-      const result = await prompt.handler({ editing_focus: 'tone' });
+      const result = await prompt.handler({ editingFocus: 'tone' });
 
       expect(result.messages[0].content.text).toContain('Focus on: tone');
     });

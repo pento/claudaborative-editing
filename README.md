@@ -68,19 +68,19 @@ Credentials are passed as environment variables via the `claude mcp add` command
 
 ### Post Metadata
 
-| Tool                   | Description                                            |
-| ---------------------- | ------------------------------------------------------ |
-| `wp_list_categories`   | List existing categories (with optional search)        |
-| `wp_list_tags`         | List existing tags (with optional search)              |
-| `wp_set_status`        | Change publication status (draft, pending, publish, …) |
-| `wp_set_categories`    | Set categories by name (creates if needed)             |
-| `wp_set_tags`          | Set tags by name (creates if needed)                   |
-| `wp_set_excerpt`       | Set or clear the post excerpt                          |
-| `wp_set_featured_image`| Set featured image by attachment ID (0 to remove)      |
-| `wp_set_date`          | Set publication date (ISO 8601)                        |
-| `wp_set_slug`          | Set URL slug                                           |
-| `wp_set_sticky`        | Pin/unpin post on front page                           |
-| `wp_set_comment_status`| Enable/disable comments                                |
+| Tool                    | Description                                            |
+| ----------------------- | ------------------------------------------------------ |
+| `wp_list_categories`    | List existing categories (with optional search)        |
+| `wp_list_tags`          | List existing tags (with optional search)              |
+| `wp_set_status`         | Change publication status (draft, pending, publish, …) |
+| `wp_set_categories`     | Set categories by name (creates if needed)             |
+| `wp_set_tags`           | Set tags by name (creates if needed)                   |
+| `wp_set_excerpt`        | Set or clear the post excerpt                          |
+| `wp_set_featured_image` | Set featured image by attachment ID (0 to remove)      |
+| `wp_set_date`           | Set publication date (ISO 8601)                        |
+| `wp_set_slug`           | Set URL slug                                           |
+| `wp_set_sticky`         | Pin/unpin post on front page                           |
+| `wp_set_comment_status` | Enable/disable comments                                |
 
 ### Status
 

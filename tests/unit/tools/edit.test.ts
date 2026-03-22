@@ -234,9 +234,11 @@ describe('edit tools', () => {
     });
 
     it('returns error on failure', async () => {
-      (session.removeInnerBlocks as ReturnType<typeof import('vitest').vi.fn>).mockImplementation(() => {
-        throw new Error('Block at 0 has no inner blocks');
-      });
+      (session.removeInnerBlocks as ReturnType<typeof import('vitest').vi.fn>).mockImplementation(
+        () => {
+          throw new Error('Block at 0 has no inner blocks');
+        },
+      );
 
       const tool = server.registeredTools.get('wp_remove_inner_blocks')!;
       const result = await tool.handler({
@@ -258,9 +260,7 @@ describe('edit tools', () => {
         blocks: [
           {
             name: 'core/list',
-            innerBlocks: [
-              { name: 'core/list-item', content: 'Replaced item' },
-            ],
+            innerBlocks: [{ name: 'core/list-item', content: 'Replaced item' }],
           },
         ],
       });
@@ -268,9 +268,7 @@ describe('edit tools', () => {
       expect(session.replaceBlocks).toHaveBeenCalledWith(0, 1, [
         {
           name: 'core/list',
-          innerBlocks: [
-            { name: 'core/list-item', content: 'Replaced item' },
-          ],
+          innerBlocks: [{ name: 'core/list-item', content: 'Replaced item' }],
         },
       ]);
       expect(result.content[0].text).toContain('Replaced 1 block at index 0 with 1 new block');

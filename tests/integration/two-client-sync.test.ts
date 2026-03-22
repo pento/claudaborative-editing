@@ -82,10 +82,7 @@ describe('Two-client sync integration', () => {
     const step1FromB = createSyncStep1(docB);
 
     // Step 2: Client A processes step1 and generates step2 with missing updates
-    const step2FromA = createSyncStep2(
-      docA,
-      base64ToUint8Array(step1FromB.data),
-    );
+    const step2FromA = createSyncStep2(docA, base64ToUint8Array(step1FromB.data));
 
     // Client B applies step2
     processIncomingUpdate(docB, step2FromA);
@@ -93,9 +90,7 @@ describe('Two-client sync integration', () => {
     // Both docs should now have the same content
     expect(manager.getTitle(docB)).toBe('Sync Test');
     expect(manager.getBlocks(docB)).toHaveLength(1);
-    expect(manager.getBlocks(docB)[0].attributes.content).toBe(
-      'Content from A',
-    );
+    expect(manager.getBlocks(docB)[0].attributes.content).toBe('Content from A');
   });
 
   it('handles bidirectional sync via step1/step2', () => {
@@ -196,9 +191,7 @@ describe('Two-client sync integration', () => {
     const docA = manager.createDoc();
 
     // Set initial content
-    manager.setBlocks(docA, [
-      makeParagraph('Hello world'),
-    ]);
+    manager.setBlocks(docA, [makeParagraph('Hello world')]);
 
     // Sync to client B
     const docB = syncNewClient(docA);
@@ -227,9 +220,7 @@ describe('Two-client sync integration', () => {
     const docA = manager.createDoc();
 
     // Set initial content with a longer paragraph
-    manager.setBlocks(docA, [
-      makeParagraph('The quick brown fox'),
-    ]);
+    manager.setBlocks(docA, [makeParagraph('The quick brown fox')]);
 
     const docB = syncNewClient(docA);
 

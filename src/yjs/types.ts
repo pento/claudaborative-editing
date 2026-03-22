@@ -18,7 +18,7 @@ export const CRDT_DOC_VERSION = 1;
 // --- Block types ---
 
 /** Block attributes map: rich-text attributes are Y.Text, others are plain values. */
-export type YBlockAttributes = Y.Map<Y.Text | unknown>;
+export type YBlockAttributes = Y.Map<unknown>;
 
 /** A block as represented in the Yjs document. */
 export interface YBlockFields {
@@ -88,9 +88,7 @@ export interface AwarenessCursorPosition {
 }
 
 export interface AwarenessEditorState {
-  selection:
-    | { type: 'none' }
-    | { type: 'cursor'; cursorPosition: AwarenessCursorPosition };
+  selection: { type: 'none' } | { type: 'cursor'; cursorPosition: AwarenessCursorPosition };
 }
 
 export interface AwarenessLocalState {

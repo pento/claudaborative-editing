@@ -31,10 +31,7 @@ export function createSyncStep1(doc: Y.Doc): SyncUpdate {
  * Reads the remote state vector from the step1 message and encodes
  * the missing updates as a step2 reply.
  */
-export function createSyncStep2(
-  doc: Y.Doc,
-  step1Data: Uint8Array,
-): SyncUpdate {
+export function createSyncStep2(doc: Y.Doc, step1Data: Uint8Array): SyncUpdate {
   const decoder = decoding.createDecoder(step1Data);
   const encoder = encoding.createEncoder();
 
@@ -60,10 +57,7 @@ export function createSyncStep2(
  * Returns a response SyncUpdate if one is needed (e.g., step2 reply),
  * or null if no response is required.
  */
-export function processIncomingUpdate(
-  doc: Y.Doc,
-  update: SyncUpdate,
-): SyncUpdate | null {
+export function processIncomingUpdate(doc: Y.Doc, update: SyncUpdate): SyncUpdate | null {
   const rawData = base64ToUint8Array(update.data);
 
   switch (update.type) {

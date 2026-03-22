@@ -86,11 +86,7 @@ export class WordPressApiClient {
    * Create a new post.
    * POST /wp/v2/posts
    */
-  async createPost(data: {
-    title?: string;
-    content?: string;
-    status?: string;
-  }): Promise<WPPost> {
+  async createPost(data: { title?: string; content?: string; status?: string }): Promise<WPPost> {
     return this.apiFetch<WPPost>('/wp/v2/posts', {
       method: 'POST',
       body: JSON.stringify(data),
@@ -133,10 +129,7 @@ export class WordPressApiClient {
    * Update an existing post's fields.
    * POST /wp/v2/posts/{id}?context=edit
    */
-  async updatePost(
-    id: number,
-    data: Record<string, unknown>,
-  ): Promise<WPPost> {
+  async updatePost(id: number, data: Record<string, unknown>): Promise<WPPost> {
     return this.apiFetch<WPPost>(`/wp/v2/posts/${id}?context=edit`, {
       method: 'POST',
       body: JSON.stringify(data),
@@ -166,10 +159,7 @@ export class WordPressApiClient {
    * Search for taxonomy terms (categories or tags) by name.
    * GET /wp/v2/{categories|tags}?search=...
    */
-  async searchTerms(
-    taxonomy: 'categories' | 'tags',
-    search: string,
-  ): Promise<WPTerm[]> {
+  async searchTerms(taxonomy: 'categories' | 'tags', search: string): Promise<WPTerm[]> {
     const params = new URLSearchParams({ search, per_page: '100' });
     return this.apiFetch<WPTerm[]>(`/wp/v2/${taxonomy}?${params.toString()}`);
   }
@@ -178,10 +168,7 @@ export class WordPressApiClient {
    * Create a new taxonomy term (category or tag).
    * POST /wp/v2/{categories|tags}
    */
-  async createTerm(
-    taxonomy: 'categories' | 'tags',
-    name: string,
-  ): Promise<WPTerm> {
+  async createTerm(taxonomy: 'categories' | 'tags', name: string): Promise<WPTerm> {
     return this.apiFetch<WPTerm>(`/wp/v2/${taxonomy}`, {
       method: 'POST',
       body: JSON.stringify({ name }),
@@ -192,10 +179,7 @@ export class WordPressApiClient {
    * Fetch taxonomy terms by IDs (for resolving IDs to names).
    * GET /wp/v2/{categories|tags}?include=...
    */
-  async getTerms(
-    taxonomy: 'categories' | 'tags',
-    ids: number[],
-  ): Promise<WPTerm[]> {
+  async getTerms(taxonomy: 'categories' | 'tags', ids: number[]): Promise<WPTerm[]> {
     if (ids.length === 0) return [];
     const params = new URLSearchParams({
       include: ids.join(','),
@@ -232,7 +216,7 @@ export class WordPressApiClient {
     const allNotes: WPNote[] = [];
     let page = 1;
 
-    while (true) {
+    for (;;) {
       const params = new URLSearchParams({
         post: String(postId),
         type: 'note',
@@ -332,7 +316,7 @@ export class WordPressApiClient {
     // Add Content-Type for JSON requests (skip for FormData — fetch auto-sets the boundary)
     if (
       (options?.method === 'POST' || options?.method === 'PUT') &&
-      !(options?.body instanceof FormData)
+      !(options.body instanceof FormData)
     ) {
       headers['Content-Type'] = 'application/json';
     }
@@ -355,11 +339,7 @@ export class WordPressApiClient {
 
       const message = this.formatErrorMessage(path, response.status, errorBody);
 
-      throw new WordPressApiError(
-        message,
-        response.status,
-        errorBody,
-      );
+      throw new WordPressApiError(message, response.status, errorBody);
     }
 
     return (await response.json()) as T;

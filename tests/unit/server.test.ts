@@ -7,10 +7,14 @@ const mockServerClose = vi.fn<() => Promise<void>>().mockResolvedValue(undefined
 
 vi.mock('@modelcontextprotocol/sdk/server/mcp.js', () => {
   return {
-    McpServer: vi.fn().mockImplementation(function (this: Record<string, unknown>, _info: unknown, options?: Record<string, unknown>) {
+    McpServer: vi.fn().mockImplementation(function (
+      this: Record<string, unknown>,
+      _info: unknown,
+      options?: Record<string, unknown>,
+    ) {
       capturedOptions = options;
-      this.tool = vi.fn();
-      this.prompt = vi.fn();
+      this.registerTool = vi.fn();
+      this.registerPrompt = vi.fn();
       this.connect = vi.fn().mockResolvedValue(undefined);
       this.close = mockServerClose;
     }),
@@ -125,8 +129,8 @@ describe('graceful shutdown', () => {
   let processExitSpy: ReturnType<typeof vi.spyOn>;
 
   // Capture registered handlers so we can invoke them in tests
-  let signalHandlers: Record<string, (() => void)[]>;
-  let stdinHandlers: Record<string, (() => void)[]>;
+  let signalHandlers: Partial<Record<string, (() => void)[]>>;
+  let stdinHandlers: Partial<Record<string, (() => void)[]>>;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -138,19 +142,27 @@ describe('graceful shutdown', () => {
     signalHandlers = {};
     stdinHandlers = {};
 
-    processOnSpy = vi.spyOn(process, 'on').mockImplementation(((event: string, handler: () => void) => {
+    processOnSpy = vi.spyOn(process, 'on').mockImplementation(((
+      event: string,
+      handler: () => void,
+    ) => {
       if (!signalHandlers[event]) signalHandlers[event] = [];
       signalHandlers[event].push(handler);
       return process;
     }) as typeof process.on);
 
-    stdinOnSpy = vi.spyOn(process.stdin, 'on').mockImplementation(((event: string, handler: () => void) => {
+    stdinOnSpy = vi.spyOn(process.stdin, 'on').mockImplementation(((
+      event: string,
+      handler: () => void,
+    ) => {
       if (!stdinHandlers[event]) stdinHandlers[event] = [];
       stdinHandlers[event].push(handler);
       return process.stdin;
     }) as typeof process.stdin.on);
 
-    processExitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {}) as typeof process.exit);
+    processExitSpy = vi
+      .spyOn(process, 'exit')
+      .mockImplementation((() => {}) as typeof process.exit);
   });
 
   afterEach(() => {
@@ -164,9 +176,9 @@ describe('graceful shutdown', () => {
     const { startServer } = await import('../../src/server.js');
     await startServer();
 
-    expect(signalHandlers['SIGTERM']).toHaveLength(1);
-    expect(signalHandlers['SIGINT']).toHaveLength(1);
-    expect(stdinHandlers['end']).toHaveLength(1);
+    expect(signalHandlers.SIGTERM).toHaveLength(1);
+    expect(signalHandlers.SIGINT).toHaveLength(1);
+    expect(stdinHandlers.end).toHaveLength(1);
   });
 
   it('disconnects session and closes server on SIGTERM', async () => {
@@ -174,7 +186,7 @@ describe('graceful shutdown', () => {
     await startServer();
 
     // Trigger the SIGTERM handler
-    signalHandlers['SIGTERM'][0]();
+    signalHandlers.SIGTERM[0]();
 
     // Allow the async cleanup to complete
     await vi.waitFor(() => {
@@ -189,7 +201,7 @@ describe('graceful shutdown', () => {
     const { startServer } = await import('../../src/server.js');
     await startServer();
 
-    signalHandlers['SIGINT'][0]();
+    signalHandlers.SIGINT[0]();
 
     await vi.waitFor(() => {
       expect(processExitSpy).toHaveBeenCalledWith(0);
@@ -203,7 +215,7 @@ describe('graceful shutdown', () => {
     const { startServer } = await import('../../src/server.js');
     await startServer();
 
-    stdinHandlers['end'][0]();
+    stdinHandlers.end[0]();
 
     await vi.waitFor(() => {
       expect(processExitSpy).toHaveBeenCalledWith(0);
@@ -218,8 +230,8 @@ describe('graceful shutdown', () => {
     await startServer();
 
     // Trigger both SIGTERM and stdin end simultaneously
-    signalHandlers['SIGTERM'][0]();
-    stdinHandlers['end'][0]();
+    signalHandlers.SIGTERM[0]();
+    stdinHandlers.end[0]();
 
     await vi.waitFor(() => {
       expect(processExitSpy).toHaveBeenCalled();

@@ -9,6 +9,10 @@ npm install
 npm run build        # Build with tsup → dist/
 npm test             # Run vitest
 npm run typecheck    # TypeScript type check
+npm run lint         # ESLint + markdownlint
+npm run lint:fix     # Auto-fix lint issues
+npm run format       # Format with Prettier
+npm run format:check # Check formatting without writing
 npm run dev          # Watch mode build
 ```
 
@@ -30,7 +34,7 @@ Claude Code  <--stdio-->  MCP Server (Node.js)  <--HTTP polling-->  WordPress
 - `src/wordpress/` — REST API client, HTTP polling sync client, MIME type detection
 - `src/yjs/` — Y.Doc management, block ↔ Yjs conversion, sync protocol encoding
 - `src/session/` — Connection lifecycle, awareness/presence
-- `src/tools/` — MCP tool handlers (connect, posts [open/close/create], read, edit, media, metadata, notes, status)
+- `src/tools/` — MCP tool handlers (connect, posts, read, edit, media, metadata, notes, status)
 - `src/prompts/` — MCP prompt handlers (editing, review, authoring)
 - `src/blocks/` — Gutenberg HTML parser, Claude-friendly renderer
 - `tests/` — Unit and integration tests
@@ -233,7 +237,7 @@ Prompt handlers check `session.getState()` at invocation time:
 
 | Prompt             | Description                                                                       | Arguments                                                    |
 | ------------------ | --------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| `edit`             | Edit a post with an optional editing focus                                        | `editing_focus` (optional)                                   |
+| `edit`             | Edit a post with an optional editing focus                                        | `editingFocus` (optional)                                    |
 | `proofread`        | Fix grammar, spelling, and punctuation                                            | None                                                         |
 | `review`           | Leave editorial notes on blocks (falls back to text summary if notes unsupported) | None                                                         |
 | `respond-to-notes` | Address existing notes: edit blocks, reply, resolve                               | None                                                         |

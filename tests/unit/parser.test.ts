@@ -159,7 +159,10 @@ describe('parsedBlockToBlock', () => {
     const blocks = parsed.map(parsedBlockToBlock);
 
     const ids = new Set<string>();
-    function collectIds(block: { clientId: string; innerBlocks: { clientId: string; innerBlocks: any[] }[] }) {
+    function collectIds(block: {
+      clientId: string;
+      innerBlocks: { clientId: string; innerBlocks: any[] }[];
+    }) {
       ids.add(block.clientId);
       for (const inner of block.innerBlocks) {
         collectIds(inner);

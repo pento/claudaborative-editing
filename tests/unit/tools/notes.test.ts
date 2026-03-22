@@ -36,8 +36,28 @@ describe('note tools', () => {
 
     it('formats notes with block index and replies', async () => {
       const fakeNotes = [
-        { id: 1, post: 42, parent: 0, author: 1, author_name: 'Alice', date: '2026-03-20', content: { rendered: '<p>Needs more detail</p>', raw: 'Needs more detail' }, status: 'hold', type: 'note' },
-        { id: 2, post: 42, parent: 1, author: 2, author_name: 'Bob', date: '2026-03-21', content: { rendered: '<p>Agreed</p>', raw: 'Agreed' }, status: 'hold', type: 'note' },
+        {
+          id: 1,
+          post: 42,
+          parent: 0,
+          author: 1,
+          author_name: 'Alice',
+          date: '2026-03-20',
+          content: { rendered: '<p>Needs more detail</p>', raw: 'Needs more detail' },
+          status: 'hold',
+          type: 'note',
+        },
+        {
+          id: 2,
+          post: 42,
+          parent: 1,
+          author: 2,
+          author_name: 'Bob',
+          date: '2026-03-21',
+          content: { rendered: '<p>Agreed</p>', raw: 'Agreed' },
+          status: 'hold',
+          type: 'note',
+        },
       ];
       (session.listNotes as ReturnType<typeof import('vitest').vi.fn>).mockResolvedValue({
         notes: fakeNotes,
@@ -56,7 +76,17 @@ describe('note tools', () => {
 
     it('shows unlinked for notes without block mapping', async () => {
       const fakeNotes = [
-        { id: 5, post: 42, parent: 0, author: 1, author_name: 'Alice', date: '2026-03-20', content: { rendered: '<p>Orphaned</p>', raw: 'Orphaned' }, status: 'hold', type: 'note' },
+        {
+          id: 5,
+          post: 42,
+          parent: 0,
+          author: 1,
+          author_name: 'Alice',
+          date: '2026-03-20',
+          content: { rendered: '<p>Orphaned</p>', raw: 'Orphaned' },
+          status: 'hold',
+          type: 'note',
+        },
       ];
       (session.listNotes as ReturnType<typeof import('vitest').vi.fn>).mockResolvedValue({
         notes: fakeNotes,

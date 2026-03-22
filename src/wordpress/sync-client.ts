@@ -103,7 +103,7 @@ export class SyncClient {
       this.currentBackoff = this.config.pollingInterval;
       this.isPolling = true;
       this.onStatusChange('connecting');
-      this.pollTimer = setTimeout(() => this.poll(), 0);
+      this.pollTimer = setTimeout(() => void this.poll(), 0);
     }
   }
 
@@ -181,7 +181,7 @@ export class SyncClient {
       clearTimeout(this.pollTimer);
       this.pollTimer = null;
     }
-    this.pollTimer = setTimeout(() => this.poll(), 0);
+    this.pollTimer = setTimeout(() => void this.poll(), 0);
   }
 
   /**
@@ -272,34 +272,30 @@ export class SyncClient {
         this.firstPollResolve();
         this.firstPollResolve = null;
       }
-    } catch (error) {
+    } catch {
       // Restore un-sent updates for ALL rooms (excluding stale compaction updates)
       for (const [name, updates] of drainedQueues) {
         const state = this.rooms.get(name);
         if (state) {
-          const restorable = updates.filter(
-            (u) => (u.type as SyncUpdateType) !== ('compaction' as SyncUpdateType),
-          );
+          const restorable = updates.filter((u) => u.type !== ('compaction' as SyncUpdateType));
           state.updateQueue.unshift(...restorable);
         }
       }
 
       this.onStatusChange?.('error');
-      this.currentBackoff = Math.min(
-        this.currentBackoff * 2,
-        this.config.maxErrorBackoff,
-      );
+      this.currentBackoff = Math.min(this.currentBackoff * 2, this.config.maxErrorBackoff);
     }
 
     this.pollInProgress = false;
 
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- flushQueue() may set this during the await
     if (this.flushRequested) {
       this.flushRequested = false;
       if (this.pollTimer !== null) {
         clearTimeout(this.pollTimer);
         this.pollTimer = null;
       }
-      this.pollTimer = setTimeout(() => this.poll(), 0);
+      this.pollTimer = setTimeout(() => void this.poll(), 0);
     } else {
       this.scheduleNextPoll();
     }
@@ -323,19 +319,21 @@ export class SyncClient {
       return;
     }
 
-    this.pollTimer = setTimeout(() => this.poll(), this.currentBackoff);
+    this.pollTimer = setTimeout(() => void this.poll(), this.currentBackoff);
   }
 
   /**
    * Process a sync response from the server.
    */
-  private processResponse(response: { rooms: Array<{
-    room: string;
-    end_cursor: number;
-    awareness: AwarenessState;
-    updates: SyncUpdate[];
-    should_compact?: boolean;
-  }> }): void {
+  private processResponse(response: {
+    rooms: Array<{
+      room: string;
+      end_cursor: number;
+      awareness: AwarenessState;
+      updates: SyncUpdate[];
+      should_compact?: boolean;
+    }>;
+  }): void {
     for (const roomData of response.rooms) {
       const state = this.rooms.get(roomData.room);
       if (!state) continue;

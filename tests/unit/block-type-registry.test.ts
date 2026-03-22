@@ -160,18 +160,14 @@ describe('BlockTypeRegistry', () => {
     });
 
     it('handles blocks with attributes: null', () => {
-      const blockTypes: WPBlockType[] = [
-        { name: 'core/nextpage', attributes: null },
-      ];
+      const blockTypes: WPBlockType[] = [{ name: 'core/nextpage', attributes: null }];
       const registry = BlockTypeRegistry.fromApiResponse(blockTypes);
       expect(registry.isKnownBlockType('core/nextpage')).toBe(true);
       expect(registry.isRichTextAttribute('core/nextpage', 'anything')).toBe(false);
     });
 
     it('handles blocks with empty attributes', () => {
-      const blockTypes: WPBlockType[] = [
-        { name: 'core/spacer', attributes: {} },
-      ];
+      const blockTypes: WPBlockType[] = [{ name: 'core/spacer', attributes: {} }];
       const registry = BlockTypeRegistry.fromApiResponse(blockTypes);
       expect(registry.isKnownBlockType('core/spacer')).toBe(true);
     });
@@ -235,9 +231,7 @@ describe('BlockTypeRegistry', () => {
     });
 
     it('getAttributeNames() returns empty Set for API block with null attributes', () => {
-      const reg = BlockTypeRegistry.fromApiResponse([
-        { name: 'core/nextpage', attributes: null },
-      ]);
+      const reg = BlockTypeRegistry.fromApiResponse([{ name: 'core/nextpage', attributes: null }]);
       const names = reg.getAttributeNames('core/nextpage');
       expect(names).toBeInstanceOf(Set);
       expect(names!.size).toBe(0);
@@ -343,19 +337,19 @@ describe('BlockTypeRegistry', () => {
 
     it('includes richText flag correctly for non-rich-text attributes', () => {
       const info = registry.getBlockTypeInfo('core/paragraph')!;
-      const dropCapAttr = info.attributes.find(a => a.name === 'dropCap');
+      const dropCapAttr = info.attributes.find((a) => a.name === 'dropCap');
       expect(dropCapAttr!.richText).toBe(false);
     });
 
     it('includes richText flag correctly for rich-text attributes', () => {
       const info = registry.getBlockTypeInfo('core/paragraph')!;
-      const contentAttr = info.attributes.find(a => a.name === 'content');
+      const contentAttr = info.attributes.find((a) => a.name === 'content');
       expect(contentAttr!.richText).toBe(true);
     });
 
     it('omits default field when no default is defined', () => {
       const info = registry.getBlockTypeInfo('core/paragraph')!;
-      const contentAttr = info.attributes.find(a => a.name === 'content');
+      const contentAttr = info.attributes.find((a) => a.name === 'content');
       expect('default' in contentAttr!).toBe(false);
     });
   });

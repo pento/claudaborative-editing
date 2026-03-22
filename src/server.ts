@@ -42,10 +42,7 @@ export async function startServer(): Promise<void> {
     ? 'Already connected to WordPress. Do NOT call wp_connect. Use wp_status to check connection state, then wp_open_post or wp_create_post to start editing.'
     : 'Use wp_connect to connect to a WordPress site first, or use wp_status to check connection state.';
 
-  const server = new McpServer(
-    { name: 'wpce', version: VERSION },
-    { instructions },
-  );
+  const server = new McpServer({ name: 'wpce', version: VERSION }, { instructions });
 
   // Register all tools
   registerConnectTools(server, session);
@@ -82,7 +79,13 @@ export async function startServer(): Promise<void> {
     process.exit(0);
   };
 
-  process.on('SIGTERM', () => { cleanup(); });
-  process.on('SIGINT', () => { cleanup(); });
-  process.stdin.on('end', () => { cleanup(); });
+  process.on('SIGTERM', () => {
+    void cleanup();
+  });
+  process.on('SIGINT', () => {
+    void cleanup();
+  });
+  process.stdin.on('end', () => {
+    void cleanup();
+  });
 }

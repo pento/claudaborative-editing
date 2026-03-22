@@ -17,10 +17,7 @@ import {
   createCompactionUpdate,
   createUpdateFromChange,
 } from '../yjs/sync-protocol.js';
-import {
-  computeTextDelta,
-  findHtmlSafeChunkEnd,
-} from '../yjs/block-converter.js';
+import { computeTextDelta, findHtmlSafeChunkEnd } from '../yjs/block-converter.js';
 import { parseBlocks, parsedBlockToBlock } from '../blocks/parser.js';
 import { renderPost, renderBlock, type PostMetadata } from '../blocks/renderer.js';
 import { buildAwarenessState, parseCollaborators } from './awareness.js';
@@ -104,12 +101,11 @@ function prepareBlockTree(
     if (input.content !== undefined && !registry.hasAttribute(input.name, 'content')) {
       const info = registry.getBlockTypeInfo(input.name);
       const richTextAttrs = info?.attributes.filter((a) => a.richText).map((a) => a.name) ?? [];
-      const hint = richTextAttrs.length > 0
-        ? ` This block's rich-text attributes are: ${richTextAttrs.join(', ')}. Pass text via the "attributes" parameter instead.`
-        : '';
-      throw new Error(
-        `Block type ${input.name} does not have a "content" attribute.${hint}`,
-      );
+      const hint =
+        richTextAttrs.length > 0
+          ? ` This block's rich-text attributes are: ${richTextAttrs.join(', ')}. Pass text via the "attributes" parameter instead.`
+          : '';
+      throw new Error(`Block type ${input.name} does not have a "content" attribute.${hint}`);
     }
 
     // Validate provided attributes exist in the block schema
@@ -120,7 +116,7 @@ function prepareBlockTree(
         if (unknownAttrs.length > 0) {
           throw new Error(
             `Unknown attribute${unknownAttrs.length > 1 ? 's' : ''} for ${input.name}: ${unknownAttrs.join(', ')}. ` +
-            `Known attributes: ${[...knownAttrs].sort().join(', ')}`,
+              `Known attributes: ${[...knownAttrs].sort().join(', ')}`,
           );
         }
       }
@@ -209,13 +205,13 @@ function prepareBlockTree(
 }
 
 export class SessionManager {
-  private apiClient: WordPressApiClient | null = null;
-  private syncClient: SyncClient | null = null;
+  private _apiClient: WordPressApiClient | null = null;
+  private _syncClient: SyncClient | null = null;
   private documentManager: DocumentManager;
   private registry: BlockTypeRegistry;
-  private doc: Y.Doc | null = null;
-  private user: WPUser | null = null;
-  private currentPost: WPPost | null = null;
+  private _doc: Y.Doc | null = null;
+  private _user: WPUser | null = null;
+  private _currentPost: WPPost | null = null;
   private state: SessionState = 'disconnected';
   private awarenessState: AwarenessLocalState | null = null;
   private collaborators: CollaboratorInfo[] = [];
@@ -229,6 +225,33 @@ export class SessionManager {
 
   /** Max time (ms) to wait for sync to populate the doc before loading from REST API. Set to 0 in tests. */
   syncWaitTimeout = 5000;
+
+  // --- Throwing getters for state-dependent fields ---
+
+  private get apiClient(): WordPressApiClient {
+    if (!this._apiClient) throw new Error('No API client (not connected)');
+    return this._apiClient;
+  }
+
+  private get user(): WPUser {
+    if (!this._user) throw new Error('No user (not connected)');
+    return this._user;
+  }
+
+  private get doc(): Y.Doc {
+    if (!this._doc) throw new Error('No Y.Doc (no post open)');
+    return this._doc;
+  }
+
+  private get syncClient(): SyncClient {
+    if (!this._syncClient) throw new Error('No sync client (no post open)');
+    return this._syncClient;
+  }
+
+  private get currentPost(): WPPost {
+    if (!this._currentPost) throw new Error('No current post (no post open)');
+    return this._currentPost;
+  }
 
   constructor() {
     this.registry = BlockTypeRegistry.createFallback();
@@ -249,11 +272,11 @@ export class SessionManager {
       this.disconnect();
     }
 
-    this.apiClient = new WordPressApiClient(config);
+    this._apiClient = new WordPressApiClient(config);
 
     // Validate credentials
     const user = await this.apiClient.validateConnection();
-    this.user = user;
+    this._user = user;
 
     // Validate sync endpoint is available
     await this.apiClient.validateSyncEndpoint();
@@ -289,8 +312,8 @@ export class SessionManager {
       this.closePost();
     }
 
-    this.apiClient = null;
-    this.user = null;
+    this._apiClient = null;
+    this._user = null;
     this.awarenessState = null;
     this.collaborators = [];
     this.notesSupported = false;
@@ -308,7 +331,7 @@ export class SessionManager {
     perPage?: number;
   }): Promise<WPPost[]> {
     this.requireState('connected', 'editing');
-    return this.apiClient!.listPosts(options);
+    return this.apiClient.listPosts(options);
   }
 
   /**
@@ -319,19 +342,19 @@ export class SessionManager {
     this.requireState('connected');
 
     // Fetch post from API
-    const post = await this.apiClient!.getPost(postId);
-    this.currentPost = post;
+    const post = await this.apiClient.getPost(postId);
+    this._currentPost = post;
 
     // Create an EMPTY Y.Doc — don't load content yet.
     // We first sync with the server to receive any existing CRDT state.
     // Loading content independently would create divergent CRDT histories,
     // causing duplicate blocks when two clients sync.
     const doc = this.documentManager.createDoc();
-    this.doc = doc;
+    this._doc = doc;
 
     // Create sync client
-    const syncClient = new SyncClient(this.apiClient!, { ...DEFAULT_SYNC_CONFIG });
-    this.syncClient = syncClient;
+    const syncClient = new SyncClient(this.apiClient, { ...DEFAULT_SYNC_CONFIG });
+    this._syncClient = syncClient;
 
     // Start sync with room = postType/${post.type}:${postId}
     const room = `postType/${post.type}:${postId}`;
@@ -497,13 +520,10 @@ export class SessionManager {
   /**
    * Create a new post and open it for editing.
    */
-  async createPost(data: {
-    title?: string;
-    content?: string;
-  }): Promise<WPPost> {
+  async createPost(data: { title?: string; content?: string }): Promise<WPPost> {
     this.requireState('connected');
 
-    const post = await this.apiClient!.createPost({
+    const post = await this.apiClient.createPost({
       title: data.title,
       content: data.content,
       status: 'draft',
@@ -520,13 +540,13 @@ export class SessionManager {
   closePost(): void {
     this.requireState('editing');
 
-    if (this.syncClient) {
-      this.syncClient.stop();
-      this.syncClient = null;
+    if (this._syncClient) {
+      this._syncClient.stop();
+      this._syncClient = null;
     }
 
-    if (this.doc && this.updateHandler) {
-      this.doc.off('update', this.updateHandler);
+    if (this._doc && this.updateHandler) {
+      this._doc.off('update', this.updateHandler);
       this.updateHandler = null;
     }
 
@@ -535,9 +555,9 @@ export class SessionManager {
       this.commentUpdateHandler = null;
     }
 
-    this.doc = null;
+    this._doc = null;
     this.commentDoc = null;
-    this.currentPost = null;
+    this._currentPost = null;
     this.collaborators = [];
     this.state = 'connected';
   }
@@ -550,17 +570,29 @@ export class SessionManager {
   readPost(): string {
     this.requireState('editing');
 
-    const title = this.documentManager.getTitle(this.doc!);
-    const blocks = this.documentManager.getBlocks(this.doc!);
+    const title = this.documentManager.getTitle(this.doc);
+    const blocks = this.documentManager.getBlocks(this.doc);
 
     // Gather metadata from Y.Doc (preferred, reflects collaborative state) and currentPost (fallback)
     const metadata: PostMetadata = {
-      status: (this.documentManager.getProperty(this.doc!, 'status') as string) ?? this.currentPost?.status,
-      date: (this.documentManager.getProperty(this.doc!, 'date') as string) ?? this.currentPost?.date ?? undefined,
-      slug: (this.documentManager.getProperty(this.doc!, 'slug') as string) ?? this.currentPost?.slug,
-      sticky: (this.documentManager.getProperty(this.doc!, 'sticky') as boolean | undefined) ?? this.currentPost?.sticky,
-      commentStatus: (this.documentManager.getProperty(this.doc!, 'comment_status') as string) ?? this.currentPost?.comment_status,
-      excerpt: (this.documentManager.getProperty(this.doc!, 'excerpt') as string) || undefined,
+      status:
+        (this.documentManager.getProperty(this.doc, 'status') as string | undefined) ??
+        this._currentPost?.status,
+      date:
+        (this.documentManager.getProperty(this.doc, 'date') as string | undefined) ??
+        this._currentPost?.date ??
+        undefined,
+      slug:
+        (this.documentManager.getProperty(this.doc, 'slug') as string | undefined) ??
+        this._currentPost?.slug,
+      sticky:
+        (this.documentManager.getProperty(this.doc, 'sticky') as boolean | undefined) ??
+        this._currentPost?.sticky,
+      commentStatus:
+        (this.documentManager.getProperty(this.doc, 'comment_status') as string | undefined) ??
+        this._currentPost?.comment_status,
+      excerpt:
+        (this.documentManager.getProperty(this.doc, 'excerpt') as string | undefined) || undefined,
     };
 
     return renderPost(title, blocks, metadata);
@@ -572,7 +604,7 @@ export class SessionManager {
   readBlock(index: string): string {
     this.requireState('editing');
 
-    const block = this.documentManager.getBlockByIndex(this.doc!, index);
+    const block = this.documentManager.getBlockByIndex(this.doc, index);
     if (!block) {
       throw new Error(`Block not found at index ${index}`);
     }
@@ -602,7 +634,7 @@ export class SessionManager {
 
     // Identify which changes should be streamed vs applied atomically.
     // Look up the block name to determine rich-text attributes.
-    const block = this.documentManager.getBlockByIndex(this.doc!, index);
+    const block = this.documentManager.getBlockByIndex(this.doc, index);
     if (!block) return;
 
     const streamTargets: Array<{ attrName: string; newValue: string }> = [];
@@ -610,7 +642,10 @@ export class SessionManager {
 
     // Check 'content' field
     if (changes.content !== undefined) {
-      if (this.registry.isRichTextAttribute(block.name, 'content') && changes.content.length >= STREAM_THRESHOLD) {
+      if (
+        this.registry.isRichTextAttribute(block.name, 'content') &&
+        changes.content.length >= STREAM_THRESHOLD
+      ) {
         streamTargets.push({ attrName: 'content', newValue: changes.content });
       } else {
         atomicChanges.content = changes.content;
@@ -638,22 +673,24 @@ export class SessionManager {
 
     // Apply atomic changes (non-streaming) in one transaction
     if (atomicChanges.content !== undefined || atomicChanges.attributes) {
-      this.doc!.transact(() => {
-        this.documentManager.updateBlock(this.doc!, index, atomicChanges);
+      this.doc.transact(() => {
+        this.documentManager.updateBlock(this.doc, index, atomicChanges);
       }, LOCAL_ORIGIN);
     }
 
     // Stream each rich-text attribute
     for (const target of streamTargets) {
-      let ytext = this.documentManager.getBlockAttributeYText(this.doc!, index, target.attrName);
+      let ytext = this.documentManager.getBlockAttributeYText(this.doc, index, target.attrName);
       if (!ytext) {
         // Y.Text doesn't exist yet — create it atomically before streaming
-        this.doc!.transact(() => {
-          this.documentManager.updateBlock(this.doc!, index, {
-            ...(target.attrName === 'content' ? { content: '' } : { attributes: { [target.attrName]: '' } }),
+        this.doc.transact(() => {
+          this.documentManager.updateBlock(this.doc, index, {
+            ...(target.attrName === 'content'
+              ? { content: '' }
+              : { attributes: { [target.attrName]: '' } }),
           });
         }, LOCAL_ORIGIN);
-        ytext = this.documentManager.getBlockAttributeYText(this.doc!, index, target.attrName);
+        ytext = this.documentManager.getBlockAttributeYText(this.doc, index, target.attrName);
       }
       if (ytext) {
         await this.streamTextToYText(ytext, target.newValue, index);
@@ -668,18 +705,15 @@ export class SessionManager {
    * then rich-text content is streamed in progressively.
    * Supports recursive inner blocks.
    */
-  async insertBlock(
-    position: number,
-    block: BlockInput,
-  ): Promise<void> {
+  async insertBlock(position: number, block: BlockInput): Promise<void> {
     this.requireState('editing');
 
     const blockIndex = String(position);
     const { block: fullBlock, streamTargets } = prepareBlockTree(block, blockIndex, this.registry);
 
     // Insert block structure atomically
-    this.doc!.transact(() => {
-      this.documentManager.insertBlock(this.doc!, position, fullBlock);
+    this.doc.transact(() => {
+      this.documentManager.insertBlock(this.doc, position, fullBlock);
     }, LOCAL_ORIGIN);
 
     // Stream rich-text content (depth-first: parent first, then children)
@@ -691,8 +725,8 @@ export class SessionManager {
    */
   removeBlocks(startIndex: number, count: number): void {
     this.requireState('editing');
-    this.doc!.transact(() => {
-      this.documentManager.removeBlocks(this.doc!, startIndex, count);
+    this.doc.transact(() => {
+      this.documentManager.removeBlocks(this.doc, startIndex, count);
     }, LOCAL_ORIGIN);
   }
 
@@ -701,8 +735,8 @@ export class SessionManager {
    */
   moveBlock(fromIndex: number, toIndex: number): void {
     this.requireState('editing');
-    this.doc!.transact(() => {
-      this.documentManager.moveBlock(this.doc!, fromIndex, toIndex);
+    this.doc.transact(() => {
+      this.documentManager.moveBlock(this.doc, fromIndex, toIndex);
     }, LOCAL_ORIGIN);
   }
 
@@ -712,11 +746,7 @@ export class SessionManager {
    * Old blocks are removed and new block structures (with empty content)
    * are inserted atomically. Rich-text content is then streamed progressively.
    */
-  async replaceBlocks(
-    startIndex: number,
-    count: number,
-    newBlocks: BlockInput[],
-  ): Promise<void> {
+  async replaceBlocks(startIndex: number, count: number, newBlocks: BlockInput[]): Promise<void> {
     this.requireState('editing');
 
     // Prepare all blocks recursively
@@ -729,14 +759,10 @@ export class SessionManager {
     });
 
     // Remove old blocks and insert new structures atomically
-    this.doc!.transact(() => {
-      this.documentManager.removeBlocks(this.doc!, startIndex, count);
+    this.doc.transact(() => {
+      this.documentManager.removeBlocks(this.doc, startIndex, count);
       for (let i = 0; i < fullBlocks.length; i++) {
-        this.documentManager.insertBlock(
-          this.doc!,
-          startIndex + i,
-          fullBlocks[i],
-        );
+        this.documentManager.insertBlock(this.doc, startIndex + i, fullBlocks[i]);
       }
     }, LOCAL_ORIGIN);
 
@@ -747,18 +773,14 @@ export class SessionManager {
   /**
    * Insert a block as an inner block of an existing block.
    */
-  async insertInnerBlock(
-    parentIndex: string,
-    position: number,
-    block: BlockInput,
-  ): Promise<void> {
+  async insertInnerBlock(parentIndex: string, position: number, block: BlockInput): Promise<void> {
     this.requireState('editing');
 
     const blockIndex = `${parentIndex}.${position}`;
     const { block: fullBlock, streamTargets } = prepareBlockTree(block, blockIndex, this.registry);
 
-    this.doc!.transact(() => {
-      this.documentManager.insertInnerBlock(this.doc!, parentIndex, position, fullBlock);
+    this.doc.transact(() => {
+      this.documentManager.insertInnerBlock(this.doc, parentIndex, position, fullBlock);
     }, LOCAL_ORIGIN);
 
     await this.streamTargets(streamTargets);
@@ -769,8 +791,8 @@ export class SessionManager {
    */
   removeInnerBlocks(parentIndex: string, startIndex: number, count: number): void {
     this.requireState('editing');
-    this.doc!.transact(() => {
-      this.documentManager.removeInnerBlocks(this.doc!, parentIndex, startIndex, count);
+    this.doc.transact(() => {
+      this.documentManager.removeInnerBlocks(this.doc, parentIndex, startIndex, count);
     }, LOCAL_ORIGIN);
   }
 
@@ -783,18 +805,18 @@ export class SessionManager {
     this.requireState('editing');
 
     if (title.length < STREAM_THRESHOLD) {
-      this.doc!.transact(() => {
-        this.documentManager.setTitle(this.doc!, title);
+      this.doc.transact(() => {
+        this.documentManager.setTitle(this.doc, title);
       }, LOCAL_ORIGIN);
       return;
     }
 
     // Get the title Y.Text
-    const documentMap = this.documentManager.getDocumentMap(this.doc!);
+    const documentMap = this.documentManager.getDocumentMap(this.doc);
     let ytext = documentMap.get('title');
     if (!(ytext instanceof Y.Text)) {
       // Create Y.Text if it doesn't exist
-      this.doc!.transact(() => {
+      this.doc.transact(() => {
         const newYText = new Y.Text();
         documentMap.set('title', newYText);
       }, LOCAL_ORIGIN);
@@ -810,8 +832,8 @@ export class SessionManager {
    */
   save(): void {
     this.requireState('editing');
-    this.doc!.transact(() => {
-      this.documentManager.markSaved(this.doc!);
+    this.doc.transact(() => {
+      this.documentManager.markSaved(this.doc);
     }, LOCAL_ORIGIN);
   }
 
@@ -822,7 +844,7 @@ export class SessionManager {
    */
   async listCategories(options?: { search?: string; perPage?: number }): Promise<WPTerm[]> {
     this.requireState('connected', 'editing');
-    return this.apiClient!.listTerms('categories', options);
+    return this.apiClient.listTerms('categories', options);
   }
 
   /**
@@ -830,7 +852,7 @@ export class SessionManager {
    */
   async listTags(options?: { search?: string; perPage?: number }): Promise<WPTerm[]> {
     this.requireState('connected', 'editing');
-    return this.apiClient!.listTerms('tags', options);
+    return this.apiClient.listTerms('tags', options);
   }
 
   /**
@@ -942,7 +964,7 @@ export class SessionManager {
     const mimeType = getMimeType(fileName);
     const fileData = await readFile(filePath);
 
-    return this.apiClient!.uploadMedia(fileData, fileName, mimeType, options);
+    return this.apiClient.uploadMedia(fileData, fileName, mimeType, options);
   }
 
   // --- Notes ---
@@ -951,22 +973,22 @@ export class SessionManager {
    * List all notes (block comments) on the current post, along with a map
    * from noteId to the block index where the note is attached.
    */
-  async listNotes(): Promise<{ notes: WPNote[]; noteBlockMap: Record<number, string> }> {
+  async listNotes(): Promise<{ notes: WPNote[]; noteBlockMap: Partial<Record<number, string>> }> {
     this.requireState('editing');
     if (!this.notesSupported) {
       throw new Error('Notes are not supported. This feature requires WordPress 6.9 or later.');
     }
 
-    const notes = await this.apiClient!.listNotes(this.currentPost!.id);
+    const notes = await this.apiClient.listNotes(this.currentPost.id);
 
     // Build noteId-to-blockIndex map with a single pass over all blocks
     const noteBlockMap: Record<number, string> = {};
-    const blocks = this.documentManager.getBlocks(this.doc!);
+    const blocks = this.documentManager.getBlocks(this.doc);
     const scanBlocks = (blockList: Block[], prefix: string) => {
       for (let i = 0; i < blockList.length; i++) {
         const idx = prefix ? `${prefix}.${i}` : String(i);
         const metadata = blockList[i].attributes.metadata as Record<string, unknown> | undefined;
-        if (metadata?.noteId != null) {
+        if (metadata?.noteId !== null && metadata?.noteId !== undefined) {
           noteBlockMap[metadata.noteId as number] = idx;
         }
         if (blockList[i].innerBlocks.length > 0) {
@@ -989,30 +1011,31 @@ export class SessionManager {
       throw new Error('Notes are not supported. This feature requires WordPress 6.9 or later.');
     }
 
-    const block = this.documentManager.getBlockByIndex(this.doc!, blockIndex);
+    const block = this.documentManager.getBlockByIndex(this.doc, blockIndex);
     if (!block) {
       throw new Error(`Block not found at index ${blockIndex}`);
     }
 
-    const existingNoteId = (block.attributes.metadata as Record<string, unknown> | undefined)?.noteId;
-    if (existingNoteId != null) {
+    const existingNoteId = (block.attributes.metadata as Record<string, unknown> | undefined)
+      ?.noteId;
+    if (existingNoteId !== null && existingNoteId !== undefined) {
       throw new Error(
-        `Block at index ${blockIndex} already has a note (ID: ${existingNoteId}). ` +
-        `Your view may be stale — call wp_read_post and wp_list_notes to refresh, ` +
-        `then use wp_reply_to_note to reply to the existing note.`,
+        `Block at index ${blockIndex} already has a note (ID: ${String(existingNoteId)}). ` +
+          `Your view may be stale — call wp_read_post and wp_list_notes to refresh, ` +
+          `then use wp_reply_to_note to reply to the existing note.`,
       );
     }
 
-    const note = await this.apiClient!.createNote({ post: this.currentPost!.id, content });
+    const note = await this.apiClient.createNote({ post: this.currentPost.id, content });
 
-    this.doc!.transact(() => {
-      this.documentManager.setBlockNoteId(this.doc!, blockIndex, note.id);
+    this.doc.transact(() => {
+      this.documentManager.setBlockNoteId(this.doc, blockIndex, note.id);
     }, LOCAL_ORIGIN);
 
     this.notifyCommentChange();
 
-    if (this.syncClient) {
-      this.syncClient.flushQueue();
+    if (this._syncClient) {
+      this._syncClient.flushQueue();
     }
 
     return note;
@@ -1027,11 +1050,15 @@ export class SessionManager {
       throw new Error('Notes are not supported. This feature requires WordPress 6.9 or later.');
     }
 
-    const reply = await this.apiClient!.createNote({ post: this.currentPost!.id, content, parent: parentNoteId });
+    const reply = await this.apiClient.createNote({
+      post: this.currentPost.id,
+      content,
+      parent: parentNoteId,
+    });
 
     this.notifyCommentChange();
-    if (this.syncClient) {
-      this.syncClient.flushQueue();
+    if (this._syncClient) {
+      this._syncClient.flushQueue();
     }
 
     return reply;
@@ -1047,7 +1074,7 @@ export class SessionManager {
     }
 
     // Delete all descendants (replies, replies-to-replies, etc.) then the note itself
-    const allNotes = await this.apiClient!.listNotes(this.currentPost!.id);
+    const allNotes = await this.apiClient.listNotes(this.currentPost.id);
     const childrenByParent = new Map<number, number[]>();
     for (const note of allNotes) {
       if (note.parent !== 0) {
@@ -1060,8 +1087,7 @@ export class SessionManager {
     // Collect all descendant IDs via DFS
     const descendantIds: number[] = [];
     const stack = [noteId];
-    while (stack.length > 0) {
-      const currentId = stack.pop()!;
+    for (let currentId = stack.pop(); currentId !== undefined; currentId = stack.pop()) {
       const children = childrenByParent.get(currentId);
       if (children) {
         for (const childId of children) {
@@ -1073,22 +1099,20 @@ export class SessionManager {
 
     // Delete descendants first (leaves before parents), then the root note
     for (const id of descendantIds.reverse()) {
-      await this.apiClient!.deleteNote(id);
+      await this.apiClient.deleteNote(id);
     }
-    await this.apiClient!.deleteNote(noteId);
+    await this.apiClient.deleteNote(noteId);
 
     // Find and remove the noteId from whichever block has it
     const blockIndex = this.findBlockIndexByNoteId(noteId);
     if (blockIndex) {
-      this.doc!.transact(() => {
-        this.documentManager.removeBlockNoteId(this.doc!, blockIndex);
+      this.doc.transact(() => {
+        this.documentManager.removeBlockNoteId(this.doc, blockIndex);
       }, LOCAL_ORIGIN);
     }
 
     this.notifyCommentChange();
-    if (this.syncClient) {
-      this.syncClient.flushQueue();
-    }
+    this.syncClient.flushQueue();
   }
 
   /**
@@ -1100,12 +1124,10 @@ export class SessionManager {
       throw new Error('Notes are not supported. This feature requires WordPress 6.9 or later.');
     }
 
-    const updated = await this.apiClient!.updateNote(noteId, { content });
+    const updated = await this.apiClient.updateNote(noteId, { content });
 
     this.notifyCommentChange();
-    if (this.syncClient) {
-      this.syncClient.flushQueue();
-    }
+    this.syncClient.flushQueue();
 
     return updated;
   }
@@ -1121,10 +1143,10 @@ export class SessionManager {
     hasCollaborators: boolean;
     queueSize: number;
   } | null {
-    if (!this.syncClient) {
+    if (!this._syncClient) {
       return null;
     }
-    const status = this.syncClient.getStatus();
+    const status = this._syncClient.getStatus();
     return {
       isPolling: status.isPolling,
       hasCollaborators: status.hasCollaborators,
@@ -1137,11 +1159,11 @@ export class SessionManager {
   }
 
   getCurrentPost(): WPPost | null {
-    return this.currentPost;
+    return this._currentPost;
   }
 
   getUser(): WPUser | null {
-    return this.user;
+    return this._user;
   }
 
   getRegistry(): BlockTypeRegistry {
@@ -1166,15 +1188,25 @@ export class SessionManager {
    */
   private async streamTargets(targets: StreamTarget[]): Promise<void> {
     for (const target of targets) {
-      let ytext = this.documentManager.getBlockAttributeYText(this.doc!, target.blockIndex, target.attrName);
+      let ytext = this.documentManager.getBlockAttributeYText(
+        this.doc,
+        target.blockIndex,
+        target.attrName,
+      );
       if (!ytext) {
         // Y.Text doesn't exist yet — create it atomically before streaming
-        this.doc!.transact(() => {
-          this.documentManager.updateBlock(this.doc!, target.blockIndex, {
-            ...(target.attrName === 'content' ? { content: '' } : { attributes: { [target.attrName]: '' } }),
+        this.doc.transact(() => {
+          this.documentManager.updateBlock(this.doc, target.blockIndex, {
+            ...(target.attrName === 'content'
+              ? { content: '' }
+              : { attributes: { [target.attrName]: '' } }),
           });
         }, LOCAL_ORIGIN);
-        ytext = this.documentManager.getBlockAttributeYText(this.doc!, target.blockIndex, target.attrName);
+        ytext = this.documentManager.getBlockAttributeYText(
+          this.doc,
+          target.blockIndex,
+          target.attrName,
+        );
       }
       if (ytext) {
         await this.streamTextToYText(ytext, target.value, target.blockIndex);
@@ -1182,7 +1214,11 @@ export class SessionManager {
     }
   }
 
-  private async streamTextToYText(ytext: Y.Text, newValue: string, blockIndex?: string): Promise<void> {
+  private async streamTextToYText(
+    ytext: Y.Text,
+    newValue: string,
+    blockIndex?: string,
+  ): Promise<void> {
     const oldValue = ytext.toString();
     const delta = computeTextDelta(oldValue, newValue);
     if (!delta) return;
@@ -1194,16 +1230,14 @@ export class SessionManager {
 
     // Apply retain + delete atomically (remove old text immediately)
     if (delta.deleteCount > 0) {
-      this.doc!.transact(() => {
+      this.doc.transact(() => {
         const ops: Array<{ retain?: number; delete?: number }> = [];
         if (delta.prefixLen > 0) ops.push({ retain: delta.prefixLen });
         ops.push({ delete: delta.deleteCount });
         ytext.applyDelta(ops);
       }, LOCAL_ORIGIN);
 
-      if (this.syncClient) {
-        this.syncClient.flushQueue();
-      }
+      this.syncClient.flushQueue();
     }
 
     // If there's nothing to insert, we're done
@@ -1211,7 +1245,7 @@ export class SessionManager {
 
     // For short inserts, apply atomically (no streaming overhead)
     if (delta.insertText.length < STREAM_THRESHOLD) {
-      this.doc!.transact(() => {
+      this.doc.transact(() => {
         const ops: Array<{ retain?: number; insert?: string }> = [];
         if (delta.prefixLen > 0) ops.push({ retain: delta.prefixLen });
         ops.push({ insert: delta.insertText });
@@ -1231,8 +1265,8 @@ export class SessionManager {
     let nextInsertRelPos: Y.RelativePosition | null = null;
 
     while (offset < delta.insertText.length) {
-      // Early exit: bail if session is no longer active
-      if (!this.doc || !this.syncClient) return;
+      // Early exit: bail if session is no longer active (may disconnect mid-stream)
+      if (!this._doc || !this._syncClient) return;
 
       // If we have a relative position from the previous chunk, resolve it
       // now (after the delay, when remote edits may have been applied).
@@ -1241,10 +1275,11 @@ export class SessionManager {
         if (absPos) {
           insertPos = absPos.index;
         }
-        nextInsertRelPos = null;
       }
 
-      const chunkSize = STREAM_CHUNK_SIZE_MIN + Math.floor(Math.random() * (STREAM_CHUNK_SIZE_MAX - STREAM_CHUNK_SIZE_MIN + 1));
+      const chunkSize =
+        STREAM_CHUNK_SIZE_MIN +
+        Math.floor(Math.random() * (STREAM_CHUNK_SIZE_MAX - STREAM_CHUNK_SIZE_MIN + 1));
       const chunkEnd = findHtmlSafeChunkEnd(delta.insertText, offset, chunkSize);
       const chunk = delta.insertText.slice(offset, chunkEnd);
 
@@ -1280,15 +1315,12 @@ export class SessionManager {
    * cursor always resolves — even after updateYText deletes all items.
    */
   private updateCursorPosition(blockIndex: string): void {
-    if (!this.doc || !this.user) return;
-
     const ytext = this.documentManager.getBlockContentYText(this.doc, blockIndex);
     if (!ytext) return;
 
     // Get the Y.Text's internal item ID — this references the Y.Text TYPE,
     // not its content items. The type is never deleted, so this always resolves.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const typeItem = (ytext as any)._item;
+    const typeItem = ytext._item;
     if (!typeItem?.id) return;
 
     const relPosJSON = {
@@ -1304,7 +1336,7 @@ export class SessionManager {
     this.awarenessState = {
       collaboratorInfo: {
         id: this.user.id,
-        name: `${this.user.name} (Claude)`,
+        name: `${this.user.name ?? this.user.slug} (Claude)`,
         slug: this.user.slug,
         avatar_urls: this.user.avatar_urls ?? {},
         browserType: 'Claude Code MCP',
@@ -1343,25 +1375,23 @@ export class SessionManager {
    */
   private async updatePostMeta(fields: Record<string, unknown>): Promise<WPPost> {
     // Persist via REST API first — fail fast before touching collaborative state
-    const updated = await this.apiClient!.updatePost(this.currentPost!.id, fields);
-    this.currentPost = updated;
+    const updated = await this.apiClient.updatePost(this.currentPost.id, fields);
+    this._currentPost = updated;
 
     // Update Y.Doc properties to reflect the committed state.
     // Use WordPress-returned values for scalar fields (e.g., slug may be deduplicated),
     // but keep the caller's value for fields where the API returns a different shape
     // (e.g., excerpt returns { rendered, raw } but Y.Doc stores a plain string).
-    this.doc!.transact(() => {
+    this.doc.transact(() => {
       for (const [key, value] of Object.entries(fields)) {
         const canonical = (updated as unknown as Record<string, unknown>)[key];
         const useCanonical = canonical !== undefined && typeof canonical === typeof value;
-        this.documentManager.setProperty(this.doc!, key, useCanonical ? canonical : value);
+        this.documentManager.setProperty(this.doc, key, useCanonical ? canonical : value);
       }
     }, LOCAL_ORIGIN);
 
     // Flush sync queue so collaborators see the change
-    if (this.syncClient) {
-      this.syncClient.flushQueue();
-    }
+    this.syncClient.flushQueue();
 
     return updated;
   }
@@ -1377,15 +1407,13 @@ export class SessionManager {
     const results: Array<{ name: string; id: number; created: boolean }> = [];
 
     for (const name of names) {
-      const matches = await this.apiClient!.searchTerms(taxonomy, name);
-      const exact = matches.find(
-        (t) => t.name.toLowerCase() === name.toLowerCase(),
-      );
+      const matches = await this.apiClient.searchTerms(taxonomy, name);
+      const exact = matches.find((t) => t.name.toLowerCase() === name.toLowerCase());
 
       if (exact) {
         results.push({ name: exact.name, id: exact.id, created: false });
       } else {
-        const created = await this.apiClient!.createTerm(taxonomy, name);
+        const created = await this.apiClient.createTerm(taxonomy, name);
         results.push({ name: created.name, id: created.id, created: true });
       }
     }
@@ -1399,12 +1427,13 @@ export class SessionManager {
    * other clients to re-fetch notes from the REST API.
    */
   private notifyCommentChange(): void {
-    if (!this.commentDoc) return;
+    const doc = this.commentDoc;
+    if (!doc) return;
 
-    this.commentDoc.transact(() => {
-      const stateMap = this.commentDoc!.getMap(CRDT_STATE_MAP_KEY);
+    doc.transact(() => {
+      const stateMap = doc.getMap(CRDT_STATE_MAP_KEY);
       stateMap.set(CRDT_STATE_MAP_SAVED_AT_KEY, Date.now());
-      stateMap.set(CRDT_STATE_MAP_SAVED_BY_KEY, this.commentDoc!.clientID);
+      stateMap.set(CRDT_STATE_MAP_SAVED_BY_KEY, doc.clientID);
     }, LOCAL_ORIGIN);
   }
 
@@ -1425,7 +1454,7 @@ export class SessionManager {
    * Returns the block index (dot-notation) or null if not found.
    */
   private findBlockIndexByNoteId(noteId: number): string | null {
-    const blocks = this.documentManager.getBlocks(this.doc!);
+    const blocks = this.documentManager.getBlocks(this.doc);
     const scan = (blockList: Block[], prefix: string): string | null => {
       for (let i = 0; i < blockList.length; i++) {
         const idx = prefix ? `${prefix}.${i}` : String(i);

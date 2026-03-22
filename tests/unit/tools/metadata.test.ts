@@ -210,9 +210,7 @@ describe('metadata tools', () => {
     });
 
     it('returns error on failure', async () => {
-      (session.setTags as ReturnType<typeof vi.fn>).mockRejectedValue(
-        new Error('API error'),
-      );
+      (session.setTags as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('API error'));
 
       const tool = server.registeredTools.get('wp_set_tags')!;
       const result = await tool.handler({ tags: ['fail'] });
@@ -241,9 +239,7 @@ describe('metadata tools', () => {
     });
 
     it('returns error on failure', async () => {
-      (session.setExcerpt as ReturnType<typeof vi.fn>).mockRejectedValue(
-        new Error('Not editing'),
-      );
+      (session.setExcerpt as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('Not editing'));
 
       const tool = server.registeredTools.get('wp_set_excerpt')!;
       const result = await tool.handler({ excerpt: 'test' });
@@ -345,13 +341,13 @@ describe('metadata tools', () => {
       const result = await tool.handler({ slug: 'my-url' });
 
       expect(session.setSlug).toHaveBeenCalledWith('my-url');
-      expect(result.content[0].text).toBe('Slug set to "my-url-2" (adjusted from "my-url" for uniqueness).');
+      expect(result.content[0].text).toBe(
+        'Slug set to "my-url-2" (adjusted from "my-url" for uniqueness).',
+      );
     });
 
     it('returns error on failure', async () => {
-      (session.setSlug as ReturnType<typeof vi.fn>).mockRejectedValue(
-        new Error('Invalid slug'),
-      );
+      (session.setSlug as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('Invalid slug'));
 
       const tool = server.registeredTools.get('wp_set_slug')!;
       const result = await tool.handler({ slug: '' });
@@ -380,9 +376,7 @@ describe('metadata tools', () => {
     });
 
     it('returns error on failure', async () => {
-      (session.setSticky as ReturnType<typeof vi.fn>).mockRejectedValue(
-        new Error('Not editing'),
-      );
+      (session.setSticky as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('Not editing'));
 
       const tool = server.registeredTools.get('wp_set_sticky')!;
       const result = await tool.handler({ sticky: true });

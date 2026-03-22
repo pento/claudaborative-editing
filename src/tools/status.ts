@@ -2,10 +2,9 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { SessionManager } from '../session/session-manager.js';
 
 export function registerStatusTools(server: McpServer, session: SessionManager): void {
-  server.tool(
+  server.registerTool(
     'wp_status',
-    'Show current connection state, sync status, and post info',
-    {},
+    { description: 'Show current connection state, sync status, and post info' },
     async () => {
       const state = session.getState();
       const lines: string[] = [];
@@ -19,15 +18,21 @@ export function registerStatusTools(server: McpServer, session: SessionManager):
         lines.push('Connection: connected');
         lines.push(`User: ${user?.name ?? 'unknown'} (ID: ${user?.id ?? '?'})`);
 
-        lines.push(`Notes: ${session.getNotesSupported() ? 'supported' : 'not supported (requires WordPress 6.9+)'}`);
+        lines.push(
+          `Notes: ${session.getNotesSupported() ? 'supported' : 'not supported (requires WordPress 6.9+)'}`,
+        );
 
         const post = session.getCurrentPost();
         if (state === 'editing' && post) {
           const syncStatus = session.getSyncStatus();
           const collaboratorCount = session.getCollaborators().length;
 
-          lines.push(`Sync: ${syncStatus?.isPolling ? 'polling' : 'stopped'} (${collaboratorCount + 1} collaborator${collaboratorCount + 1 !== 1 ? 's' : ''})`);
-          lines.push(`Post: "${post.title.raw ?? post.title.rendered}" (ID: ${post.id}, status: ${post.status})`);
+          lines.push(
+            `Sync: ${syncStatus?.isPolling ? 'polling' : 'stopped'} (${collaboratorCount + 1} collaborator${collaboratorCount + 1 !== 1 ? 's' : ''})`,
+          );
+          lines.push(
+            `Post: "${post.title.raw ?? post.title.rendered}" (ID: ${post.id}, status: ${post.status})`,
+          );
           lines.push(`Queue: ${syncStatus?.queueSize ?? 0} pending updates`);
         } else {
           lines.push('Post: none open');
@@ -42,10 +47,9 @@ export function registerStatusTools(server: McpServer, session: SessionManager):
     },
   );
 
-  server.tool(
+  server.registerTool(
     'wp_collaborators',
-    'List active collaborators on the current post',
-    {},
+    { description: 'List active collaborators on the current post' },
     async () => {
       try {
         const state = session.getState();
@@ -80,33 +84,40 @@ export function registerStatusTools(server: McpServer, session: SessionManager):
         };
       } catch (error) {
         return {
-          content: [{ type: 'text' as const, text: `Failed to get collaborators: ${error instanceof Error ? error.message : String(error)}` }],
+          content: [
+            {
+              type: 'text' as const,
+              text: `Failed to get collaborators: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
           isError: true,
         };
       }
     },
   );
 
-  server.tool(
-    'wp_save',
-    'Save the current post',
-    {},
-    async () => {
-      try {
-        session.save();
-        const post = session.getCurrentPost();
-        return {
-          content: [{
+  server.registerTool('wp_save', { description: 'Save the current post' }, async () => {
+    try {
+      session.save();
+      const post = session.getCurrentPost();
+      return {
+        content: [
+          {
             type: 'text' as const,
             text: `Post "${post?.title.raw ?? post?.title.rendered ?? 'Untitled'}" saved.`,
-          }],
-        };
-      } catch (error) {
-        return {
-          content: [{ type: 'text' as const, text: `Failed to save: ${error instanceof Error ? error.message : String(error)}` }],
-          isError: true,
-        };
-      }
-    },
-  );
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: `Failed to save: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  });
 }

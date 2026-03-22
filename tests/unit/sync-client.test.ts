@@ -2,10 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { SyncClient } from '../../src/wordpress/sync-client.js';
 import type { SyncCallbacks, RoomCallbacks } from '../../src/wordpress/sync-client.js';
 import type { WordPressApiClient } from '../../src/wordpress/api-client.js';
-import {
-  SyncUpdateType,
-  DEFAULT_SYNC_CONFIG,
-} from '../../src/wordpress/types.js';
+import { SyncUpdateType, DEFAULT_SYNC_CONFIG } from '../../src/wordpress/types.js';
 import type {
   SyncPayload,
   SyncResponse,
@@ -274,10 +271,12 @@ describe('SyncClient', () => {
             '200': { cursor: { x: 1, y: 1 } },
           }),
         )
-        .mockResolvedValue(emptyRoomResponse('postType/post:1', 3, {
-          '100': { cursor: null },
-          '200': { cursor: { x: 1, y: 1 } },
-        }));
+        .mockResolvedValue(
+          emptyRoomResponse('postType/post:1', 3, {
+            '100': { cursor: null },
+            '200': { cursor: { x: 1, y: 1 } },
+          }),
+        );
 
       const callbacks = createMockCallbacks();
       syncClient.start('postType/post:1', 100, [], callbacks);
@@ -484,9 +483,9 @@ describe('SyncClient', () => {
       syncClient.start('postType/post:1', 100, [], callbacks);
 
       const update: SyncUpdate = { type: SyncUpdateType.UPDATE, data: 'test' };
-      expect(() => syncClient.queueUpdate('unknown-room', update)).toThrow(
-        "Room 'unknown-room' is not registered",
-      );
+      expect(() => {
+        syncClient.queueUpdate('unknown-room', update);
+      }).toThrow("Room 'unknown-room' is not registered");
     });
   });
 
@@ -531,7 +530,11 @@ describe('SyncClient', () => {
       // Use a delayed mock to simulate a slow poll
       let resolvePoll!: (value: SyncResponse) => void;
       apiClient.sendSyncUpdate
-        .mockReturnValueOnce(new Promise<SyncResponse>((resolve) => { resolvePoll = resolve; }))
+        .mockReturnValueOnce(
+          new Promise<SyncResponse>((resolve) => {
+            resolvePoll = resolve;
+          }),
+        )
         .mockResolvedValue(emptyRoomResponse('postType/post:1', 2));
 
       const callbacks = createMockCallbacks();
@@ -541,7 +544,10 @@ describe('SyncClient', () => {
       await vi.advanceTimersByTimeAsync(0);
 
       // Now call flushQueue while poll is in progress
-      syncClient.queueUpdate('postType/post:1', { type: SyncUpdateType.UPDATE, data: 'during-poll' });
+      syncClient.queueUpdate('postType/post:1', {
+        type: SyncUpdateType.UPDATE,
+        data: 'during-poll',
+      });
       syncClient.flushQueue();
 
       // Resolve the pending poll
@@ -556,7 +562,11 @@ describe('SyncClient', () => {
     it('re-entrancy guard prevents concurrent polls', async () => {
       let resolvePoll!: (value: SyncResponse) => void;
       apiClient.sendSyncUpdate
-        .mockReturnValueOnce(new Promise<SyncResponse>((resolve) => { resolvePoll = resolve; }))
+        .mockReturnValueOnce(
+          new Promise<SyncResponse>((resolve) => {
+            resolvePoll = resolve;
+          }),
+        )
         .mockResolvedValue(emptyRoomResponse('postType/post:1', 2));
 
       const callbacks = createMockCallbacks();
@@ -580,6 +590,135 @@ describe('SyncClient', () => {
       // One follow-up poll should fire
       await vi.advanceTimersByTimeAsync(0);
       expect(apiClient.sendSyncUpdate).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('waitForFirstPoll()', () => {
+    it('resolves after the first successful poll cycle', async () => {
+      apiClient.sendSyncUpdate.mockResolvedValue(emptyRoomResponse('postType/post:1', 1));
+      const callbacks = createMockCallbacks();
+
+      const firstPollPromise = syncClient.waitForFirstPoll();
+
+      let resolved = false;
+      void firstPollPromise.then(() => {
+        resolved = true;
+      });
+
+      syncClient.start('postType/post:1', 100, [], callbacks);
+
+      // Before the poll fires, the promise should not be resolved
+      expect(resolved).toBe(false);
+
+      // Trigger the first poll
+      await vi.advanceTimersByTimeAsync(0);
+
+      // The promise should now be resolved
+      expect(resolved).toBe(true);
+    });
+
+    it('does not resolve if the first poll fails', async () => {
+      apiClient.sendSyncUpdate
+        .mockRejectedValueOnce(new Error('Network error'))
+        .mockResolvedValue(emptyRoomResponse('postType/post:1', 1));
+
+      const callbacks = createMockCallbacks();
+
+      const firstPollPromise = syncClient.waitForFirstPoll();
+
+      let resolved = false;
+      void firstPollPromise.then(() => {
+        resolved = true;
+      });
+
+      syncClient.start('postType/post:1', 100, [], callbacks);
+
+      // First poll fails
+      await vi.advanceTimersByTimeAsync(0);
+      expect(resolved).toBe(false);
+
+      // Second poll succeeds — firstPollResolve should fire
+      await vi.advanceTimersByTimeAsync(config.pollingInterval * 2);
+      expect(resolved).toBe(true);
+    });
+  });
+
+  describe('scheduleNextPoll() early return', () => {
+    it('does not schedule a new timer after stop()', async () => {
+      // We test the early return in scheduleNextPoll() by stopping the client
+      // during a poll, then verifying no further polls are scheduled.
+      let resolvePoll!: (value: SyncResponse) => void;
+      apiClient.sendSyncUpdate
+        .mockReturnValueOnce(
+          new Promise<SyncResponse>((resolve) => {
+            resolvePoll = resolve;
+          }),
+        )
+        .mockResolvedValue(emptyRoomResponse('postType/post:1', 2));
+
+      const callbacks = createMockCallbacks();
+      syncClient.start('postType/post:1', 100, [], callbacks);
+
+      // Trigger first poll (it will be pending)
+      await vi.advanceTimersByTimeAsync(0);
+      expect(apiClient.sendSyncUpdate).toHaveBeenCalledTimes(1);
+
+      // Stop while the poll is in progress — this sets isPolling = false
+      // Note: stop() clears rooms, so the poll will return early after resolve.
+      // But we need to test that scheduleNextPoll exits early.
+      // Instead, we use a different approach: create a new client, start it,
+      // let one poll succeed, then stop it. After stopping, advancing timers
+      // should not trigger another poll.
+      resolvePoll(emptyRoomResponse('postType/post:1', 1));
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Now the client has scheduled a next poll via scheduleNextPoll()
+      // Stop the client — this clears the timer
+      syncClient.stop();
+
+      // Verify no more polls happen after stop
+      apiClient.sendSyncUpdate.mockClear();
+      await vi.advanceTimersByTimeAsync(config.pollingInterval * 10);
+      expect(apiClient.sendSyncUpdate).not.toHaveBeenCalled();
+    });
+
+    it('scheduleNextPoll early-returns when isPolling is false during poll completion', async () => {
+      // This specifically targets the early return on line 319.
+      // We simulate: poll is in-progress, then we stop() which sets isPolling=false,
+      // then the poll completes and calls scheduleNextPoll() which should early-return.
+      let resolvePoll!: (value: SyncResponse) => void;
+      apiClient.sendSyncUpdate
+        .mockReturnValueOnce(
+          new Promise<SyncResponse>((resolve) => {
+            resolvePoll = resolve;
+          }),
+        )
+        .mockResolvedValue(emptyRoomResponse('postType/post:1', 2));
+
+      // Use a fresh client so stop() doesn't interfere with the shared one
+      const freshClient = new SyncClient(apiClient, config);
+
+      const callbacks = createMockCallbacks();
+      freshClient.start('postType/post:1', 100, [], callbacks);
+
+      // Trigger first poll (pending)
+      await vi.advanceTimersByTimeAsync(0);
+      expect(apiClient.sendSyncUpdate).toHaveBeenCalledTimes(1);
+
+      // Stop the client while poll is in-progress.
+      // This sets isPolling = false and clears rooms.
+      freshClient.stop();
+
+      // Now resolve the pending poll. The poll() method will see rooms.size === 0
+      // after processResponse (rooms were cleared). After the try/catch, it will
+      // call scheduleNextPoll() which should hit the early return since isPolling is false.
+      apiClient.sendSyncUpdate.mockClear();
+      resolvePoll(emptyRoomResponse('postType/post:1', 1));
+      await vi.advanceTimersByTimeAsync(0);
+
+      // No new poll should be scheduled
+      await vi.advanceTimersByTimeAsync(config.pollingInterval * 10);
+      expect(apiClient.sendSyncUpdate).not.toHaveBeenCalled();
     });
   });
 
@@ -634,9 +773,7 @@ describe('SyncClient', () => {
     });
 
     it('removeRoom removes a room from poll payload', async () => {
-      apiClient.sendSyncUpdate.mockResolvedValue(
-        emptyRoomResponse(ROOM_A, 1),
-      );
+      apiClient.sendSyncUpdate.mockResolvedValue(emptyRoomResponse(ROOM_A, 1));
 
       const callbacks = createMockCallbacks();
       syncClient.start(ROOM_A, 100, [], callbacks);
@@ -666,9 +803,9 @@ describe('SyncClient', () => {
       syncClient.start(ROOM_A, 100, [], callbacks);
 
       const roomCallbacks = createMockRoomCallbacks();
-      expect(() => syncClient.addRoom(ROOM_A, 200, [], roomCallbacks)).toThrow(
-        `Room '${ROOM_A}' is already registered`,
-      );
+      expect(() => {
+        syncClient.addRoom(ROOM_A, 200, [], roomCallbacks);
+      }).toThrow(`Room '${ROOM_A}' is already registered`);
     });
 
     it('per-room cursor tracking', async () => {
@@ -759,7 +896,7 @@ describe('SyncClient', () => {
       expect(callbacksB.onAwareness).toHaveBeenCalledWith({});
     });
 
-    it('error recovery restores all rooms\' queues', async () => {
+    it("error recovery restores all rooms' queues", async () => {
       apiClient.sendSyncUpdate
         .mockResolvedValueOnce(
           multiRoomResponse([

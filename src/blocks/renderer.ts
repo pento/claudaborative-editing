@@ -70,7 +70,7 @@ export function renderBlock(block: Block, index: string): string {
     .join(', ');
 
   const metadata = block.attributes.metadata as Record<string, unknown> | undefined;
-  const hasNote = metadata?.noteId != null;
+  const hasNote = metadata?.noteId !== null && metadata?.noteId !== undefined;
 
   const header = attrStr
     ? `[${index}] ${block.name} (${attrStr})${hasNote ? ' [has note]' : ''}`
@@ -97,17 +97,12 @@ export function renderBlock(block: Block, index: string): string {
  * @param parentIndex - Parent index prefix for nested blocks (e.g., "2" -> "2.0", "2.1")
  * @param indent - Current indentation level
  */
-function renderBlockList(
-  blocks: Block[],
-  parentIndex?: string,
-  indent: number = 0,
-): string {
+function renderBlockList(blocks: Block[], parentIndex?: string, indent: number = 0): string {
   const indentStr = '  '.repeat(indent);
 
   return blocks
     .map((block, i) => {
-      const index =
-        parentIndex !== undefined ? `${parentIndex}.${i}` : String(i);
+      const index = parentIndex !== undefined ? `${parentIndex}.${i}` : String(i);
       const rendered = renderBlock(block, index);
       // Indent each line of the rendered block
       if (indent > 0) {
@@ -144,19 +139,13 @@ function getBlockTextContent(block: Block): string {
  * Skip 'content', 'text', 'value' (shown separately as text content)
  * Skip complex objects/arrays
  */
-function getDisplayAttributes(
-  block: Block,
-): Record<string, string | number | boolean> {
+function getDisplayAttributes(block: Block): Record<string, string | number | boolean> {
   const skipKeys = new Set(['content', 'text', 'value', 'citation', 'metadata']);
   const result: Record<string, string | number | boolean> = {};
 
   for (const [key, val] of Object.entries(block.attributes)) {
     if (skipKeys.has(key)) continue;
-    if (
-      typeof val === 'string' ||
-      typeof val === 'number' ||
-      typeof val === 'boolean'
-    ) {
+    if (typeof val === 'string' || typeof val === 'number' || typeof val === 'boolean') {
       result[key] = val;
     }
   }

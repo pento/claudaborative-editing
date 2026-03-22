@@ -34,9 +34,15 @@ describe('getMimeType', () => {
   it('returns correct MIME type for document extensions', () => {
     expect(getMimeType('doc.pdf')).toBe('application/pdf');
     expect(getMimeType('doc.doc')).toBe('application/msword');
-    expect(getMimeType('doc.docx')).toBe('application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-    expect(getMimeType('slides.pptx')).toBe('application/vnd.openxmlformats-officedocument.presentationml.presentation');
-    expect(getMimeType('data.xlsx')).toBe('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    expect(getMimeType('doc.docx')).toBe(
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    );
+    expect(getMimeType('slides.pptx')).toBe(
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    );
+    expect(getMimeType('data.xlsx')).toBe(
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
   });
 
   it('handles uppercase extensions (case-insensitive)', () => {

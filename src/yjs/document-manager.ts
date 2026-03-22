@@ -15,11 +15,7 @@ import {
   CRDT_STATE_MAP_SAVED_BY_KEY,
   CRDT_STATE_MAP_VERSION_KEY,
 } from './types.js';
-import {
-  blockToYMap,
-  deltaUpdateYText,
-  yMapToBlock,
-} from './block-converter.js';
+import { blockToYMap, deltaUpdateYText, yMapToBlock } from './block-converter.js';
 import { BlockTypeRegistry } from './block-type-registry.js';
 
 export class DocumentManager {
@@ -111,9 +107,7 @@ export class DocumentManager {
    */
   getBlocks(doc: Y.Doc): Block[] {
     const documentMap = this.getDocumentMap(doc);
-    const blocksArray = documentMap.get('blocks') as
-      | Y.Array<Y.Map<unknown>>
-      | undefined;
+    const blocksArray = documentMap.get('blocks') as Y.Array<Y.Map<unknown>> | undefined;
     if (!blocksArray) {
       return [];
     }
@@ -131,9 +125,7 @@ export class DocumentManager {
   setBlocks(doc: Y.Doc, blocks: Block[]): void {
     doc.transact(() => {
       const documentMap = this.getDocumentMap(doc);
-      let blocksArray = documentMap.get('blocks') as Y.Array<
-        Y.Map<unknown>
-      > | undefined;
+      let blocksArray = documentMap.get('blocks') as Y.Array<Y.Map<unknown>> | undefined;
 
       if (!blocksArray) {
         blocksArray = new Y.Array<Y.Map<unknown>>();
@@ -199,10 +191,7 @@ export class DocumentManager {
 
       if (changes.attributes) {
         for (const [key, value] of Object.entries(changes.attributes)) {
-          if (
-            this.registry.isRichTextAttribute(blockName, key) &&
-            typeof value === 'string'
-          ) {
+          if (this.registry.isRichTextAttribute(blockName, key) && typeof value === 'string') {
             const existing = attrMap.get(key);
             if (existing instanceof Y.Text) {
               deltaUpdateYText(existing, value);
@@ -225,9 +214,7 @@ export class DocumentManager {
   insertBlock(doc: Y.Doc, position: number, block: Block): void {
     doc.transact(() => {
       const documentMap = this.getDocumentMap(doc);
-      let blocksArray = documentMap.get('blocks') as Y.Array<
-        Y.Map<unknown>
-      > | undefined;
+      let blocksArray = documentMap.get('blocks') as Y.Array<Y.Map<unknown>> | undefined;
       if (!blocksArray) {
         blocksArray = new Y.Array<Y.Map<unknown>>();
         documentMap.set('blocks', blocksArray);
@@ -243,9 +230,7 @@ export class DocumentManager {
   removeBlocks(doc: Y.Doc, startIndex: number, count: number): void {
     doc.transact(() => {
       const documentMap = this.getDocumentMap(doc);
-      const blocksArray = documentMap.get('blocks') as Y.Array<
-        Y.Map<unknown>
-      >;
+      const blocksArray = documentMap.get('blocks') as Y.Array<Y.Map<unknown>>;
       blocksArray.delete(startIndex, count);
     });
   }
@@ -296,9 +281,7 @@ export class DocumentManager {
   moveBlock(doc: Y.Doc, fromIndex: number, toIndex: number): void {
     doc.transact(() => {
       const documentMap = this.getDocumentMap(doc);
-      const blocksArray = documentMap.get('blocks') as Y.Array<
-        Y.Map<unknown>
-      >;
+      const blocksArray = documentMap.get('blocks') as Y.Array<Y.Map<unknown>>;
 
       // Read the block at fromIndex as a plain object, then re-insert
       const block = yMapToBlock(blocksArray.get(fromIndex));
@@ -432,9 +415,7 @@ export class DocumentManager {
       }
 
       const attrMap = ymap.get('attributes') as Y.Map<unknown>;
-      const currentMetadata = attrMap.get('metadata') as
-        | Record<string, unknown>
-        | undefined;
+      const currentMetadata = attrMap.get('metadata') as Record<string, unknown> | undefined;
 
       if (!currentMetadata || !('noteId' in currentMetadata)) {
         return;
@@ -453,15 +434,10 @@ export class DocumentManager {
    * Resolve a dot-notation index to a Y.Map block reference.
    * E.g., "2" → top-level block 2, "2.1" → inner block 1 of block 2.
    */
-  private _resolveBlockYMap(
-    doc: Y.Doc,
-    index: string,
-  ): Y.Map<unknown> | null {
+  private _resolveBlockYMap(doc: Y.Doc, index: string): Y.Map<unknown> | null {
     const parts = index.split('.').map(Number);
     const documentMap = this.getDocumentMap(doc);
-    const blocksArray = documentMap.get('blocks') as Y.Array<
-      Y.Map<unknown>
-    >;
+    const blocksArray = documentMap.get('blocks') as Y.Array<Y.Map<unknown>>;
 
     if (parts.length === 0 || isNaN(parts[0])) {
       return null;
@@ -476,9 +452,7 @@ export class DocumentManager {
       }
       current = currentArray.get(part);
       // For next iteration, if there are more parts, descend into innerBlocks
-      const innerBlocks = current.get('innerBlocks') as
-        | Y.Array<Y.Map<unknown>>
-        | undefined;
+      const innerBlocks = current.get('innerBlocks') as Y.Array<Y.Map<unknown>> | undefined;
       if (innerBlocks) {
         currentArray = innerBlocks;
       }

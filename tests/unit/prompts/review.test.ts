@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createMockServer, createMockSession, fakePost, fakeNote } from './helpers.js';
 import { registerReviewPrompts } from '../../../src/prompts/review.js';
-import type { RegisteredPrompt } from './helpers.js';
 
 describe('review', () => {
   describe('when disconnected', () => {
@@ -10,7 +9,7 @@ describe('review', () => {
       const session = createMockSession({ state: 'disconnected' });
       registerReviewPrompts(server, session);
 
-      const prompt = server.registeredPrompts.get('review')! as RegisteredPrompt;
+      const prompt = server.registeredPrompts.get('review')!;
       const result = await prompt.handler({});
 
       const text = result.messages[0].content.text;
@@ -24,7 +23,7 @@ describe('review', () => {
       const session = createMockSession({ state: 'connected' });
       registerReviewPrompts(server, session);
 
-      const prompt = server.registeredPrompts.get('review')! as RegisteredPrompt;
+      const prompt = server.registeredPrompts.get('review')!;
       const result = await prompt.handler({});
 
       const text = result.messages[0].content.text;
@@ -38,7 +37,7 @@ describe('review', () => {
       const session = createMockSession({ state: 'editing', post: fakePost });
       registerReviewPrompts(server, session);
 
-      const prompt = server.registeredPrompts.get('review')! as RegisteredPrompt;
+      const prompt = server.registeredPrompts.get('review')!;
       const result = await prompt.handler({});
 
       const text = result.messages[0].content.text;
@@ -54,7 +53,7 @@ describe('review', () => {
       (session.getNotesSupported as any).mockReturnValue(false);
       registerReviewPrompts(server, session);
 
-      const prompt = server.registeredPrompts.get('review')! as RegisteredPrompt;
+      const prompt = server.registeredPrompts.get('review')!;
       const result = await prompt.handler({});
 
       const text = result.messages[0].content.text;
@@ -68,7 +67,7 @@ describe('review', () => {
       const session = createMockSession({ state: 'editing', post: fakePost });
       registerReviewPrompts(server, session);
 
-      const prompt = server.registeredPrompts.get('review')! as RegisteredPrompt;
+      const prompt = server.registeredPrompts.get('review')!;
       const result = await prompt.handler({});
 
       const text = result.messages[0].content.text;
@@ -80,7 +79,7 @@ describe('review', () => {
       const session = createMockSession({ state: 'editing', post: fakePost });
       registerReviewPrompts(server, session);
 
-      const prompt = server.registeredPrompts.get('review')! as RegisteredPrompt;
+      const prompt = server.registeredPrompts.get('review')!;
       const result = await prompt.handler({});
 
       const text = result.messages[0].content.text;
@@ -96,7 +95,7 @@ describe('respond-to-notes', () => {
       const session = createMockSession({ state: 'disconnected' });
       registerReviewPrompts(server, session);
 
-      const prompt = server.registeredPrompts.get('respond-to-notes')! as RegisteredPrompt;
+      const prompt = server.registeredPrompts.get('respond-to-notes')!;
       const result = await prompt.handler({});
 
       const text = result.messages[0].content.text;
@@ -110,7 +109,7 @@ describe('respond-to-notes', () => {
       const session = createMockSession({ state: 'connected' });
       registerReviewPrompts(server, session);
 
-      const prompt = server.registeredPrompts.get('respond-to-notes')! as RegisteredPrompt;
+      const prompt = server.registeredPrompts.get('respond-to-notes')!;
       const result = await prompt.handler({});
 
       const text = result.messages[0].content.text;
@@ -125,7 +124,7 @@ describe('respond-to-notes', () => {
       (session.getNotesSupported as any).mockReturnValue(false);
       registerReviewPrompts(server, session);
 
-      const prompt = server.registeredPrompts.get('respond-to-notes')! as RegisteredPrompt;
+      const prompt = server.registeredPrompts.get('respond-to-notes')!;
       const result = await prompt.handler({});
 
       const text = result.messages[0].content.text;
@@ -137,7 +136,7 @@ describe('respond-to-notes', () => {
       const session = createMockSession({ state: 'editing', post: fakePost });
       registerReviewPrompts(server, session);
 
-      const prompt = server.registeredPrompts.get('respond-to-notes')! as RegisteredPrompt;
+      const prompt = server.registeredPrompts.get('respond-to-notes')!;
       const result = await prompt.handler({});
 
       const text = result.messages[0].content.text;
@@ -153,7 +152,7 @@ describe('respond-to-notes', () => {
       });
       registerReviewPrompts(server, session);
 
-      const prompt = server.registeredPrompts.get('respond-to-notes')! as RegisteredPrompt;
+      const prompt = server.registeredPrompts.get('respond-to-notes')!;
       const result = await prompt.handler({});
 
       const text = result.messages[0].content.text;
@@ -183,7 +182,7 @@ describe('respond-to-notes', () => {
       });
       registerReviewPrompts(server, session);
 
-      const prompt = server.registeredPrompts.get('respond-to-notes')! as RegisteredPrompt;
+      const prompt = server.registeredPrompts.get('respond-to-notes')!;
       const result = await prompt.handler({});
 
       const text = result.messages[0].content.text;

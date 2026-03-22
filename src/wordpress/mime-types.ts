@@ -67,7 +67,7 @@ export function getMimeType(fileName: string): string {
   if (!mime) {
     throw new Error(
       `Unsupported file type: ${ext || '(no extension)'}. ` +
-      `Supported types: ${Object.keys(MIME_TYPES).join(', ')}`,
+        `Supported types: ${Object.keys(MIME_TYPES).join(', ')}`,
     );
   }
   return mime;

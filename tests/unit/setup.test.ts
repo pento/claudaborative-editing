@@ -52,9 +52,7 @@ describe('setup wizard', () => {
 
   it('outputs mcp add command on successful validation', async () => {
     fetchMock
-      .mockResolvedValueOnce(
-        mockResponse({ id: 1, name: 'admin', slug: 'admin', avatar_urls: {} }),
-      )
+      .mockResolvedValueOnce(mockResponse({ id: 1, name: 'admin', slug: 'admin', avatar_urls: {} }))
       .mockResolvedValueOnce(mockResponse({ rooms: [] }));
 
     const { deps, logs } = createTestDeps(['https://example.com', 'admin', 'xxxx xxxx xxxx']);
@@ -86,9 +84,7 @@ describe('setup wizard', () => {
 
   it('exits with error when sync endpoint returns 404', async () => {
     fetchMock
-      .mockResolvedValueOnce(
-        mockResponse({ id: 1, name: 'admin', slug: 'admin', avatar_urls: {} }),
-      )
+      .mockResolvedValueOnce(mockResponse({ id: 1, name: 'admin', slug: 'admin', avatar_urls: {} }))
       .mockResolvedValueOnce(
         mockResponse(
           { code: 'rest_no_route', message: 'No route' },
@@ -111,18 +107,71 @@ describe('setup wizard', () => {
     expect(errors.join('\n')).toContain('Site URL is required');
   });
 
+  it('exits with error when username is empty', async () => {
+    const { deps, errors } = createTestDeps(['https://example.com', '', 'xxxx']);
+
+    await expect(runSetup(deps)).rejects.toThrow(SetupExitError);
+
+    expect(errors.join('\n')).toContain('Username is required');
+  });
+
+  it('exits with error when application password is empty', async () => {
+    const { deps, errors } = createTestDeps(['https://example.com', 'admin', '']);
+
+    await expect(runSetup(deps)).rejects.toThrow(SetupExitError);
+
+    expect(errors.join('\n')).toContain('Application Password is required');
+  });
+
+  it('exits with generic connection error on non-API auth failure', async () => {
+    fetchMock.mockRejectedValueOnce(new Error('ECONNREFUSED'));
+
+    const { deps, errors } = createTestDeps(['https://example.com', 'admin', 'xxxx xxxx xxxx']);
+
+    await expect(runSetup(deps)).rejects.toThrow(SetupExitError);
+
+    expect(errors.join('\n')).toContain('Could not connect to https://example.com');
+  });
+
+  it('exits with API error message on non-404 sync endpoint failure', async () => {
+    fetchMock
+      .mockResolvedValueOnce(mockResponse({ id: 1, name: 'admin', slug: 'admin', avatar_urls: {} }))
+      .mockResolvedValueOnce(
+        mockResponse(
+          { code: 'internal_server_error', message: 'Something broke' },
+          { status: 500, statusText: 'Internal Server Error' },
+        ),
+      );
+
+    const { deps, errors } = createTestDeps(['https://example.com', 'admin', 'xxxx xxxx xxxx']);
+
+    await expect(runSetup(deps)).rejects.toThrow(SetupExitError);
+
+    const errorOutput = errors.join('\n');
+    // Should NOT contain the 404-specific collaborative editing message
+    expect(errorOutput).not.toContain('Collaborative editing is not enabled');
+    // Should contain the API error message (formatted by apiFetch)
+    expect(errorOutput).toMatch(/Something broke|Internal Server Error|500/);
+  });
+
+  it('exits with generic sync error on non-API sync endpoint failure', async () => {
+    fetchMock
+      .mockResolvedValueOnce(mockResponse({ id: 1, name: 'admin', slug: 'admin', avatar_urls: {} }))
+      .mockRejectedValueOnce(new Error('network timeout'));
+
+    const { deps, errors } = createTestDeps(['https://example.com', 'admin', 'xxxx xxxx xxxx']);
+
+    await expect(runSetup(deps)).rejects.toThrow(SetupExitError);
+
+    expect(errors.join('\n')).toContain('Could not validate the sync endpoint');
+  });
+
   it('quotes values with spaces in the mcp add command', async () => {
     fetchMock
-      .mockResolvedValueOnce(
-        mockResponse({ id: 1, name: 'admin', slug: 'admin', avatar_urls: {} }),
-      )
+      .mockResolvedValueOnce(mockResponse({ id: 1, name: 'admin', slug: 'admin', avatar_urls: {} }))
       .mockResolvedValueOnce(mockResponse({ rooms: [] }));
 
-    const { deps, logs } = createTestDeps([
-      'https://example.com',
-      'admin',
-      'xxxx xxxx xxxx xxxx',
-    ]);
+    const { deps, logs } = createTestDeps(['https://example.com', 'admin', 'xxxx xxxx xxxx xxxx']);
 
     await runSetup(deps);
 
