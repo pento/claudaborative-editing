@@ -1,23 +1,120 @@
 /**
  * Interactive setup wizard for claudaborative-editing.
  *
- * Prompts for WordPress credentials, validates them, and outputs
- * the `claude mcp add` command the user can copy-paste.
+ * Collects WordPress credentials (via browser auth or manual entry),
+ * validates them, detects installed MCP clients, and configures them.
  */
 
 import { createInterface } from 'readline';
 import { WordPressApiClient, WordPressApiError } from '../wordpress/api-client.js';
+import { openAuthPage } from './auth-server.js';
+import { detectInstalledClients, SERVER_NAME } from './clients.js';
+import {
+  addServerToConfig,
+  buildServerEntry,
+  hasServerInConfig,
+  removeServerFromConfig,
+} from './config-writer.js';
+import { checkboxPrompt } from './checkbox-prompt.js';
+import type { CheckboxItem, CheckboxOptions, CheckboxResult } from './checkbox-prompt.js';
+import type { BrowserAuthOptions } from './auth-server.js';
+import type { McpClientConfig, McpClientType, SetupOptions, WpCredentials } from './types.js';
 
 export interface SetupDeps {
   prompt: (question: string) => Promise<string>;
+  /** Prompt for sensitive input, masking characters with '*' */
+  promptSecret: (question: string) => Promise<string>;
   log: (message: string) => void;
   error: (message: string) => void;
   exit: (code: number) => never;
   cleanup: () => void;
+  /** Override browser auth page opener for testing */
+  openAuth?: (siteUrl: string, options?: BrowserAuthOptions) => Promise<string>;
+  /** Override client detection for testing */
+  detectClients?: () => Array<{ type: McpClientType; config: McpClientConfig; detected: boolean }>;
+  /** Override config writing for testing */
+  writeConfig?: (config: McpClientConfig, credentials: WpCredentials) => Promise<boolean>;
+  /** Override config removal for testing */
+  removeConfig?: (config: McpClientConfig) => Promise<boolean>;
+  /** Override config existence check for testing */
+  hasConfig?: (config: McpClientConfig) => boolean;
+  /** Override interactive checkbox selection for testing */
+  selectCheckbox?: (items: CheckboxItem[], options?: CheckboxOptions) => Promise<CheckboxResult>;
+}
+
+/**
+ * Read a line from stdin with each character masked as '*'.
+ * Uses raw mode to intercept keystrokes before they echo.
+ */
+function readMasked(question: string): Promise<string> {
+  return new Promise((resolve) => {
+    process.stdout.write(question);
+
+    if (!process.stdin.isTTY) {
+      // Non-interactive: fall back to plain readline (e.g., piped input in tests)
+      const rl = createInterface({ input: process.stdin, output: process.stdout });
+      rl.question('', (answer) => {
+        rl.close();
+        resolve(answer.trim());
+      });
+      return;
+    }
+
+    const raw = process.stdin;
+    raw.setRawMode(true);
+    raw.resume();
+    raw.setEncoding('utf8');
+
+    let input = '';
+    let finished = false;
+
+    const onData = (chunk: string): void => {
+      // Pasted text arrives as a single multi-character string.
+      // Process each character individually so masking and
+      // special-key handling work correctly.
+      for (const c of chunk) {
+        if (finished) {
+          break;
+        }
+        if (c === '\n' || c === '\r') {
+          finished = true;
+          raw.setRawMode(false);
+          raw.pause();
+          raw.removeListener('data', onData);
+          process.stdout.write('\n');
+          resolve(input.trim());
+        } else if (c === '\u0003') {
+          raw.setRawMode(false);
+          process.exit(130);
+        } else if (c === '\u007F' || c === '\b') {
+          if (input.length > 0) {
+            input = input.slice(0, -1);
+            process.stdout.write('\b \b');
+          }
+        } else if (c.charCodeAt(0) >= 32) {
+          // Only append printable characters (ignore other control chars)
+          input += c;
+          process.stdout.write('*');
+        }
+      }
+    };
+    raw.on('data', onData);
+  });
 }
 
 function defaultDeps(): SetupDeps {
-  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  // readline must be closed before any raw-mode operation (promptSecret,
+  // selectCheckbox) and reopened after, because readline attaches its own
+  // listeners to stdin that intercept keystrokes.
+  let rl = createInterface({ input: process.stdin, output: process.stdout });
+
+  function closeRl(): void {
+    rl.close();
+  }
+
+  function reopenRl(): void {
+    rl = createInterface({ input: process.stdin, output: process.stdout });
+  }
 
   return {
     prompt: (question: string) =>
@@ -26,6 +123,12 @@ function defaultDeps(): SetupDeps {
           resolve(answer.trim());
         });
       }),
+    promptSecret: (question: string) => {
+      closeRl();
+      return readMasked(question).finally(() => {
+        reopenRl();
+      });
+    },
     log: (msg) => {
       console.log(msg);
     },
@@ -33,113 +136,396 @@ function defaultDeps(): SetupDeps {
       console.error(`Error: ${msg}`);
     },
     exit: (code) => {
-      rl.close();
+      closeRl();
       return process.exit(code);
     },
     cleanup: () => {
-      rl.close();
+      closeRl();
+    },
+    selectCheckbox: (items: CheckboxItem[], opts?: CheckboxOptions) => {
+      closeRl();
+      return checkboxPrompt(items, opts).finally(() => {
+        reopenRl();
+      });
     },
   };
 }
 
-export async function runSetup(deps: SetupDeps = defaultDeps()): Promise<void> {
-  const { prompt, log, error, exit, cleanup } = deps;
-
-  log('');
-  log('claudaborative-editing setup');
-  log('============================');
-  log('');
-  log('This wizard will validate your WordPress credentials and give you');
-  log('the command to register this MCP server with Claude Code.');
-  log('');
-  log('Prerequisites:');
-  log('  - WordPress 7.0+ with collaborative editing enabled');
-  log('    (Settings → Writing in your WordPress admin)');
-  log('  - An Application Password for your WordPress user');
-  log('    (Users → Your Profile → Application Passwords)');
-  log('');
-
-  // 1. Collect credentials
-  const siteUrl = await prompt('WordPress site URL: ');
-  if (!siteUrl) {
-    error('Site URL is required.');
-    exit(1);
+export async function runSetup(
+  deps: SetupDeps = defaultDeps(),
+  options: SetupOptions = {},
+): Promise<void> {
+  if (options.remove) {
+    await runRemove(deps);
+    return;
   }
 
-  const username = await prompt('WordPress username: ');
+  deps.log('');
+  deps.log('claudaborative-editing setup');
+  deps.log('============================');
+  deps.log('');
+  deps.log('Prerequisites:');
+  deps.log('  - WordPress 7.0+ with collaborative editing enabled');
+  deps.log('    (Settings → Writing in your WordPress admin)');
+  deps.log('');
+
+  // 1. Collect credentials (browser or manual)
+  const credentials = await collectCredentials(deps, options);
+
+  // 2. Validate credentials
+  await validateCredentials(deps, credentials);
+
+  // 3. Detect and select clients
+  const selectedClients = await detectAndSelectClients(deps, options);
+
+  // 4. Configure selected clients
+  await configureClients(deps, credentials, selectedClients);
+
+  deps.log('');
+  deps.log('Done! Restart your MCP clients to start editing.');
+
+  deps.cleanup();
+}
+
+// ---------------------------------------------------------------------------
+// Credential collection
+// ---------------------------------------------------------------------------
+
+async function collectCredentials(deps: SetupDeps, options: SetupOptions): Promise<WpCredentials> {
+  if (options.manual || options.client) {
+    return collectManualCredentials(deps);
+  }
+  return collectBrowserCredentials(deps);
+}
+
+async function collectManualCredentials(deps: SetupDeps): Promise<WpCredentials> {
+  const rawUrl = await deps.prompt('WordPress site URL: ');
+  if (!rawUrl) {
+    deps.error('Site URL is required.');
+    deps.exit(1);
+  }
+  const siteUrl = normalizeSiteUrl(rawUrl);
+
+  const username = await deps.prompt('WordPress username: ');
   if (!username) {
-    error('Username is required.');
-    exit(1);
+    deps.error('Username is required.');
+    deps.exit(1);
   }
 
-  const appPassword = await prompt('Application Password: ');
+  deps.log('  Create an Application Password at:');
+  deps.log('  Users → Your Profile → Application Passwords');
+  deps.log('');
+
+  const appPassword = await deps.promptSecret('Application Password: ');
   if (!appPassword) {
-    error('Application Password is required.');
-    exit(1);
+    deps.error('Application Password is required.');
+    deps.exit(1);
   }
 
-  log('');
-  log('Validating credentials...');
+  return { siteUrl, username, appPassword };
+}
 
-  // 2. Validate auth
+async function collectBrowserCredentials(deps: SetupDeps): Promise<WpCredentials> {
+  const rawUrl = await deps.prompt('WordPress site URL: ');
+  if (!rawUrl) {
+    deps.error('Site URL is required.');
+    deps.exit(1);
+  }
+  const siteUrl = normalizeSiteUrl(rawUrl);
+
+  deps.log('');
+  deps.log('Opening your browser to authorize with WordPress...');
+  deps.log('Approve the connection, then copy the credentials shown on the page.');
+  deps.log('');
+
+  const doOpen = deps.openAuth ?? openAuthPage;
+  const authUrl = await doOpen(siteUrl);
+  deps.log(`If the browser didn't open, visit:`);
+  deps.log(`  ${authUrl}`);
+  deps.log('');
+
+  const username = await deps.prompt('WordPress username (shown after approval): ');
+  if (!username) {
+    deps.error('Username is required.');
+    deps.exit(1);
+  }
+
+  const appPassword = await deps.promptSecret('Application Password (shown after approval): ');
+  if (!appPassword) {
+    deps.error('Application Password is required.');
+    deps.exit(1);
+  }
+
+  return { siteUrl, username, appPassword };
+}
+
+// ---------------------------------------------------------------------------
+// Credential validation
+// ---------------------------------------------------------------------------
+
+async function validateCredentials(deps: SetupDeps, credentials: WpCredentials): Promise<void> {
+  deps.log('');
+  deps.log('Validating credentials...');
+
   const client = new WordPressApiClient({
-    siteUrl,
-    username,
-    appPassword,
+    siteUrl: credentials.siteUrl,
+    username: credentials.username,
+    appPassword: credentials.appPassword,
   });
 
-  let displayName: string;
   try {
     const user = await client.validateConnection();
-    displayName = user.name ?? username;
-    log(`  ✓ Authenticated as "${displayName}"`);
+    const displayName = user.name ?? credentials.username;
+    deps.log(`  ✓ Authenticated as "${displayName}"`);
   } catch (err) {
     if (err instanceof WordPressApiError) {
-      error(err.message);
+      deps.error(err.message);
     } else {
-      error(`Could not connect to ${siteUrl}. Check the URL and try again.`);
+      deps.error(`Could not connect to ${credentials.siteUrl}. Check the URL and try again.`);
     }
-    exit(1);
+    deps.exit(1);
   }
 
-  // 3. Validate sync endpoint
   try {
     await client.validateSyncEndpoint();
-    log('  ✓ Collaborative editing endpoint available');
+    deps.log('  ✓ Collaborative editing endpoint available');
   } catch (err) {
     if (err instanceof WordPressApiError && err.status === 404) {
-      log('');
-      error(
+      deps.log('');
+      deps.error(
         'Collaborative editing is not enabled.\n' +
           '  Go to Settings → Writing in your WordPress admin and enable it.\n' +
           '  (Requires WordPress 7.0 or later.)',
       );
-      exit(1);
+      deps.exit(1);
     }
     if (err instanceof WordPressApiError) {
-      error(err.message);
+      deps.error(err.message);
     } else {
-      error('Could not validate the sync endpoint.');
+      deps.error('Could not validate the sync endpoint.');
     }
-    exit(1);
+    deps.exit(1);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Client detection and selection
+// ---------------------------------------------------------------------------
+
+async function detectAndSelectClients(
+  deps: SetupDeps,
+  options: SetupOptions,
+): Promise<McpClientConfig[]> {
+  // Single-client mode: skip detection UI
+  if (options.client) {
+    const allClients = deps.detectClients?.() ?? detectInstalledClients();
+    const match = allClients.find((c) => c.type === options.client);
+    if (!match) {
+      deps.error(`Unknown client: ${options.client}`);
+      deps.exit(1);
+    }
+    return [match.config];
   }
 
-  log('');
-  log('Setup complete! Run this command to register the MCP server:');
-  log('');
+  const clients = deps.detectClients?.() ?? detectInstalledClients();
 
-  // Build the env flags
-  const envFlags = [
-    `-e WP_SITE_URL=${shellQuote(siteUrl)}`,
-    `-e WP_USERNAME=${shellQuote(username)}`,
-    `-e WP_APP_PASSWORD=${shellQuote(appPassword)}`,
-  ].join(' ');
+  // Sort: detected first, then undetected, preserving order within each group
+  const sorted = [...clients.filter((c) => c.detected), ...clients.filter((c) => !c.detected)];
 
-  log(`  claude mcp add wpce ${envFlags} -- npx claudaborative-editing`);
-  log('');
+  deps.log('');
+  deps.log('Select MCP clients to configure:');
+  deps.log('  (use ↑↓ to move, space to toggle, enter to confirm)');
+  deps.log('');
 
-  cleanup();
+  const items: CheckboxItem[] = sorted.map((c) => ({
+    label: c.config.displayName,
+    hint: c.detected ? undefined : '(not detected)',
+    selected: c.detected,
+  }));
+
+  const doSelect = deps.selectCheckbox ?? checkboxPrompt;
+  const result = await doSelect(items, { requireSelection: true });
+
+  return result.selected.map((i) => sorted[i].config);
 }
+
+// ---------------------------------------------------------------------------
+// Client configuration
+// ---------------------------------------------------------------------------
+
+async function configureClients(
+  deps: SetupDeps,
+  credentials: WpCredentials,
+  selectedClients: McpClientConfig[],
+): Promise<void> {
+  if (selectedClients.length === 0) {
+    return;
+  }
+
+  deps.log('');
+  deps.log('Configuring MCP clients...');
+
+  for (const client of selectedClients) {
+    await configureSingleClient(deps, credentials, client);
+  }
+}
+
+async function configureSingleClient(
+  deps: SetupDeps,
+  credentials: WpCredentials,
+  client: McpClientConfig,
+): Promise<void> {
+  // Check if entry already exists
+  const exists =
+    deps.hasConfig?.(client) ??
+    hasServerInConfig(client.configPath(), client.configKey, SERVER_NAME);
+  if (exists) {
+    const answer = await deps.prompt(
+      `${client.displayName}: entry already exists. Update? (Y/n): `,
+    );
+    if (answer !== '' && !/^[yY]/.test(answer)) {
+      deps.log(`  - ${client.displayName} — skipped`);
+      return;
+    }
+  }
+
+  try {
+    // If a full write override is provided (e.g., for testing), use it exclusively
+    if (deps.writeConfig) {
+      const result = await deps.writeConfig(client, credentials);
+      if (result) {
+        deps.log(`  ✓ ${client.displayName} — configured via CLI`);
+      } else {
+        deps.log(`  ✗ ${client.displayName} — configuration returned false`);
+      }
+      return;
+    }
+
+    // Try CLI first if available
+    if (client.useCli) {
+      const cliResult = await client.useCli(credentials);
+      if (cliResult) {
+        deps.log(`  ✓ ${client.displayName} — configured via CLI`);
+        return;
+      }
+    }
+
+    // Fall back to config file writing
+    addServerToConfig(
+      client.configPath(),
+      client.configKey,
+      SERVER_NAME,
+      buildServerEntry(credentials),
+    );
+    deps.log(`  ✓ ${client.displayName} — written to ${client.configPath()}`);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    deps.log(`  ✗ ${client.displayName} — failed: ${message}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Remove flow
+// ---------------------------------------------------------------------------
+
+async function runRemove(deps: SetupDeps): Promise<void> {
+  deps.log('');
+  deps.log('claudaborative-editing remove');
+  deps.log('=============================');
+  deps.log('');
+
+  const clients = deps.detectClients?.() ?? detectInstalledClients();
+
+  // Find which clients have our entry
+  const configured = clients.filter(
+    (c) =>
+      deps.hasConfig?.(c.config) ??
+      hasServerInConfig(c.config.configPath(), c.config.configKey, SERVER_NAME),
+  );
+
+  if (configured.length === 0) {
+    deps.log('No MCP clients have claudaborative-editing configured.');
+    deps.cleanup();
+    return;
+  }
+
+  deps.log('Select clients to remove from:');
+  deps.log('  (use ↑↓ to move, space to toggle, enter to confirm)');
+  deps.log('');
+
+  const removeItems: CheckboxItem[] = configured.map((c) => ({
+    label: c.config.displayName,
+    selected: true,
+  }));
+
+  const doSelect = deps.selectCheckbox ?? checkboxPrompt;
+  const removeResult = await doSelect(removeItems, { requireSelection: true });
+
+  const selected = removeResult.selected.map((i) => configured[i]);
+
+  deps.log('');
+  for (const entry of selected) {
+    await removeSingleClient(deps, entry.config);
+  }
+
+  deps.log('');
+  deps.log('Done! Restart your MCP clients to complete removal.');
+  deps.cleanup();
+}
+
+async function removeSingleClient(deps: SetupDeps, client: McpClientConfig): Promise<void> {
+  try {
+    // If a full remove override is provided (e.g., for testing), use it exclusively
+    if (deps.removeConfig) {
+      const result = await deps.removeConfig(client);
+      if (result) {
+        deps.log(`  ✓ ${client.displayName} — removed via CLI`);
+      } else {
+        deps.log(`  - ${client.displayName} — removal returned false`);
+      }
+      return;
+    }
+
+    // Try CLI removal first
+    if (client.removeCli) {
+      const cliResult = await client.removeCli();
+      if (cliResult) {
+        deps.log(`  ✓ ${client.displayName} — removed via CLI`);
+        return;
+      }
+    }
+
+    // Fall back to config file removal
+    const removed = removeServerFromConfig(client.configPath(), client.configKey, SERVER_NAME);
+    if (removed) {
+      deps.log(`  ✓ ${client.displayName} — removed from ${client.configPath()}`);
+    } else {
+      deps.log(`  - ${client.displayName} — entry not found`);
+    }
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    deps.log(`  ✗ ${client.displayName} — failed: ${message}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// URL normalization
+// ---------------------------------------------------------------------------
+
+/**
+ * Ensure a site URL has a scheme. If the user enters a bare domain
+ * like "pento.net", prepend "https://".
+ */
+function normalizeSiteUrl(url: string): string {
+  if (/^https?:\/\//i.test(url)) {
+    return url;
+  }
+  return `https://${url}`;
+}
+
+// ---------------------------------------------------------------------------
+// Utilities
+// ---------------------------------------------------------------------------
 
 /**
  * Quote a value for safe shell use in the output command.

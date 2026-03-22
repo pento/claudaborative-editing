@@ -30,7 +30,11 @@ Claude Code  <--stdio-->  MCP Server (Node.js)  <--HTTP polling-->  WordPress
 
 - `src/index.ts` — Entry point: CLI flags (`--version`, `--help`, `setup`) then MCP server
 - `src/server.ts` — MCP server setup, tool/prompt registration, version export
-- `src/cli/setup.ts` — Interactive setup wizard (credential validation, outputs `claude mcp add` command)
+- `src/cli/setup.ts` — Interactive setup wizard (browser-based auth, multi-client config writing)
+- `src/cli/types.ts` — Shared CLI types (McpClientType, McpClientConfig, WpCredentials, SetupOptions)
+- `src/cli/clients.ts` — MCP client registry, detection, platform path resolution
+- `src/cli/config-writer.ts` — JSON config read/merge/write for MCP client settings files
+- `src/cli/auth-server.ts` — Local HTTP server for browser-based WordPress Application Password auth
 - `src/wordpress/` — REST API client, HTTP polling sync client, MIME type detection
 - `src/yjs/` — Y.Doc management, block ↔ Yjs conversion, sync protocol encoding
 - `src/session/` — Connection lifecycle, awareness/presence
@@ -122,7 +126,10 @@ The entry point (`src/index.ts`) handles CLI flags before starting the MCP serve
 
 - `--version` / `-v` — prints version from `package.json` (injected at build time via tsup `define`)
 - `--help` / `-h` — prints usage
-- `setup` — runs interactive setup wizard (`src/cli/setup.ts`)
+- `setup` — interactive setup wizard with browser-based WordPress auth and multi-client config writing
+- `setup --manual` — skip browser auth, prompt for credentials manually
+- `setup --remove` — remove claudaborative-editing config from MCP clients
+- `setup --client <name>` — configure a specific client only (valid: `claude-code`, `claude-desktop`, `vscode`, `vscode-insiders`, `cursor`, `windsurf`)
 - No args — starts the MCP server (stdio transport)
 
 The version is injected at build time: `tsup.config.ts` reads `package.json` and defines `__PKG_VERSION__`, which `src/server.ts` exports as `VERSION`.
