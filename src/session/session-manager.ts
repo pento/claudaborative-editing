@@ -25,6 +25,13 @@ import { parseBlocks, parsedBlockToBlock } from '../blocks/parser.js';
 import { renderPost, renderBlock } from '../blocks/renderer.js';
 import { buildAwarenessState, parseCollaborators } from './awareness.js';
 import { DEFAULT_SYNC_CONFIG } from '../wordpress/types.js';
+import {
+  CRDT_DOC_VERSION,
+  CRDT_STATE_MAP_KEY,
+  CRDT_STATE_MAP_SAVED_AT_KEY,
+  CRDT_STATE_MAP_SAVED_BY_KEY,
+  CRDT_STATE_MAP_VERSION_KEY,
+} from '../yjs/types.js';
 import type { Block, CollaboratorInfo, AwarenessLocalState } from '../yjs/types.js';
 import { BlockTypeRegistry } from '../yjs/block-type-registry.js';
 import { getMimeType } from '../wordpress/mime-types.js';
@@ -213,6 +220,11 @@ export class SessionManager {
   private collaborators: CollaboratorInfo[] = [];
   private notesSupported = false;
   private updateHandler: ((update: Uint8Array, origin: unknown) => void) | null = null;
+  private commentDoc: Y.Doc | null = null;
+  private commentUpdateHandler: ((update: Uint8Array, origin: unknown) => void) | null = null;
+
+  /** Room name for the comment sync room. */
+  private static readonly COMMENT_ROOM = 'root/comment';
 
   /** Max time (ms) to wait for sync to populate the doc before loading from REST API. Set to 0 in tests. */
   syncWaitTimeout = 5000;
@@ -418,6 +430,46 @@ export class SessionManager {
     };
     doc.on('update', this.updateHandler);
 
+    // Join the root/comment room for real-time note sync.
+    // This room's state map acts as a change signal: when savedAt/savedBy
+    // are updated, other clients re-fetch notes from the REST API.
+    if (this.notesSupported) {
+      const commentDoc = new Y.Doc();
+      this.commentDoc = commentDoc;
+
+      // Initialize the state map (same pattern as the post doc)
+      commentDoc.transact(() => {
+        const stateMap = commentDoc.getMap(CRDT_STATE_MAP_KEY);
+        stateMap.set(CRDT_STATE_MAP_VERSION_KEY, CRDT_DOC_VERSION);
+      });
+
+      this.commentUpdateHandler = (update: Uint8Array, origin: unknown) => {
+        if (origin === LOCAL_ORIGIN) {
+          const syncUpdate = createUpdateFromChange(update);
+          syncClient.queueUpdate(SessionManager.COMMENT_ROOM, syncUpdate);
+        }
+      };
+      commentDoc.on('update', this.commentUpdateHandler);
+
+      syncClient.addRoom(
+        SessionManager.COMMENT_ROOM,
+        commentDoc.clientID,
+        [createSyncStep1(commentDoc)],
+        {
+          onUpdate: (update) => {
+            try {
+              return processIncomingUpdate(commentDoc, update);
+            } catch {
+              return null;
+            }
+          },
+          onAwareness: () => {},
+          onCompactionRequested: () => createCompactionUpdate(commentDoc),
+          getAwarenessState: () => null,
+        },
+      );
+    }
+
     this.state = 'editing';
   }
 
@@ -457,7 +509,13 @@ export class SessionManager {
       this.updateHandler = null;
     }
 
+    if (this.commentDoc && this.commentUpdateHandler) {
+      this.commentDoc.off('update', this.commentUpdateHandler);
+      this.commentUpdateHandler = null;
+    }
+
     this.doc = null;
+    this.commentDoc = null;
     this.currentPost = null;
     this.collaborators = [];
     this.state = 'connected';
@@ -796,6 +854,8 @@ export class SessionManager {
       this.documentManager.setBlockNoteId(this.doc!, blockIndex, note.id);
     }, LOCAL_ORIGIN);
 
+    this.notifyCommentChange();
+
     if (this.syncClient) {
       this.syncClient.flushQueue();
     }
@@ -812,7 +872,14 @@ export class SessionManager {
       throw new Error('Notes are not supported. This feature requires WordPress 6.9 or later.');
     }
 
-    return this.apiClient!.createNote({ post: this.currentPost!.id, content, parent: parentNoteId });
+    const reply = await this.apiClient!.createNote({ post: this.currentPost!.id, content, parent: parentNoteId });
+
+    this.notifyCommentChange();
+    if (this.syncClient) {
+      this.syncClient.flushQueue();
+    }
+
+    return reply;
   }
 
   /**
@@ -839,9 +906,11 @@ export class SessionManager {
       this.doc!.transact(() => {
         this.documentManager.removeBlockNoteId(this.doc!, blockIndex);
       }, LOCAL_ORIGIN);
-      if (this.syncClient) {
-        this.syncClient.flushQueue();
-      }
+    }
+
+    this.notifyCommentChange();
+    if (this.syncClient) {
+      this.syncClient.flushQueue();
     }
   }
 
@@ -854,7 +923,14 @@ export class SessionManager {
       throw new Error('Notes are not supported. This feature requires WordPress 6.9 or later.');
     }
 
-    return this.apiClient!.updateNote(noteId, { content });
+    const updated = await this.apiClient!.updateNote(noteId, { content });
+
+    this.notifyCommentChange();
+    if (this.syncClient) {
+      this.syncClient.flushQueue();
+    }
+
+    return updated;
   }
 
   // --- Status ---
@@ -1082,6 +1158,21 @@ export class SessionManager {
   }
 
   // --- Internal ---
+
+  /**
+   * Signal a note change to other collaborators via the root/comment room.
+   * Updates the comment doc's state map (savedAt/savedBy), which triggers
+   * other clients to re-fetch notes from the REST API.
+   */
+  private notifyCommentChange(): void {
+    if (!this.commentDoc) return;
+
+    this.commentDoc.transact(() => {
+      const stateMap = this.commentDoc!.getMap(CRDT_STATE_MAP_KEY);
+      stateMap.set(CRDT_STATE_MAP_SAVED_AT_KEY, Date.now());
+      stateMap.set(CRDT_STATE_MAP_SAVED_BY_KEY, this.commentDoc!.clientID);
+    }, LOCAL_ORIGIN);
+  }
 
   /**
    * Assert that the session is in one of the allowed states.

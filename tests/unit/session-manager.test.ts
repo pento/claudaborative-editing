@@ -48,6 +48,8 @@ const mockSyncStart = vi.fn();
 const mockSyncStop = vi.fn();
 const mockSyncQueueUpdate = vi.fn();
 const mockSyncFlushQueue = vi.fn();
+const mockSyncAddRoom = vi.fn();
+const mockSyncRemoveRoom = vi.fn();
 const mockSyncGetStatus = vi.fn().mockReturnValue({
   isPolling: true,
   hasCollaborators: false,
@@ -64,6 +66,8 @@ vi.mock('../../src/wordpress/sync-client.js', () => {
       this.stop = mockSyncStop;
       this.queueUpdate = mockSyncQueueUpdate;
       this.flushQueue = mockSyncFlushQueue;
+      this.addRoom = mockSyncAddRoom;
+      this.removeRoom = mockSyncRemoveRoom;
       this.getStatus = mockSyncGetStatus;
       this.waitForFirstPoll = mockWaitForFirstPoll;
     }),
@@ -1351,8 +1355,8 @@ describe('SessionManager', () => {
         await session.resolveNote(999);
 
         expect(mockDeleteNote).toHaveBeenCalledWith(999);
-        // flushQueue should NOT have been called since no block metadata was changed
-        expect(mockSyncFlushQueue).not.toHaveBeenCalled();
+        // flushQueue should still be called to notify other clients via root/comment room
+        expect(mockSyncFlushQueue).toHaveBeenCalled();
       });
 
       it('throws when not in editing state', async () => {
