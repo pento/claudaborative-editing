@@ -34,7 +34,7 @@ Claude Code  <--stdio-->  MCP Server (Node.js)  <--HTTP polling-->  WordPress
 - `src/cli/types.ts` — Shared CLI types (McpClientType, McpClientConfig, WpCredentials, SetupOptions)
 - `src/cli/clients.ts` — MCP client registry, detection, platform path resolution
 - `src/cli/config-writer.ts` — JSON config read/merge/write for MCP client settings files
-- `src/cli/auth-server.ts` — Local HTTP server for browser-based WordPress Application Password auth
+- `src/cli/auth-server.ts` — Browser-based WordPress Application Password auth (opens `authorize-application.php`)
 - `src/wordpress/` — REST API client, HTTP polling sync client, MIME type detection
 - `src/yjs/` — Y.Doc management, block ↔ Yjs conversion, sync protocol encoding
 - `src/session/` — Connection lifecycle, awareness/presence

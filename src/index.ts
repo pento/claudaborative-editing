@@ -41,8 +41,13 @@ if (args[0] === 'setup') {
     options.remove = true;
   }
   const clientIdx = args.indexOf('--client');
-  if (clientIdx !== -1 && args[clientIdx + 1]) {
-    options.client = args[clientIdx + 1] as McpClientType;
+  if (clientIdx !== -1) {
+    if (args[clientIdx + 1]) {
+      options.client = args[clientIdx + 1] as McpClientType;
+    } else {
+      console.error('Error: --client requires a client name. See --help for usage.');
+      process.exit(1);
+    }
   }
   await runSetup(undefined, options);
 } else {

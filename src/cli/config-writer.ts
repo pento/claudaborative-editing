@@ -6,7 +6,7 @@
  * VS Code, Cursor, etc.).
  */
 
-import { readFileSync, writeFileSync, mkdirSync, renameSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, mkdirSync, renameSync, unlinkSync, existsSync } from 'fs';
 import { dirname } from 'path';
 import type { WpCredentials } from './types.js';
 
@@ -79,7 +79,17 @@ export function writeJsonConfig(
   const json = JSON.stringify(config, null, resolvedIndent) + '\n';
   const tmpPath = `${filePath}.tmp`;
   writeFileSync(tmpPath, json, 'utf-8');
-  renameSync(tmpPath, filePath);
+  try {
+    renameSync(tmpPath, filePath);
+  } catch (err: unknown) {
+    // On Windows, renameSync fails when destination exists. Fall back to unlink + rename.
+    if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'EPERM') {
+      unlinkSync(filePath);
+      renameSync(tmpPath, filePath);
+    } else {
+      throw err;
+    }
+  }
 }
 
 /**

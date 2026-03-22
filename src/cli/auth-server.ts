@@ -67,8 +67,8 @@ export function openBrowserDefault(url: string): Promise<void> {
       command = 'open';
       args = [url];
     } else if (platform === 'win32') {
-      command = 'cmd';
-      args = ['/c', 'start', '', url];
+      command = 'explorer';
+      args = [url];
     } else {
       command = 'xdg-open';
       args = [url];
