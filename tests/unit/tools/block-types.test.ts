@@ -212,5 +212,25 @@ describe('block-types tool', () => {
       const text = result.content[0].text;
       expect(text).toContain('default=false');
     });
+
+    it('shows InnerBlocks support when supports.allowedBlocks is true', async () => {
+      server = createMockServer();
+      session = createSessionWithRegistry([
+        {
+          name: 'core/quote',
+          title: 'Quote',
+          attributes: {
+            citation: { type: 'rich-text', source: 'rich-text' },
+          },
+          supports: { allowedBlocks: true },
+        },
+      ]);
+      registerBlockTypeTools(server as unknown as McpServer, session);
+
+      const tool = server.registeredTools.get('wp_block_types')!;
+      const result = await tool.handler({ name: 'core/quote' });
+
+      expect(result.content[0].text).toContain('Supports InnerBlocks: yes');
+    });
   });
 });

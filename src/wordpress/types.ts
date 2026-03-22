@@ -118,6 +118,8 @@ export interface WPBlockType {
   ancestor?: string[] | null;
   /** Block types allowed as direct children. Null = any, string[] = restricted list. */
   allowed_blocks?: string[] | null;
+  /** Block supports object. We extract `allowedBlocks` (boolean = InnerBlocks capability). */
+  supports?: { allowedBlocks?: boolean; [key: string]: unknown } | null;
 }
 
 // --- Media API Types ---

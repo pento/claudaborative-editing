@@ -97,15 +97,43 @@ function prepareBlockTree(
       );
     }
 
-    // Validate 'content' parameter: block must have a 'content' attribute
+    // Auto-wrap content into inner core/paragraph for blocks that use InnerBlocks
+    // for their primary content. The `supports.allowedBlocks` API flag (exposed as
+    // supportsInnerBlocks) is the canonical signal — e.g., core/quote has it (inner
+    // paragraphs), while core/pullquote doesn't (uses `value` directly).
     if (input.content !== undefined && !registry.hasAttribute(input.name, 'content')) {
-      const info = registry.getBlockTypeInfo(input.name);
-      const richTextAttrs = info?.attributes.filter((a) => a.richText).map((a) => a.name) ?? [];
-      const hint =
-        richTextAttrs.length > 0
-          ? ` This block's rich-text attributes are: ${richTextAttrs.join(', ')}. Pass text via the "attributes" parameter instead.`
+      const usesInnerBlocks = registry.supportsInnerBlocks(input.name);
+      const allowedBlocks = registry.getAllowedBlocks(input.name);
+      const paragraphAllowed =
+        usesInnerBlocks &&
+        (allowedBlocks === null || allowedBlocks.includes('core/paragraph')) &&
+        registry.isKnownBlockType('core/paragraph');
+
+      if (paragraphAllowed) {
+        const wrappedContent = input.content;
+        const existingInnerBlocks = input.innerBlocks;
+        input = {
+          ...input,
+          content: undefined,
+          innerBlocks: [
+            { name: 'core/paragraph', content: wrappedContent },
+            ...(existingInnerBlocks ?? []),
+          ],
+        };
+      } else {
+        const info = registry.getBlockTypeInfo(input.name);
+        const richTextAttrs = info?.attributes.filter((a) => a.richText).map((a) => a.name) ?? [];
+        const richTextHint =
+          richTextAttrs.length > 0
+            ? ` This block's rich-text attributes are: ${richTextAttrs.join(', ')}. Pass text via the "attributes" parameter instead.`
+            : '';
+        const innerBlocksHint = usesInnerBlocks
+          ? ' Alternatively, pass content via the "innerBlocks" parameter.'
           : '';
-      throw new Error(`Block type ${input.name} does not have a "content" attribute.${hint}`);
+        throw new Error(
+          `Block type ${input.name} does not have a "content" attribute.${richTextHint}${innerBlocksHint}`,
+        );
+      }
     }
 
     // Validate provided attributes exist in the block schema
