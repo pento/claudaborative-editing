@@ -395,6 +395,252 @@ describe('SessionManager', () => {
     });
   });
 
+  describe('editBlockText()', () => {
+    it('applies a single find-and-replace edit', async () => {
+      await connectAndOpen(session);
+
+      const result = session.editBlockText('0', [{ find: 'First', replace: 'Updated' }]);
+
+      expect(result.appliedCount).toBe(1);
+      expect(result.failedCount).toBe(0);
+      expect(result.updatedText).toBe('Updated paragraph');
+      expect(session.readBlock('0')).toContain('Updated paragraph');
+    });
+
+    it('applies multiple sequential edits with position adjustment', async () => {
+      await connectAndOpen(session);
+
+      const result = session.editBlockText('0', [
+        { find: 'First', replace: 'My' },
+        { find: 'paragraph', replace: 'text' },
+      ]);
+
+      expect(result.appliedCount).toBe(2);
+      expect(result.failedCount).toBe(0);
+      expect(result.updatedText).toBe('My text');
+    });
+
+    it('reports failure when find text is not found', async () => {
+      await connectAndOpen(session);
+
+      const result = session.editBlockText('0', [{ find: 'nonexistent', replace: 'something' }]);
+
+      expect(result.appliedCount).toBe(0);
+      expect(result.failedCount).toBe(1);
+      expect(result.edits[0].applied).toBe(false);
+      expect(result.edits[0].error).toContain('not found');
+      // Content unchanged
+      expect(session.readBlock('0')).toContain('First paragraph');
+    });
+
+    it('handles partial success (one found, one not)', async () => {
+      await connectAndOpen(session);
+
+      const result = session.editBlockText('0', [
+        { find: 'First', replace: 'My' },
+        { find: 'nonexistent', replace: 'something' },
+      ]);
+
+      expect(result.appliedCount).toBe(1);
+      expect(result.failedCount).toBe(1);
+      expect(result.edits[0].applied).toBe(true);
+      expect(result.edits[1].applied).toBe(false);
+      expect(result.updatedText).toBe('My paragraph');
+    });
+
+    it('deletes text when replace is empty', async () => {
+      await connectAndOpen(session);
+
+      const result = session.editBlockText('0', [{ find: 'First ', replace: '' }]);
+
+      expect(result.appliedCount).toBe(1);
+      expect(result.updatedText).toBe('paragraph');
+    });
+
+    it('replaces the Nth occurrence with occurrence parameter', async () => {
+      await connectAndOpen(session);
+
+      // Set up block with repeated text
+      await session.updateBlock('0', { content: 'the cat and the dog and the bird' });
+
+      const result = session.editBlockText('0', [{ find: 'the', replace: 'a', occurrence: 2 }]);
+
+      expect(result.appliedCount).toBe(1);
+      expect(result.updatedText).toBe('the cat and a dog and the bird');
+    });
+
+    it('fails when requested occurrence exceeds actual count', async () => {
+      await connectAndOpen(session);
+
+      const result = session.editBlockText('0', [{ find: 'First', replace: 'My', occurrence: 5 }]);
+
+      expect(result.appliedCount).toBe(0);
+      expect(result.failedCount).toBe(1);
+      expect(result.edits[0].error).toContain('Occurrence 5');
+    });
+
+    it('throws for non-rich-text attribute', async () => {
+      await connectAndOpen(session);
+
+      expect(() =>
+        session.editBlockText('1', [{ find: 'test', replace: 'test2' }], 'level'),
+      ).toThrow('not a rich-text attribute');
+    });
+
+    it('throws when block not found', async () => {
+      await connectAndOpen(session);
+
+      expect(() => session.editBlockText('999', [{ find: 'test', replace: 'test2' }])).toThrow(
+        'Block 999 not found',
+      );
+    });
+
+    it('throws when not in editing state', async () => {
+      await connectSession(session);
+
+      expect(() => session.editBlockText('0', [{ find: 'test', replace: 'test2' }])).toThrow(
+        /requires state/,
+      );
+    });
+
+    it('rejects invalid occurrence values', async () => {
+      await connectAndOpen(session);
+
+      const result = session.editBlockText('0', [
+        { find: 'First', replace: 'My', occurrence: 0 },
+        { find: 'paragraph', replace: 'text', occurrence: -1 },
+        { find: 'First', replace: 'My', occurrence: 1.5 },
+      ]);
+
+      expect(result.appliedCount).toBe(0);
+      expect(result.failedCount).toBe(3);
+      expect(result.edits[0].error).toContain('Invalid occurrence value: 0');
+      expect(result.edits[1].error).toContain('Invalid occurrence value: -1');
+      expect(result.edits[2].error).toContain('Invalid occurrence value: 1.5');
+      // Content should be unchanged
+      expect(session.readBlock('0')).toContain('First paragraph');
+    });
+
+    it('rejects empty find string', async () => {
+      await connectAndOpen(session);
+
+      const result = session.editBlockText('0', [{ find: '', replace: 'something' }]);
+
+      expect(result.appliedCount).toBe(0);
+      expect(result.failedCount).toBe(1);
+      expect(result.edits[0].error).toContain('Empty find string');
+    });
+
+    it('handles HTML-containing content', async () => {
+      await connectAndOpen(session);
+
+      await session.updateBlock('0', { content: 'This is <strong>bold</strong> text' });
+
+      const result = session.editBlockText('0', [
+        { find: '<strong>bold</strong>', replace: '<strong>important</strong>' },
+      ]);
+
+      expect(result.appliedCount).toBe(1);
+      expect(result.updatedText).toBe('This is <strong>important</strong> text');
+    });
+
+    it('flushes sync queue when edits are applied', async () => {
+      await connectAndOpen(session);
+
+      session.editBlockText('0', [{ find: 'First', replace: 'Updated' }]);
+
+      expect(mockSyncFlushQueue).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not flush sync queue when all edits fail', async () => {
+      await connectAndOpen(session);
+
+      session.editBlockText('0', [{ find: 'nonexistent', replace: 'something' }]);
+
+      expect(mockSyncFlushQueue).not.toHaveBeenCalled();
+    });
+
+    it('defaults attribute to content', async () => {
+      await connectAndOpen(session);
+
+      // Should work without specifying attribute (defaults to "content")
+      const result = session.editBlockText('0', [{ find: 'First', replace: 'Default' }]);
+
+      expect(result.appliedCount).toBe(1);
+      expect(result.updatedText).toBe('Default paragraph');
+    });
+
+    it('edits a custom rich-text attribute', async () => {
+      await connectAndOpen(session);
+
+      // Insert a pullquote block which has 'value' and 'citation' as rich-text attributes
+      await session.insertBlock(2, {
+        name: 'core/pullquote',
+        attributes: { value: 'A wise saying', citation: 'Someone Famous' },
+      });
+
+      const result = session.editBlockText(
+        '2',
+        [{ find: 'Someone', replace: 'Nobody' }],
+        'citation',
+      );
+
+      expect(result.appliedCount).toBe(1);
+      expect(result.updatedText).toBe('Nobody Famous');
+    });
+
+    it('throws for empty Y.Text attribute', async () => {
+      await connectAndOpen(session);
+
+      // Insert a block with no content set
+      await session.insertBlock(2, {
+        name: 'core/paragraph',
+        attributes: {},
+      });
+
+      expect(() => session.editBlockText('2', [{ find: 'test', replace: 'test2' }])).toThrow(
+        'empty',
+      );
+    });
+
+    it('gracefully handles edit 2 failing when edit 1 modified its target', async () => {
+      await connectAndOpen(session);
+
+      // Edit 1 replaces text that edit 2 targets
+      const result = session.editBlockText('0', [
+        { find: 'First paragraph', replace: 'Rewritten' },
+        { find: 'paragraph', replace: 'text' },
+      ]);
+
+      expect(result.appliedCount).toBe(1);
+      expect(result.failedCount).toBe(1);
+      expect(result.edits[0].applied).toBe(true);
+      expect(result.edits[1].applied).toBe(false);
+      expect(result.edits[1].error).toContain('not found');
+      expect(result.updatedText).toBe('Rewritten');
+    });
+
+    it('is case-sensitive when matching find strings', async () => {
+      await connectAndOpen(session);
+
+      const result = session.editBlockText('0', [{ find: 'first', replace: 'Updated' }]);
+
+      // "first" (lowercase) should not match "First" (capitalized)
+      expect(result.appliedCount).toBe(0);
+      expect(result.failedCount).toBe(1);
+    });
+
+    it('applies edit at position 0 without retain op', async () => {
+      await connectAndOpen(session);
+
+      // "First" is at position 0 — the delta should be [delete, insert] with no leading retain
+      const result = session.editBlockText('0', [{ find: 'First', replace: 'The first' }]);
+
+      expect(result.appliedCount).toBe(1);
+      expect(result.updatedText).toBe('The first paragraph');
+    });
+  });
+
   describe('insertBlock()', () => {
     it('adds a new block to the doc', async () => {
       vi.useFakeTimers();

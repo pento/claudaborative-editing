@@ -7,7 +7,11 @@
 
 import { vi } from 'vitest';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { SessionManager, SessionState } from '../../../src/session/session-manager.js';
+import type {
+  SessionManager,
+  SessionState,
+  EditBlockTextResult,
+} from '../../../src/session/session-manager.js';
 import type { WPMediaItem, WPNote, WPPost, WPUser } from '../../../src/wordpress/types.js';
 import type { CollaboratorInfo } from '../../../src/yjs/types.js';
 
@@ -107,6 +111,13 @@ export const fakeNote: WPNote = {
 /**
  * Create a mock SessionManager with configurable state and return values.
  */
+const defaultEditBlockTextResult: EditBlockTextResult = {
+  edits: [{ find: 'old', replace: 'new', applied: true }],
+  appliedCount: 1,
+  failedCount: 0,
+  updatedText: 'new text',
+};
+
 export function createMockSession(
   overrides: {
     state?: SessionState;
@@ -116,6 +127,7 @@ export function createMockSession(
     syncStatus?: { isPolling: boolean; hasCollaborators: boolean; queueSize: number } | null;
     postContent?: string;
     blockContent?: string;
+    editBlockTextResult?: EditBlockTextResult;
   } = {},
 ): SessionManager {
   const state = overrides.state ?? 'disconnected';
@@ -125,6 +137,7 @@ export function createMockSession(
   const syncStatus = overrides.syncStatus ?? null;
   const postContent = overrides.postContent ?? 'Title: "Test"\n\n[0] core/paragraph\n  "Hello"';
   const blockContent = overrides.blockContent ?? '[0] core/paragraph\n  "Hello"';
+  const editBlockTextResult = overrides.editBlockTextResult ?? defaultEditBlockTextResult;
 
   return {
     connect: vi.fn().mockResolvedValue(user ?? fakeUser),
@@ -136,6 +149,7 @@ export function createMockSession(
     readPost: vi.fn().mockReturnValue(postContent),
     readBlock: vi.fn().mockReturnValue(blockContent),
     updateBlock: vi.fn().mockResolvedValue(undefined),
+    editBlockText: vi.fn().mockReturnValue(editBlockTextResult),
     insertBlock: vi.fn().mockResolvedValue(undefined),
     insertInnerBlock: vi.fn().mockResolvedValue(undefined),
     removeBlocks: vi.fn(),

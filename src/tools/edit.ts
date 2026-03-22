@@ -289,6 +289,89 @@ export function registerEditTools(server: McpServer, session: SessionManager): v
   );
 
   server.registerTool(
+    'wp_edit_block_text',
+    {
+      description:
+        'Make surgical find-and-replace text edits within a block. ' +
+        'More efficient than wp_update_block for small corrections (typos, ' +
+        'grammar fixes) — only the targeted text is changed, preserving concurrent edits.',
+      inputSchema: {
+        index: z.string().describe('Block index (e.g., "0", "2.1" for nested blocks)'),
+        attribute: z
+          .string()
+          .optional()
+          .describe(
+            'Rich-text attribute to edit (default: "content"). ' +
+              'Use "citation" for quote/pullquote citations, "value" for pullquote text, etc.',
+          ),
+        edits: z
+          .array(
+            z.object({
+              find: z
+                .string()
+                .min(1)
+                .describe(
+                  'Exact text to find in the current content (may include HTML tags like <strong>, <a href="...">)',
+                ),
+              replace: z
+                .string()
+                .describe('Replacement text (empty string to delete the found text)'),
+              occurrence: z
+                .number()
+                .int()
+                .min(1)
+                .optional()
+                .describe(
+                  'Which occurrence to replace (1-indexed, default 1). Use when the same text appears multiple times.',
+                ),
+            }),
+          )
+          .min(1)
+          .describe('List of find-and-replace operations applied sequentially'),
+      },
+    },
+    async ({ index, attribute, edits }) => {
+      try {
+        const result = session.editBlockText(index, edits, attribute);
+
+        const lines: string[] = [];
+        if (result.failedCount > 0) {
+          lines.push(
+            `Applied ${result.appliedCount}/${result.edits.length} edit${result.edits.length !== 1 ? 's' : ''}.`,
+          );
+          for (const edit of result.edits) {
+            if (!edit.applied) {
+              lines.push(`  FAILED: find "${edit.find}" — ${edit.error}`);
+            }
+          }
+        } else {
+          lines.push(`Applied ${result.appliedCount} edit${result.appliedCount !== 1 ? 's' : ''}.`);
+        }
+
+        // Include the updated block rendering for verification
+        const updated = session.readBlock(index);
+        lines.push('');
+        lines.push(updated);
+
+        return {
+          content: [{ type: 'text' as const, text: lines.join('\n') }],
+          isError: result.appliedCount === 0 && result.failedCount > 0,
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `Failed to edit block text: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  server.registerTool(
     'wp_set_title',
     {
       description: 'Set the post title',
