@@ -64,7 +64,7 @@ describe('setup wizard', () => {
     const output = logs.join('\n');
     expect(output).toContain('Authenticated as "admin"');
     expect(output).toContain('Collaborative editing endpoint available');
-    expect(output).toContain('claude mcp add claudaborative-editing');
+    expect(output).toContain('claude mcp add wpce');
     expect(output).toContain('WP_SITE_URL');
     expect(output).toContain('npx claudaborative-editing');
   });

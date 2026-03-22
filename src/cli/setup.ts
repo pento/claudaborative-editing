@@ -127,7 +127,7 @@ export async function runSetup(deps: SetupDeps = defaultDeps()): Promise<void> {
     `-e WP_APP_PASSWORD=${shellQuote(appPassword)}`,
   ].join(' ');
 
-  log(`  claude mcp add claudaborative-editing ${envFlags} -- npx claudaborative-editing`);
+  log(`  claude mcp add wpce ${envFlags} -- npx claudaborative-editing`);
   log('');
 
   cleanup();

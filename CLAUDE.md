@@ -25,12 +25,13 @@ Claude Code  <--stdio-->  MCP Server (Node.js)  <--HTTP polling-->  WordPress
 ### Source Layout
 
 - `src/index.ts` — Entry point: CLI flags (`--version`, `--help`, `setup`) then MCP server
-- `src/server.ts` — MCP server setup, tool registration, version export
+- `src/server.ts` — MCP server setup, tool/prompt registration, version export
 - `src/cli/setup.ts` — Interactive setup wizard (credential validation, outputs `claude mcp add` command)
 - `src/wordpress/` — REST API client, HTTP polling sync client, MIME type detection
 - `src/yjs/` — Y.Doc management, block ↔ Yjs conversion, sync protocol encoding
 - `src/session/` — Connection lifecycle, awareness/presence
 - `src/tools/` — MCP tool handlers (connect, posts [open/close/create], read, edit, media, metadata, notes, status)
+- `src/prompts/` — MCP prompt handlers (editing, review, authoring)
 - `src/blocks/` — Gutenberg HTML parser, Claude-friendly renderer
 - `tests/` — Unit and integration tests
 
@@ -216,6 +217,28 @@ Both tools replace all existing terms (not append).
 - `wp_set_slug` — Set URL slug (WordPress may auto-modify for uniqueness)
 - `wp_set_sticky` — Pin/unpin on front page
 - `wp_set_comment_status` — Enable/disable comments (open/closed)
+
+## Prompts
+
+MCP prompts are user-invokable templates that pre-populate conversation context for common workflows. They are registered via `server.prompt()` in `src/prompts/`, following the same pattern as tool registration.
+
+### Dynamic content
+
+Prompt handlers check `session.getState()` at invocation time:
+
+- **`editing`**: Post content (and notes where relevant) is embedded directly in the prompt messages to avoid extra tool-call round-trips.
+- **`connected`** or **`disconnected`**: Returns instructions to open a post or connect first.
+
+### Available prompts
+
+| Prompt             | Description                                                                       | Arguments                                                    |
+| ------------------ | --------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `edit`             | Edit a post with an optional editing focus                                        | `editing_focus` (optional)                                   |
+| `proofread`        | Fix grammar, spelling, and punctuation                                            | None                                                         |
+| `review`           | Leave editorial notes on blocks (falls back to text summary if notes unsupported) | None                                                         |
+| `respond-to-notes` | Address existing notes: edit blocks, reply, resolve                               | None                                                         |
+| `draft`            | Create a new post from a topic/brief                                              | `topic` (required), `tone` (optional), `audience` (optional) |
+| `translate`        | Translate post content into another language                                      | `language` (required)                                        |
 
 ## MCP Server Usage
 
