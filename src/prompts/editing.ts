@@ -52,13 +52,12 @@ export function registerEditingPrompts(server: McpServer, session: SessionManage
 
       // state === 'editing'
       const postContent = session.readPost();
-      const post = session.getCurrentPost();
       const focusInstruction = editingFocus
         ? `Focus on: ${editingFocus}`
         : "Ask me what kind of editing I'd like (e.g., tone, structure, expand, condense, rewrite).";
 
       return {
-        description: `Edit "${post?.title.raw ?? 'Untitled'}"`,
+        description: `Edit "${session.getTitle()}"`,
         messages: [
           {
             role: 'user' as const,
@@ -130,10 +129,9 @@ Work block by block. Do not try to replace the entire post at once. Preserve the
 
       // state === 'editing'
       const postContent = session.readPost();
-      const post = session.getCurrentPost();
 
       return {
-        description: `Proofread "${post?.title.raw ?? 'Untitled'}"`,
+        description: `Proofread "${session.getTitle()}"`,
         messages: [
           {
             role: 'user' as const,

@@ -155,10 +155,9 @@ Instructions:
 
       // state === 'editing'
       const postContent = session.readPost();
-      const post = session.getCurrentPost();
 
       return {
-        description: `Translate "${post?.title.raw ?? 'Untitled'}" into ${language}`,
+        description: `Translate "${session.getTitle()}" into ${language}`,
         messages: [
           {
             role: 'user' as const,

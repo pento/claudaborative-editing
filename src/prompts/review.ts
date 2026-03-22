@@ -80,12 +80,11 @@ export function registerReviewPrompts(server: McpServer, session: SessionManager
 
       // state === 'editing'
       const postContent = session.readPost();
-      const post = session.getCurrentPost();
       const notesSupported = session.getNotesSupported();
 
       if (!notesSupported) {
         return {
-          description: `Review "${post?.title.raw ?? 'Untitled'}"`,
+          description: `Review "${session.getTitle()}"`,
           messages: [
             {
               role: 'user' as const,
@@ -116,7 +115,7 @@ Provide your feedback as a structured summary, written in the same language as t
       }
 
       return {
-        description: `Review "${post?.title.raw ?? 'Untitled'}"`,
+        description: `Review "${session.getTitle()}"`,
         messages: [
           {
             role: 'user' as const,
@@ -202,7 +201,6 @@ Instructions:
       }
 
       const postContent = session.readPost();
-      const post = session.getCurrentPost();
       const { notes, noteBlockMap } = await session.listNotes();
 
       if (notes.length === 0) {
@@ -223,7 +221,7 @@ Instructions:
       const formattedNotes = formatNotes(notes, noteBlockMap);
 
       return {
-        description: `Respond to notes on "${post?.title.raw ?? 'Untitled'}"`,
+        description: `Respond to notes on "${session.getTitle()}"`,
         messages: [
           {
             role: 'user' as const,

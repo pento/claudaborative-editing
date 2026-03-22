@@ -75,6 +75,28 @@ describe('status tools', () => {
       expect(text).toContain('status: publish');
       expect(text).toContain('Queue: 0 pending updates');
     });
+
+    it('reads title from Y.Doc via getTitle(), not from getCurrentPost()', async () => {
+      const session = createMockSession({
+        state: 'editing',
+        user: fakeUser,
+        post: fakePost,
+        syncStatus: { isPolling: true, hasCollaborators: false, queueSize: 0 },
+      });
+      // Simulate title changed in Y.Doc but not in currentPost
+      (session.getTitle as ReturnType<typeof import('vitest').vi.fn>).mockReturnValue(
+        'Updated Title',
+      );
+      registerStatusTools(server as unknown as McpServer, session);
+
+      const tool = server.registeredTools.get('wp_status')!;
+      const result = await tool.handler({});
+      const text = result.content[0].text;
+
+      expect(text).toContain('"Updated Title"');
+      expect(text).not.toContain('My Great Post');
+      expect(session.getTitle).toHaveBeenCalled();
+    });
   });
 
   describe('wp_collaborators', () => {
@@ -94,6 +116,41 @@ describe('status tools', () => {
       expect(text).toContain('Active collaborators:');
       expect(text).toContain('Gary (AI, Claude Code MCP)');
       expect(text).toContain('Alice (Human, Chrome)');
+    });
+
+    it('shows fallback when no user and no collaborators', async () => {
+      const session = createMockSession({
+        state: 'editing',
+        user: null,
+        post: fakePost,
+        collaborators: [],
+      });
+      registerStatusTools(server as unknown as McpServer, session);
+
+      const tool = server.registeredTools.get('wp_collaborators')!;
+      const result = await tool.handler({});
+
+      expect(result.content[0].text).toContain('No collaborators detected');
+    });
+
+    it('returns error on unexpected failure', async () => {
+      const session = createMockSession({
+        state: 'editing',
+        user: fakeUser,
+        post: fakePost,
+      });
+      (session.getCollaborators as ReturnType<typeof import('vitest').vi.fn>).mockImplementation(
+        () => {
+          throw new Error('unexpected');
+        },
+      );
+      registerStatusTools(server as unknown as McpServer, session);
+
+      const tool = server.registeredTools.get('wp_collaborators')!;
+      const result = await tool.handler({});
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Failed to get collaborators: unexpected');
     });
 
     it('returns error when not editing', async () => {
@@ -125,6 +182,24 @@ describe('status tools', () => {
 
       expect(session.save).toHaveBeenCalled();
       expect(result.content[0].text).toContain('Post "My Great Post" saved.');
+    });
+
+    it('reads title from Y.Doc via getTitle()', async () => {
+      const session = createMockSession({
+        state: 'editing',
+        user: fakeUser,
+        post: fakePost,
+      });
+      (session.getTitle as ReturnType<typeof import('vitest').vi.fn>).mockReturnValue(
+        'Updated Title',
+      );
+      registerStatusTools(server as unknown as McpServer, session);
+
+      const tool = server.registeredTools.get('wp_save')!;
+      const result = await tool.handler({});
+
+      expect(result.content[0].text).toContain('Post "Updated Title" saved.');
+      expect(session.getTitle).toHaveBeenCalled();
     });
 
     it('returns error when not editing', async () => {

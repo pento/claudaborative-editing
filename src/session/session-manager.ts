@@ -1202,6 +1202,11 @@ export class SessionManager {
     return this.notesSupported;
   }
 
+  getTitle(): string {
+    this.requireState('editing');
+    return this.documentManager.getTitle(this.doc);
+  }
+
   /**
    * Stream text into a Y.Text in chunks, flushing the sync client between
    * each chunk so the browser sees progressive updates (like fast typing).

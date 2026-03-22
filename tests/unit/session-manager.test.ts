@@ -1873,6 +1873,25 @@ describe('SessionManager', () => {
       await s.openPost(42);
     }
 
+    describe('getTitle()', () => {
+      it('returns the live title from the Y.Doc', async () => {
+        await connectAndOpen(session);
+
+        expect(session.getTitle()).toBe('Hello World');
+      });
+
+      it('reflects title changes made via setTitle()', async () => {
+        await connectAndOpen(session);
+        await session.setTitle('New Title');
+
+        expect(session.getTitle()).toBe('New Title');
+      });
+
+      it('throws when not in editing state', () => {
+        expect(() => session.getTitle()).toThrow();
+      });
+    });
+
     describe('getNotesSupported()', () => {
       it('returns false by default', () => {
         expect(session.getNotesSupported()).toBe(false);
