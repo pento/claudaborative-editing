@@ -1159,11 +1159,11 @@ export class SessionManager {
   }
 
   getCurrentPost(): WPPost | null {
-    return this.currentPost;
+    return this._currentPost;
   }
 
   getUser(): WPUser | null {
-    return this.user;
+    return this._user;
   }
 
   getRegistry(): BlockTypeRegistry {

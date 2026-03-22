@@ -35,7 +35,7 @@ export function registerConnectTools(server: McpServer, session: SessionManager)
           content: [
             {
               type: 'text' as const,
-              text: `Connected to ${siteUrl} as ${user.name} (ID: ${user.id})`,
+              text: `Connected to ${siteUrl} as ${user.name ?? 'unknown'} (ID: ${user.id})`,
             },
           ],
         };
