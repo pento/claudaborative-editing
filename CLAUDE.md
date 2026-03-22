@@ -90,6 +90,7 @@ Rich-text edits (inserts and updates) are streamed to the browser in small chunk
 Block types are auto-discovered from the WordPress REST API (`GET /wp/v2/block-types`) during `connect()`. No code changes are needed to support new core blocks, third-party plugin blocks, or custom blocks — they are automatically available once registered on the WordPress site.
 
 The `BlockTypeRegistry` (`src/yjs/block-type-registry.ts`) handles:
+
 - **Rich-text detection**: `type === "rich-text"` OR `source === "rich-text"` OR `source === "html"`
 - **Default extraction**: Every attribute with a `"default"` field in the schema
 - **Attribute schema storage**: Full attribute schemas for validating attribute names on insertion
