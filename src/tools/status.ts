@@ -30,9 +30,7 @@ export function registerStatusTools(server: McpServer, session: SessionManager):
           lines.push(
             `Sync: ${syncStatus?.isPolling ? 'polling' : 'stopped'} (${collaboratorCount + 1} collaborator${collaboratorCount + 1 !== 1 ? 's' : ''})`,
           );
-          lines.push(
-            `Post: "${session.getTitle()}" (ID: ${post.id}, status: ${post.status})`,
-          );
+          lines.push(`Post: "${session.getTitle()}" (ID: ${post.id}, status: ${post.status})`);
           lines.push(`Queue: ${syncStatus?.queueSize ?? 0} pending updates`);
         } else {
           lines.push('Post: none open');
