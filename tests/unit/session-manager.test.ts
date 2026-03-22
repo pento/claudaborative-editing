@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { SessionManager } from '../../src/session/session-manager.js';
-import type { WordPressConfig, WPNote, WPPost, WPUser } from '../../src/wordpress/types.js';
+import type { WordPressConfig, WPNote, WPPost, WPTerm, WPUser } from '../../src/wordpress/types.js';
 
 // --- Mock the WordPress API client ---
 const mockValidateConnection = vi.fn<() => Promise<WPUser>>();
@@ -10,7 +10,11 @@ const mockListPosts = vi.fn<() => Promise<WPPost[]>>();
 const mockCreatePost = vi.fn<() => Promise<WPPost>>();
 const mockSendSyncUpdate = vi.fn();
 const mockGetBlockTypes = vi.fn<() => Promise<unknown[]>>();
+const mockUpdatePost = vi.fn<() => Promise<WPPost>>();
 const mockUploadMedia = vi.fn();
+const mockListTerms = vi.fn<() => Promise<WPTerm[]>>();
+const mockSearchTerms = vi.fn<() => Promise<WPTerm[]>>();
+const mockCreateTerm = vi.fn<() => Promise<WPTerm>>();
 const mockCheckNotesSupport = vi.fn<() => Promise<boolean>>();
 const mockListNotes = vi.fn<() => Promise<WPNote[]>>();
 const mockCreateNote = vi.fn<() => Promise<WPNote>>();
@@ -25,9 +29,13 @@ vi.mock('../../src/wordpress/api-client.js', () => {
       this.getPost = mockGetPost;
       this.listPosts = mockListPosts;
       this.createPost = mockCreatePost;
+      this.updatePost = mockUpdatePost;
       this.sendSyncUpdate = mockSendSyncUpdate;
       this.getBlockTypes = mockGetBlockTypes;
       this.uploadMedia = mockUploadMedia;
+      this.listTerms = mockListTerms;
+      this.searchTerms = mockSearchTerms;
+      this.createTerm = mockCreateTerm;
       this.checkNotesSupport = mockCheckNotesSupport;
       this.listNotes = mockListNotes;
       this.createNote = mockCreateNote;
@@ -1100,6 +1108,576 @@ describe('SessionManager', () => {
       mockReadFile.mockRejectedValueOnce(new Error('ENOENT: no such file'));
 
       await expect(session.uploadMedia('/path/to/missing.jpg')).rejects.toThrow('ENOENT');
+    });
+  });
+
+  describe('post metadata', () => {
+    // A post with all metadata fields populated
+    const fakePostWithMeta: WPPost = {
+      ...fakePost,
+      categories: [1, 3],
+      tags: [5],
+      featured_media: 99,
+      comment_status: 'open',
+      sticky: false,
+    };
+
+    // Helper: returns a fresh copy with fields overridden by the update
+    function updatedPost(fields: Partial<WPPost>): WPPost {
+      return { ...fakePostWithMeta, ...fields };
+    }
+
+    /** Connect and open a post that has metadata fields. */
+    async function connectAndOpenWithMeta(s: SessionManager): Promise<void> {
+      mockValidateConnection.mockResolvedValue(fakeUser);
+      mockValidateSyncEndpoint.mockResolvedValue(undefined);
+      await s.connect(fakeConfig);
+      mockGetPost.mockResolvedValue(fakePostWithMeta);
+      await s.openPost(42);
+    }
+
+    describe('openPost() metadata loading', () => {
+      it('loads categories into Y.Doc', async () => {
+        await connectAndOpenWithMeta(session);
+        const text = session.readPost();
+        // categories and tags IDs are stored in Y.Doc but rendered output
+        // shows only the fields renderPost() exposes (status, date, slug, sticky, commentStatus, excerpt).
+        // We verify via the internal state rather than rendered output for array properties.
+        expect(session.getCurrentPost()!.categories).toEqual([1, 3]);
+      });
+
+      it('loads tags into Y.Doc', async () => {
+        await connectAndOpenWithMeta(session);
+        expect(session.getCurrentPost()!.tags).toEqual([5]);
+      });
+
+      it('loads featured_media into Y.Doc', async () => {
+        await connectAndOpenWithMeta(session);
+        expect(session.getCurrentPost()!.featured_media).toBe(99);
+      });
+
+      it('loads comment_status into Y.Doc', async () => {
+        await connectAndOpenWithMeta(session);
+        // comment_status=open means it should not show "Comments: closed"
+        const text = session.readPost();
+        expect(text).not.toContain('Comments: closed');
+      });
+
+      it('loads sticky into Y.Doc', async () => {
+        await connectAndOpenWithMeta(session);
+        // sticky=false means it should not show "Sticky: yes"
+        const text = session.readPost();
+        expect(text).not.toContain('Sticky: yes');
+      });
+
+      it('loads date into Y.Doc', async () => {
+        await connectAndOpenWithMeta(session);
+        const text = session.readPost();
+        expect(text).toContain('Date: 2026-01-01T00:00:00');
+      });
+
+      it('skips categories when not present on post', async () => {
+        await connectSession(session);
+        const postWithoutMeta: WPPost = {
+          ...fakePost,
+          // no categories field
+        };
+        mockGetPost.mockResolvedValue(postWithoutMeta);
+        await session.openPost(42);
+        // Should not throw, post opens normally
+        expect(session.getState()).toBe('editing');
+      });
+    });
+
+    describe('readPost() metadata rendering', () => {
+      it('renders status', async () => {
+        await connectAndOpenWithMeta(session);
+        const text = session.readPost();
+        expect(text).toContain('Status: draft');
+      });
+
+      it('renders slug', async () => {
+        await connectAndOpenWithMeta(session);
+        const text = session.readPost();
+        expect(text).toContain('Slug: hello-world');
+      });
+
+      it('renders excerpt', async () => {
+        await connectAndOpenWithMeta(session);
+        const text = session.readPost();
+        expect(text).toContain('Excerpt: "An excerpt"');
+      });
+
+      it('renders sticky when true', async () => {
+        await connectSession(session);
+        const stickyPost = { ...fakePostWithMeta, sticky: true };
+        mockGetPost.mockResolvedValue(stickyPost);
+        await session.openPost(42);
+
+        const text = session.readPost();
+        expect(text).toContain('Sticky: yes');
+      });
+
+      it('renders comments closed', async () => {
+        await connectSession(session);
+        const closedPost = { ...fakePostWithMeta, comment_status: 'closed' };
+        mockGetPost.mockResolvedValue(closedPost);
+        await session.openPost(42);
+
+        const text = session.readPost();
+        expect(text).toContain('Comments: closed');
+      });
+    });
+
+    describe('listCategories()', () => {
+      const fakeTerms: WPTerm[] = [
+        { id: 1, name: 'Uncategorized', slug: 'uncategorized', taxonomy: 'category' },
+        { id: 3, name: 'Tech', slug: 'tech', taxonomy: 'category' },
+      ];
+
+      it('delegates to apiClient.listTerms with categories', async () => {
+        await connectSession(session);
+        mockListTerms.mockResolvedValue(fakeTerms);
+
+        const result = await session.listCategories();
+
+        expect(result).toEqual(fakeTerms);
+        expect(mockListTerms).toHaveBeenCalledWith('categories', undefined);
+      });
+
+      it('passes search and perPage options through', async () => {
+        await connectSession(session);
+        mockListTerms.mockResolvedValue([fakeTerms[1]]);
+
+        const result = await session.listCategories({ search: 'Tech', perPage: 10 });
+
+        expect(result).toEqual([fakeTerms[1]]);
+        expect(mockListTerms).toHaveBeenCalledWith('categories', { search: 'Tech', perPage: 10 });
+      });
+
+      it('works in editing state', async () => {
+        await connectAndOpenWithMeta(session);
+        mockListTerms.mockResolvedValue(fakeTerms);
+
+        const result = await session.listCategories();
+        expect(result).toEqual(fakeTerms);
+      });
+
+      it('throws when disconnected', async () => {
+        await expect(session.listCategories()).rejects.toThrow(/requires state/);
+      });
+    });
+
+    describe('listTags()', () => {
+      const fakeTags: WPTerm[] = [
+        { id: 5, name: 'JavaScript', slug: 'javascript', taxonomy: 'post_tag' },
+      ];
+
+      it('delegates to apiClient.listTerms with tags', async () => {
+        await connectSession(session);
+        mockListTerms.mockResolvedValue(fakeTags);
+
+        const result = await session.listTags();
+
+        expect(result).toEqual(fakeTags);
+        expect(mockListTerms).toHaveBeenCalledWith('tags', undefined);
+      });
+
+      it('passes options through', async () => {
+        await connectSession(session);
+        mockListTerms.mockResolvedValue(fakeTags);
+
+        await session.listTags({ search: 'Java' });
+
+        expect(mockListTerms).toHaveBeenCalledWith('tags', { search: 'Java' });
+      });
+
+      it('throws when disconnected', async () => {
+        await expect(session.listTags()).rejects.toThrow(/requires state/);
+      });
+    });
+
+    describe('setPostStatus()', () => {
+      it('updates Y.Doc, calls REST API, and refreshes currentPost', async () => {
+        await connectAndOpenWithMeta(session);
+        const updated = updatedPost({ status: 'publish' });
+        mockUpdatePost.mockResolvedValue(updated);
+
+        const result = await session.setPostStatus('publish');
+
+        expect(result).toEqual(updated);
+        expect(mockUpdatePost).toHaveBeenCalledWith(42, { status: 'publish' });
+        expect(session.getCurrentPost()!.status).toBe('publish');
+        expect(mockSyncFlushQueue).toHaveBeenCalled();
+      });
+
+      it('reflects updated status in readPost()', async () => {
+        await connectAndOpenWithMeta(session);
+        mockUpdatePost.mockResolvedValue(updatedPost({ status: 'publish' }));
+
+        await session.setPostStatus('publish');
+
+        const text = session.readPost();
+        expect(text).toContain('Status: publish');
+      });
+
+      it('throws when not editing', async () => {
+        await connectSession(session);
+        await expect(session.setPostStatus('publish')).rejects.toThrow(/requires state/);
+      });
+    });
+
+    describe('setExcerpt()', () => {
+      it('updates Y.Doc and REST API', async () => {
+        await connectAndOpenWithMeta(session);
+        const updated = updatedPost({ excerpt: { rendered: '', raw: 'New excerpt' } });
+        mockUpdatePost.mockResolvedValue(updated);
+
+        const result = await session.setExcerpt('New excerpt');
+
+        expect(result).toEqual(updated);
+        expect(mockUpdatePost).toHaveBeenCalledWith(42, { excerpt: 'New excerpt' });
+        expect(mockSyncFlushQueue).toHaveBeenCalled();
+      });
+
+      it('reflects updated excerpt in readPost()', async () => {
+        await connectAndOpenWithMeta(session);
+        mockUpdatePost.mockResolvedValue(updatedPost({}));
+
+        await session.setExcerpt('Summary text');
+
+        // The Y.Doc property was set, so readPost() should reflect it
+        const text = session.readPost();
+        expect(text).toContain('Excerpt: "Summary text"');
+      });
+
+      it('throws when not editing', async () => {
+        await connectSession(session);
+        await expect(session.setExcerpt('test')).rejects.toThrow(/requires state/);
+      });
+    });
+
+    describe('setCategories()', () => {
+      it('resolves existing categories by name and updates post', async () => {
+        await connectAndOpenWithMeta(session);
+        mockSearchTerms.mockResolvedValue([
+          { id: 3, name: 'Tech', slug: 'tech', taxonomy: 'category' },
+        ]);
+        mockUpdatePost.mockResolvedValue(updatedPost({ categories: [3] }));
+
+        const { post, resolved } = await session.setCategories(['Tech']);
+
+        expect(resolved).toEqual([{ name: 'Tech', id: 3, created: false }]);
+        expect(mockUpdatePost).toHaveBeenCalledWith(42, { categories: [3] });
+        expect(post.categories).toEqual([3]);
+        expect(mockSyncFlushQueue).toHaveBeenCalled();
+      });
+
+      it('creates categories that do not exist', async () => {
+        await connectAndOpenWithMeta(session);
+        // Search returns no results
+        mockSearchTerms.mockResolvedValue([]);
+        mockCreateTerm.mockResolvedValue({
+          id: 10, name: 'New Category', slug: 'new-category', taxonomy: 'category',
+        });
+        mockUpdatePost.mockResolvedValue(updatedPost({ categories: [10] }));
+
+        const { post, resolved } = await session.setCategories(['New Category']);
+
+        expect(resolved).toEqual([{ name: 'New Category', id: 10, created: true }]);
+        expect(mockCreateTerm).toHaveBeenCalledWith('categories', 'New Category');
+        expect(mockUpdatePost).toHaveBeenCalledWith(42, { categories: [10] });
+      });
+
+      it('creates when search returns only substring matches (not exact)', async () => {
+        await connectAndOpenWithMeta(session);
+        // Searching "AI" returns "Fair" (substring match, not exact)
+        mockSearchTerms.mockResolvedValue([
+          { id: 7, name: 'Fair', slug: 'fair', taxonomy: 'category' },
+        ]);
+        mockCreateTerm.mockResolvedValue({
+          id: 11, name: 'AI', slug: 'ai', taxonomy: 'category',
+        });
+        mockUpdatePost.mockResolvedValue(updatedPost({ categories: [11] }));
+
+        const { resolved } = await session.setCategories(['AI']);
+
+        expect(resolved).toEqual([{ name: 'AI', id: 11, created: true }]);
+        expect(mockCreateTerm).toHaveBeenCalledWith('categories', 'AI');
+      });
+
+      it('matches case-insensitively', async () => {
+        await connectAndOpenWithMeta(session);
+        mockSearchTerms.mockResolvedValue([
+          { id: 3, name: 'Tech', slug: 'tech', taxonomy: 'category' },
+        ]);
+        mockUpdatePost.mockResolvedValue(updatedPost({ categories: [3] }));
+
+        const { resolved } = await session.setCategories(['tech']);
+
+        // Should match "Tech" despite lowercase input
+        expect(resolved).toEqual([{ name: 'Tech', id: 3, created: false }]);
+        expect(mockCreateTerm).not.toHaveBeenCalled();
+      });
+
+      it('resolves multiple categories (mix of existing and new)', async () => {
+        await connectAndOpenWithMeta(session);
+        // First call: "Tech" exists
+        mockSearchTerms.mockResolvedValueOnce([
+          { id: 3, name: 'Tech', slug: 'tech', taxonomy: 'category' },
+        ]);
+        // Second call: "Science" does not exist
+        mockSearchTerms.mockResolvedValueOnce([]);
+        mockCreateTerm.mockResolvedValue({
+          id: 12, name: 'Science', slug: 'science', taxonomy: 'category',
+        });
+        mockUpdatePost.mockResolvedValue(updatedPost({ categories: [3, 12] }));
+
+        const { resolved } = await session.setCategories(['Tech', 'Science']);
+
+        expect(resolved).toEqual([
+          { name: 'Tech', id: 3, created: false },
+          { name: 'Science', id: 12, created: true },
+        ]);
+        expect(mockUpdatePost).toHaveBeenCalledWith(42, { categories: [3, 12] });
+      });
+
+      it('throws when not editing', async () => {
+        await connectSession(session);
+        await expect(session.setCategories(['Tech'])).rejects.toThrow(/requires state/);
+      });
+    });
+
+    describe('setTags()', () => {
+      it('resolves existing tags by name and updates post', async () => {
+        await connectAndOpenWithMeta(session);
+        mockSearchTerms.mockResolvedValue([
+          { id: 5, name: 'JavaScript', slug: 'javascript', taxonomy: 'post_tag' },
+        ]);
+        mockUpdatePost.mockResolvedValue(updatedPost({ tags: [5] }));
+
+        const { post, resolved } = await session.setTags(['JavaScript']);
+
+        expect(resolved).toEqual([{ name: 'JavaScript', id: 5, created: false }]);
+        expect(mockUpdatePost).toHaveBeenCalledWith(42, { tags: [5] });
+        expect(post.tags).toEqual([5]);
+      });
+
+      it('creates tags that do not exist', async () => {
+        await connectAndOpenWithMeta(session);
+        mockSearchTerms.mockResolvedValue([]);
+        mockCreateTerm.mockResolvedValue({
+          id: 20, name: 'Rust', slug: 'rust', taxonomy: 'post_tag',
+        });
+        mockUpdatePost.mockResolvedValue(updatedPost({ tags: [20] }));
+
+        const { resolved } = await session.setTags(['Rust']);
+
+        expect(resolved).toEqual([{ name: 'Rust', id: 20, created: true }]);
+        expect(mockCreateTerm).toHaveBeenCalledWith('tags', 'Rust');
+      });
+
+      it('throws when not editing', async () => {
+        await connectSession(session);
+        await expect(session.setTags(['Rust'])).rejects.toThrow(/requires state/);
+      });
+    });
+
+    describe('setFeaturedImage()', () => {
+      it('updates featured_media in Y.Doc and REST API', async () => {
+        await connectAndOpenWithMeta(session);
+        const updated = updatedPost({ featured_media: 200 });
+        mockUpdatePost.mockResolvedValue(updated);
+
+        const result = await session.setFeaturedImage(200);
+
+        expect(result).toEqual(updated);
+        expect(mockUpdatePost).toHaveBeenCalledWith(42, { featured_media: 200 });
+        expect(mockSyncFlushQueue).toHaveBeenCalled();
+      });
+
+      it('removes featured image when passing 0', async () => {
+        await connectAndOpenWithMeta(session);
+        const updated = updatedPost({ featured_media: 0 });
+        mockUpdatePost.mockResolvedValue(updated);
+
+        const result = await session.setFeaturedImage(0);
+
+        expect(result).toEqual(updated);
+        expect(mockUpdatePost).toHaveBeenCalledWith(42, { featured_media: 0 });
+      });
+
+      it('throws when not editing', async () => {
+        await connectSession(session);
+        await expect(session.setFeaturedImage(100)).rejects.toThrow(/requires state/);
+      });
+    });
+
+    describe('setDate()', () => {
+      it('updates date in Y.Doc and REST API', async () => {
+        await connectAndOpenWithMeta(session);
+        const updated = updatedPost({ date: '2026-06-15T12:00:00' });
+        mockUpdatePost.mockResolvedValue(updated);
+
+        const result = await session.setDate('2026-06-15T12:00:00');
+
+        expect(result).toEqual(updated);
+        expect(mockUpdatePost).toHaveBeenCalledWith(42, { date: '2026-06-15T12:00:00' });
+        expect(mockSyncFlushQueue).toHaveBeenCalled();
+      });
+
+      it('sends null when given empty string (clears date)', async () => {
+        await connectAndOpenWithMeta(session);
+        const updated = updatedPost({ date: null });
+        mockUpdatePost.mockResolvedValue(updated);
+
+        await session.setDate('');
+
+        expect(mockUpdatePost).toHaveBeenCalledWith(42, { date: null });
+      });
+
+      it('reflects updated date in readPost()', async () => {
+        await connectAndOpenWithMeta(session);
+        mockUpdatePost.mockResolvedValue(updatedPost({ date: '2026-06-15T12:00:00' }));
+
+        await session.setDate('2026-06-15T12:00:00');
+
+        const text = session.readPost();
+        expect(text).toContain('Date: 2026-06-15T12:00:00');
+      });
+
+      it('throws when not editing', async () => {
+        await connectSession(session);
+        await expect(session.setDate('2026-06-15T12:00:00')).rejects.toThrow(/requires state/);
+      });
+    });
+
+    describe('setSlug()', () => {
+      it('updates slug in Y.Doc and REST API', async () => {
+        await connectAndOpenWithMeta(session);
+        const updated = updatedPost({ slug: 'new-slug' });
+        mockUpdatePost.mockResolvedValue(updated);
+
+        const result = await session.setSlug('new-slug');
+
+        expect(result).toEqual(updated);
+        expect(mockUpdatePost).toHaveBeenCalledWith(42, { slug: 'new-slug' });
+        expect(mockSyncFlushQueue).toHaveBeenCalled();
+      });
+
+      it('reflects updated slug in readPost()', async () => {
+        await connectAndOpenWithMeta(session);
+        mockUpdatePost.mockResolvedValue(updatedPost({ slug: 'custom-slug' }));
+
+        await session.setSlug('custom-slug');
+
+        const text = session.readPost();
+        expect(text).toContain('Slug: custom-slug');
+      });
+
+      it('throws when not editing', async () => {
+        await connectSession(session);
+        await expect(session.setSlug('test')).rejects.toThrow(/requires state/);
+      });
+    });
+
+    describe('setSticky()', () => {
+      it('updates sticky in Y.Doc and REST API', async () => {
+        await connectAndOpenWithMeta(session);
+        const updated = updatedPost({ sticky: true });
+        mockUpdatePost.mockResolvedValue(updated);
+
+        const result = await session.setSticky(true);
+
+        expect(result).toEqual(updated);
+        expect(mockUpdatePost).toHaveBeenCalledWith(42, { sticky: true });
+        expect(mockSyncFlushQueue).toHaveBeenCalled();
+      });
+
+      it('reflects sticky=true in readPost()', async () => {
+        await connectAndOpenWithMeta(session);
+        mockUpdatePost.mockResolvedValue(updatedPost({ sticky: true }));
+
+        await session.setSticky(true);
+
+        const text = session.readPost();
+        expect(text).toContain('Sticky: yes');
+      });
+
+      it('reflects sticky=false in readPost()', async () => {
+        await connectAndOpenWithMeta(session);
+        mockUpdatePost.mockResolvedValue(updatedPost({ sticky: false }));
+
+        await session.setSticky(false);
+
+        const text = session.readPost();
+        expect(text).not.toContain('Sticky: yes');
+      });
+
+      it('throws when not editing', async () => {
+        await connectSession(session);
+        await expect(session.setSticky(true)).rejects.toThrow(/requires state/);
+      });
+    });
+
+    describe('setCommentStatus()', () => {
+      it('updates comment_status in Y.Doc and REST API', async () => {
+        await connectAndOpenWithMeta(session);
+        const updated = updatedPost({ comment_status: 'closed' });
+        mockUpdatePost.mockResolvedValue(updated);
+
+        const result = await session.setCommentStatus('closed');
+
+        expect(result).toEqual(updated);
+        expect(mockUpdatePost).toHaveBeenCalledWith(42, { comment_status: 'closed' });
+        expect(mockSyncFlushQueue).toHaveBeenCalled();
+      });
+
+      it('reflects closed comments in readPost()', async () => {
+        await connectAndOpenWithMeta(session);
+        mockUpdatePost.mockResolvedValue(updatedPost({ comment_status: 'closed' }));
+
+        await session.setCommentStatus('closed');
+
+        const text = session.readPost();
+        expect(text).toContain('Comments: closed');
+      });
+
+      it('reflects open comments in readPost()', async () => {
+        await connectAndOpenWithMeta(session);
+        mockUpdatePost.mockResolvedValue(updatedPost({ comment_status: 'open' }));
+
+        await session.setCommentStatus('open');
+
+        const text = session.readPost();
+        expect(text).not.toContain('Comments: closed');
+      });
+
+      it('throws when not editing', async () => {
+        await connectSession(session);
+        await expect(session.setCommentStatus('closed')).rejects.toThrow(/requires state/);
+      });
+    });
+
+    describe('updatePostMeta() shared behavior', () => {
+      it('flushes sync queue after updating Y.Doc', async () => {
+        await connectAndOpenWithMeta(session);
+        mockUpdatePost.mockResolvedValue(updatedPost({ status: 'private' }));
+
+        await session.setPostStatus('private');
+
+        expect(mockSyncFlushQueue).toHaveBeenCalled();
+      });
+
+      it('refreshes currentPost from API response', async () => {
+        await connectAndOpenWithMeta(session);
+        const updated = updatedPost({ status: 'publish', slug: 'auto-modified-slug' });
+        mockUpdatePost.mockResolvedValue(updated);
+
+        await session.setPostStatus('publish');
+
+        expect(session.getCurrentPost()).toEqual(updated);
+      });
     });
   });
 

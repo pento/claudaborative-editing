@@ -813,6 +813,60 @@ describe('WordPressApiClient', () => {
     });
   });
 
+  describe('listTerms', () => {
+    const fakeCat: WPTerm = { id: 1, name: 'Tech', slug: 'tech', taxonomy: 'category' };
+    const fakeTag: WPTerm = { id: 2, name: 'JavaScript', slug: 'javascript', taxonomy: 'post_tag' };
+
+    it('lists categories with default params', async () => {
+      fetchMock.mockResolvedValue(mockResponse([fakeCat]));
+      const client = createClient();
+      const result = await client.listTerms('categories');
+
+      const url = fetchMock.mock.calls[0][0] as string;
+      expect(url).toContain('/wp/v2/categories?');
+      expect(url).toContain('per_page=100');
+      expect(url).toContain('orderby=count');
+      expect(url).toContain('order=desc');
+      expect(result).toEqual([fakeCat]);
+    });
+
+    it('lists tags with correct endpoint', async () => {
+      fetchMock.mockResolvedValue(mockResponse([fakeTag]));
+      const client = createClient();
+      const result = await client.listTerms('tags');
+
+      const url = fetchMock.mock.calls[0][0] as string;
+      expect(url).toContain('/wp/v2/tags?');
+      expect(result).toEqual([fakeTag]);
+    });
+
+    it('passes search parameter when provided', async () => {
+      fetchMock.mockResolvedValue(mockResponse([fakeCat]));
+      const client = createClient();
+      await client.listTerms('categories', { search: 'Tech' });
+
+      const url = fetchMock.mock.calls[0][0] as string;
+      expect(url).toContain('search=Tech');
+    });
+
+    it('passes custom perPage', async () => {
+      fetchMock.mockResolvedValue(mockResponse([fakeCat]));
+      const client = createClient();
+      await client.listTerms('categories', { perPage: 10 });
+
+      const url = fetchMock.mock.calls[0][0] as string;
+      expect(url).toContain('per_page=10');
+    });
+
+    it('returns empty array when no terms', async () => {
+      fetchMock.mockResolvedValue(mockResponse([]));
+      const client = createClient();
+      const result = await client.listTerms('tags');
+
+      expect(result).toEqual([]);
+    });
+  });
+
   describe('createTerm', () => {
     const fakeCat: WPTerm = { id: 5, name: 'New Category', slug: 'new-category', taxonomy: 'category' };
     const fakeTag: WPTerm = { id: 6, name: 'New Tag', slug: 'new-tag', taxonomy: 'post_tag' };
