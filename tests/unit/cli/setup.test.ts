@@ -1,7 +1,13 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { mkdtempSync, rmSync } from 'fs';
+import { join } from 'path';
+import { tmpdir } from 'os';
+import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
 import type { SetupDeps } from '../../../src/cli/setup.js';
 import type { CheckboxResult } from '../../../src/cli/checkbox-prompt.js';
 import type { McpClientConfig, McpClientType } from '../../../src/cli/types.js';
+
+// Temp directory for tests that need real filesystem writes
+const testTmpDir = mkdtempSync(join(tmpdir(), 'setup-test-'));
 
 // Mock fetch globally before importing the module under test
 const fetchMock = vi.fn();
@@ -114,6 +120,10 @@ const mockOpenAuth = vi
 function mockCheckbox(selected: number[]): () => Promise<CheckboxResult> {
   return vi.fn().mockResolvedValue({ selected });
 }
+
+afterAll(() => {
+  rmSync(testTmpDir, { recursive: true, force: true });
+});
 
 describe('setup wizard', () => {
   beforeEach(() => {
@@ -625,7 +635,7 @@ describe('setup wizard', () => {
       const useCli = vi.fn().mockResolvedValue(false);
       const clientWithFailingCli = makeMockClient('claude-code', 'Claude Code', {
         useCli,
-        configPath: () => '/private/tmp/claude-501/test-setup-fallback/config.json',
+        configPath: () => join(testTmpDir, 'setup-fallback', 'config.json'),
       });
 
       const { deps, logs } = createTestDeps(manualAnswers, {
@@ -815,7 +825,7 @@ describe('setup wizard', () => {
       const removeCli = vi.fn().mockResolvedValue(false);
       const clientWithFailingRemove = makeMockClient('claude-code', 'Claude Code', {
         removeCli,
-        configPath: () => '/private/tmp/claude-501/test-remove-fallback/config.json',
+        configPath: () => join(testTmpDir, 'remove-fallback', 'config.json'),
       });
 
       const { deps, logs } = createTestDeps([], {
