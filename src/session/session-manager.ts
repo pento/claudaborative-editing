@@ -110,22 +110,29 @@ function prepareBlockTree(
         registry.isKnownBlockType('core/paragraph');
 
       if (paragraphAllowed) {
+        const wrappedContent = input.content;
+        const existingInnerBlocks = input.innerBlocks;
         input = {
           ...input,
           content: undefined,
           innerBlocks: [
-            { name: 'core/paragraph', content: input.content },
-            ...(input.innerBlocks ?? []),
+            { name: 'core/paragraph', content: wrappedContent },
+            ...(existingInnerBlocks ?? []),
           ],
         };
       } else {
         const info = registry.getBlockTypeInfo(input.name);
         const richTextAttrs = info?.attributes.filter((a) => a.richText).map((a) => a.name) ?? [];
-        const hint =
+        const richTextHint =
           richTextAttrs.length > 0
             ? ` This block's rich-text attributes are: ${richTextAttrs.join(', ')}. Pass text via the "attributes" parameter instead.`
             : '';
-        throw new Error(`Block type ${input.name} does not have a "content" attribute.${hint}`);
+        const innerBlocksHint = usesInnerBlocks
+          ? ' Alternatively, pass content via the "innerBlocks" parameter.'
+          : '';
+        throw new Error(
+          `Block type ${input.name} does not have a "content" attribute.${richTextHint}${innerBlocksHint}`,
+        );
       }
     }
 
