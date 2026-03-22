@@ -314,7 +314,6 @@ describe('buildServerEntry', () => {
     });
 
     expect(entry).toEqual({
-      title: 'WordPress site at https://example.com',
       command: 'npx',
       args: ['claudaborative-editing'],
       env: {
