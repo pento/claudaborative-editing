@@ -10,6 +10,7 @@ vi.mock('@modelcontextprotocol/sdk/server/mcp.js', () => {
     McpServer: vi.fn().mockImplementation(function (this: Record<string, unknown>, _info: unknown, options?: Record<string, unknown>) {
       capturedOptions = options;
       this.tool = vi.fn();
+      this.prompt = vi.fn();
       this.connect = vi.fn().mockResolvedValue(undefined);
       this.close = mockServerClose;
     }),
@@ -41,6 +42,14 @@ vi.mock('../../src/tools/read.js', () => ({ registerReadTools: vi.fn() }));
 vi.mock('../../src/tools/edit.js', () => ({ registerEditTools: vi.fn() }));
 vi.mock('../../src/tools/status.js', () => ({ registerStatusTools: vi.fn() }));
 vi.mock('../../src/tools/block-types.js', () => ({ registerBlockTypeTools: vi.fn() }));
+vi.mock('../../src/tools/media.js', () => ({ registerMediaTools: vi.fn() }));
+vi.mock('../../src/tools/notes.js', () => ({ registerNoteTools: vi.fn() }));
+vi.mock('../../src/tools/metadata.js', () => ({ registerMetadataTools: vi.fn() }));
+
+// --- Mock prompt registration functions (no-ops) ---
+vi.mock('../../src/prompts/editing.js', () => ({ registerEditingPrompts: vi.fn() }));
+vi.mock('../../src/prompts/review.js', () => ({ registerReviewPrompts: vi.fn() }));
+vi.mock('../../src/prompts/authoring.js', () => ({ registerAuthoringPrompts: vi.fn() }));
 
 describe('startServer()', () => {
   const originalEnv = { ...process.env };

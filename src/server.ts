@@ -10,6 +10,9 @@ import { registerBlockTypeTools } from './tools/block-types.js';
 import { registerMediaTools } from './tools/media.js';
 import { registerNoteTools } from './tools/notes.js';
 import { registerMetadataTools } from './tools/metadata.js';
+import { registerEditingPrompts } from './prompts/editing.js';
+import { registerReviewPrompts } from './prompts/review.js';
+import { registerAuthoringPrompts } from './prompts/authoring.js';
 
 declare const __PKG_VERSION__: string;
 
@@ -40,7 +43,7 @@ export async function startServer(): Promise<void> {
     : 'Use wp_connect to connect to a WordPress site first, or use wp_status to check connection state.';
 
   const server = new McpServer(
-    { name: 'claudaborative-editing', version: VERSION },
+    { name: 'wpce', version: VERSION },
     { instructions },
   );
 
@@ -54,6 +57,11 @@ export async function startServer(): Promise<void> {
   registerMediaTools(server, session);
   registerNoteTools(server, session);
   registerMetadataTools(server, session);
+
+  // Register all prompts
+  registerEditingPrompts(server, session);
+  registerReviewPrompts(server, session);
+  registerAuthoringPrompts(server, session);
 
   // Start stdio transport
   const transport = new StdioServerTransport();
