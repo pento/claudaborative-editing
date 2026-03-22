@@ -54,7 +54,7 @@ const STREAM_CHUNK_SIZE_MIN = 2;
 const STREAM_CHUNK_SIZE_MAX = 6;
 
 /** Delay between streaming chunks in milliseconds. */
-const STREAM_CHUNK_DELAY_MS = 200;
+const STREAM_CHUNK_DELAY_MS = 100;
 
 /** Minimum text length to trigger streaming (short text is applied atomically). */
 const STREAM_THRESHOLD = 20;
