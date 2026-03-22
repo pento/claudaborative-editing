@@ -8,22 +8,34 @@ An MCP server that lets Claude Code collaboratively edit WordPress posts in real
 npx claudaborative-editing setup
 ```
 
-The setup wizard validates your WordPress credentials and outputs the registration command:
+The setup wizard will:
 
-```bash
-claude mcp add claudaborative-editing -e WP_SITE_URL=https://your-site.com -e WP_USERNAME=your-user -e WP_APP_PASSWORD="xxxx xxxx xxxx xxxx" -- npx claudaborative-editing
-```
+1. Open your browser to authorize with your WordPress site (creates an Application Password automatically)
+2. Auto-detect installed MCP clients (Claude Code, Claude Desktop, VS Code, Cursor, Windsurf)
+3. Write the MCP server config directly to each client's settings file
+
+That's it — no manual config editing required.
 
 ## Prerequisites
 
 - **WordPress 7.0+** with collaborative editing enabled (Settings → Writing)
-- **Application Password** for a WordPress user with `edit_posts` capability
-  - In WordPress admin: Users → Your Profile → Application Passwords
-  - Enter a name (e.g., "Claude Code"), click **Add New**, copy the password
+- A WordPress user with `edit_posts` capability
 
 ## Configuration
 
-Credentials are passed as environment variables via the `claude mcp add` command (as shown in the quickstart). You can also use the `wp_connect` MCP tool to connect at runtime without pre-configured credentials.
+### Setup options
+
+| Flag              | Description                                           |
+| ----------------- | ----------------------------------------------------- |
+| `--manual`        | Skip browser auth, prompt for credentials manually    |
+| `--remove`        | Remove claudaborative-editing config from MCP clients |
+| `--client <name>` | Configure a specific client only                      |
+
+Supported `--client` values: `claude-code`, `claude-desktop`, `vscode`, `vscode-insiders`, `cursor`, `windsurf`.
+
+### Manual configuration
+
+If you prefer not to use the setup wizard, you can pass credentials as environment variables. Use the `wp_connect` MCP tool to connect at runtime, or configure your MCP client manually with these variables:
 
 | Variable          | Description                    |
 | ----------------- | ------------------------------ |
