@@ -30,7 +30,7 @@ Claude Code  <--stdio-->  MCP Server (Node.js)  <--HTTP polling-->  WordPress
 - `src/wordpress/` — REST API client, HTTP polling sync client, MIME type detection
 - `src/yjs/` — Y.Doc management, block ↔ Yjs conversion, sync protocol encoding
 - `src/session/` — Connection lifecycle, awareness/presence
-- `src/tools/` — MCP tool handlers (connect, posts [open/close/create], read, edit, media, status)
+- `src/tools/` — MCP tool handlers (connect, posts [open/close/create], read, edit, media, notes, status)
 - `src/blocks/` — Gutenberg HTML parser, Claude-friendly renderer
 - `tests/` — Unit and integration tests
 
@@ -65,6 +65,18 @@ The WordPress sync endpoint is `POST /wp-sync/v1/updates`. Each request:
 3. Tracks cursor for at-most-once delivery
 
 Update types: `sync_step1` (state vector), `sync_step2` (missing updates response), `update` (regular change), `compaction` (full state merge).
+
+### Multi-Room Sync
+
+The `SyncClient` supports multiple Yjs rooms in a single HTTP polling loop. WordPress Gutenberg uses separate rooms for different data types (e.g., `postType/post:{id}` for block content, `root/comment` for notes). All rooms are sent/received in a single HTTP request for efficiency.
+
+- **`start(room, clientId, initialUpdates, callbacks)`** — Starts polling with one room (backward-compatible).
+- **`addRoom(room, clientId, initialUpdates, callbacks)`** — Adds an additional room to the polling loop. The room joins the next poll cycle.
+- **`removeRoom(room)`** — Removes a room. Stops polling if no rooms remain.
+- **`queueUpdate(room, update)`** — Queues an update for a specific room.
+- Each room has its own `endCursor`, `updateQueue`, `queuePaused`, `hasCollaborators`, and `RoomCallbacks`.
+- `onStatusChange` is global (HTTP-level), not per-room.
+- Collaborator-aware polling interval: if ANY room has collaborators, all rooms poll faster.
 
 ### Streaming Text Effect
 
@@ -129,17 +141,44 @@ The `wp_upload_media` tool uploads a local file to the WordPress media library v
 
 Different media block types use different attribute names for the media reference:
 
-| Block | ID attr | URL attr | Extra required attrs |
-|-------|---------|----------|---------------------|
-| `core/image` | `id` | `url` | |
-| `core/video` | `id` | `src` | |
-| `core/audio` | `id` | `src` | |
-| `core/cover` | `id` | `url` | `backgroundType: "image"/"video"` |
-| `core/media-text` | `mediaId` | `mediaUrl` | `mediaType: "image"/"video"` |
-| `core/file` | `id` | `href` | |
-| `core/gallery` | N/A | N/A | Uses inner `core/image` blocks |
+| Block             | ID attr   | URL attr   | Extra required attrs              |
+| ----------------- | --------- | ---------- | --------------------------------- |
+| `core/image`      | `id`      | `url`      |                                   |
+| `core/video`      | `id`      | `src`      |                                   |
+| `core/audio`      | `id`      | `src`      |                                   |
+| `core/cover`      | `id`      | `url`      | `backgroundType: "image"/"video"` |
+| `core/media-text` | `mediaId` | `mediaUrl` | `mediaType: "image"/"video"`      |
+| `core/file`       | `id`      | `href`     |                                   |
+| `core/gallery`    | N/A       | N/A        | Uses inner `core/image` blocks    |
 
 The tool response includes a context-appropriate insertion hint based on the uploaded file's MIME type. MIME type detection is handled by `src/wordpress/mime-types.ts` using a static extension-to-MIME map (no external dependencies). Supported formats include common image, video, audio, and document types.
+
+## Notes (Block Comments)
+
+Notes are editorial comments attached to individual blocks, visible in the WordPress editor but not shown to site visitors. They require WordPress 6.9 or later. Support is auto-detected during `connect()` via a probe to `GET /wp/v2/comments?type=note`.
+
+### Architecture
+
+Notes use a dual-path architecture — the WordPress REST API for note content CRUD, and Yjs for block metadata linkage and real-time sync:
+
+- **REST API** (`/wp/v2/comments` with `type=note`): Create, read, update, and delete note content. Notes are stored as `wp_comments` with `comment_type = 'note'`.
+- **Yjs post room** (`postType/post:{id}`): The `metadata.noteId` attribute on a block links it to a note. This metadata propagates via normal Yjs sync so all collaborators see note indicators in Gutenberg.
+- **Yjs comment room** (`root/comment`): A separate Y.Doc whose `state` map (savedAt/savedBy) acts as a change signal. When updated, other clients re-fetch notes from the REST API, enabling real-time note visibility.
+
+### Tools
+
+- `wp_list_notes` — List all notes on the current post with author, date, content, and block association. Replies are nested under parent notes.
+- `wp_add_note` — Add a note to a block. Creates the note via REST API and sets `metadata.noteId` on the block.
+- `wp_reply_to_note` — Reply to an existing note (threaded replies).
+- `wp_resolve_note` — Delete a note and its replies, removing the metadata linkage from the block.
+- `wp_update_note` — Update note text content.
+
+### Key details
+
+- One note per block. To add feedback to a block that already has a note, reply to the existing note.
+- `wp_read_post` shows `[has note]` markers on blocks that have notes. Use `wp_list_notes` to read note content.
+- Resolving a note also deletes all its replies (cascade delete).
+- The `notesSupported` flag on `SessionManager` gates all note operations — tools return a descriptive error on older WordPress versions.
 
 ## MCP Server Usage
 

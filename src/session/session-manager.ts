@@ -25,12 +25,20 @@ import { parseBlocks, parsedBlockToBlock } from '../blocks/parser.js';
 import { renderPost, renderBlock } from '../blocks/renderer.js';
 import { buildAwarenessState, parseCollaborators } from './awareness.js';
 import { DEFAULT_SYNC_CONFIG } from '../wordpress/types.js';
+import {
+  CRDT_DOC_VERSION,
+  CRDT_STATE_MAP_KEY,
+  CRDT_STATE_MAP_SAVED_AT_KEY,
+  CRDT_STATE_MAP_SAVED_BY_KEY,
+  CRDT_STATE_MAP_VERSION_KEY,
+} from '../yjs/types.js';
 import type { Block, CollaboratorInfo, AwarenessLocalState } from '../yjs/types.js';
 import { BlockTypeRegistry } from '../yjs/block-type-registry.js';
 import { getMimeType } from '../wordpress/mime-types.js';
 import type {
   WordPressConfig,
   WPMediaItem,
+  WPNote,
   WPUser,
   WPPost,
 } from '../wordpress/types.js';
@@ -210,7 +218,13 @@ export class SessionManager {
   private state: SessionState = 'disconnected';
   private awarenessState: AwarenessLocalState | null = null;
   private collaborators: CollaboratorInfo[] = [];
+  private notesSupported = false;
   private updateHandler: ((update: Uint8Array, origin: unknown) => void) | null = null;
+  private commentDoc: Y.Doc | null = null;
+  private commentUpdateHandler: ((update: Uint8Array, origin: unknown) => void) | null = null;
+
+  /** Room name for the comment sync room. */
+  private static readonly COMMENT_ROOM = 'root/comment';
 
   /** Max time (ms) to wait for sync to populate the doc before loading from REST API. Set to 0 in tests. */
   syncWaitTimeout = 5000;
@@ -252,6 +266,13 @@ export class SessionManager {
     }
     this.documentManager.setRegistry(this.registry);
 
+    // Check if the site supports notes (block comments)
+    try {
+      this.notesSupported = await this.apiClient.checkNotesSupport();
+    } catch {
+      this.notesSupported = false;
+    }
+
     // Build awareness state from user info
     this.awarenessState = buildAwarenessState(user);
 
@@ -271,6 +292,7 @@ export class SessionManager {
     this.user = null;
     this.awarenessState = null;
     this.collaborators = [];
+    this.notesSupported = false;
     this.state = 'disconnected';
   }
 
@@ -403,10 +425,50 @@ export class SessionManager {
       // Only queue updates from local edits, not from sync
       if (origin === LOCAL_ORIGIN) {
         const syncUpdate = createUpdateFromChange(update);
-        syncClient.queueUpdate(syncUpdate);
+        syncClient.queueUpdate(room, syncUpdate);
       }
     };
     doc.on('update', this.updateHandler);
+
+    // Join the root/comment room for real-time note sync.
+    // This room's state map acts as a change signal: when savedAt/savedBy
+    // are updated, other clients re-fetch notes from the REST API.
+    if (this.notesSupported) {
+      const commentDoc = new Y.Doc();
+      this.commentDoc = commentDoc;
+
+      // Initialize the state map (same pattern as the post doc)
+      commentDoc.transact(() => {
+        const stateMap = commentDoc.getMap(CRDT_STATE_MAP_KEY);
+        stateMap.set(CRDT_STATE_MAP_VERSION_KEY, CRDT_DOC_VERSION);
+      });
+
+      this.commentUpdateHandler = (update: Uint8Array, origin: unknown) => {
+        if (origin === LOCAL_ORIGIN) {
+          const syncUpdate = createUpdateFromChange(update);
+          syncClient.queueUpdate(SessionManager.COMMENT_ROOM, syncUpdate);
+        }
+      };
+      commentDoc.on('update', this.commentUpdateHandler);
+
+      syncClient.addRoom(
+        SessionManager.COMMENT_ROOM,
+        commentDoc.clientID,
+        [createSyncStep1(commentDoc)],
+        {
+          onUpdate: (update) => {
+            try {
+              return processIncomingUpdate(commentDoc, update);
+            } catch {
+              return null;
+            }
+          },
+          onAwareness: () => {},
+          onCompactionRequested: () => createCompactionUpdate(commentDoc),
+          getAwarenessState: () => null,
+        },
+      );
+    }
 
     this.state = 'editing';
   }
@@ -447,7 +509,13 @@ export class SessionManager {
       this.updateHandler = null;
     }
 
+    if (this.commentDoc && this.commentUpdateHandler) {
+      this.commentDoc.off('update', this.commentUpdateHandler);
+      this.commentUpdateHandler = null;
+    }
+
     this.doc = null;
+    this.commentDoc = null;
     this.currentPost = null;
     this.collaborators = [];
     this.state = 'connected';
@@ -734,6 +802,171 @@ export class SessionManager {
     return this.apiClient!.uploadMedia(fileData, fileName, mimeType, options);
   }
 
+  // --- Notes ---
+
+  /**
+   * List all notes (block comments) on the current post, along with a map
+   * from noteId to the block index where the note is attached.
+   */
+  async listNotes(): Promise<{ notes: WPNote[]; noteBlockMap: Record<number, string> }> {
+    this.requireState('editing');
+    if (!this.notesSupported) {
+      throw new Error('Notes are not supported. This feature requires WordPress 6.9 or later.');
+    }
+
+    const notes = await this.apiClient!.listNotes(this.currentPost!.id);
+
+    // Build noteId-to-blockIndex map with a single pass over all blocks
+    const noteBlockMap: Record<number, string> = {};
+    const blocks = this.documentManager.getBlocks(this.doc!);
+    const scanBlocks = (blockList: Block[], prefix: string) => {
+      for (let i = 0; i < blockList.length; i++) {
+        const idx = prefix ? `${prefix}.${i}` : String(i);
+        const metadata = blockList[i].attributes.metadata as Record<string, unknown> | undefined;
+        if (metadata?.noteId != null) {
+          noteBlockMap[metadata.noteId as number] = idx;
+        }
+        if (blockList[i].innerBlocks.length > 0) {
+          scanBlocks(blockList[i].innerBlocks, idx);
+        }
+      }
+    };
+    scanBlocks(blocks, '');
+
+    return { notes, noteBlockMap };
+  }
+
+  /**
+   * Add a note (block comment) to a specific block.
+   * Creates the note via the REST API and sets `metadata.noteId` on the block.
+   */
+  async addNote(blockIndex: string, content: string): Promise<WPNote> {
+    this.requireState('editing');
+    if (!this.notesSupported) {
+      throw new Error('Notes are not supported. This feature requires WordPress 6.9 or later.');
+    }
+
+    const block = this.documentManager.getBlockByIndex(this.doc!, blockIndex);
+    if (!block) {
+      throw new Error(`Block not found at index ${blockIndex}`);
+    }
+
+    const existingNoteId = (block.attributes.metadata as Record<string, unknown> | undefined)?.noteId;
+    if (existingNoteId != null) {
+      throw new Error(
+        `Block at index ${blockIndex} already has a note (ID: ${existingNoteId}). ` +
+        `Your view may be stale — call wp_read_post and wp_list_notes to refresh, ` +
+        `then use wp_reply_to_note to reply to the existing note.`,
+      );
+    }
+
+    const note = await this.apiClient!.createNote({ post: this.currentPost!.id, content });
+
+    this.doc!.transact(() => {
+      this.documentManager.setBlockNoteId(this.doc!, blockIndex, note.id);
+    }, LOCAL_ORIGIN);
+
+    this.notifyCommentChange();
+
+    if (this.syncClient) {
+      this.syncClient.flushQueue();
+    }
+
+    return note;
+  }
+
+  /**
+   * Reply to an existing note.
+   */
+  async replyToNote(parentNoteId: number, content: string): Promise<WPNote> {
+    this.requireState('editing');
+    if (!this.notesSupported) {
+      throw new Error('Notes are not supported. This feature requires WordPress 6.9 or later.');
+    }
+
+    const reply = await this.apiClient!.createNote({ post: this.currentPost!.id, content, parent: parentNoteId });
+
+    this.notifyCommentChange();
+    if (this.syncClient) {
+      this.syncClient.flushQueue();
+    }
+
+    return reply;
+  }
+
+  /**
+   * Resolve (delete) a note and remove its metadata linkage from the block.
+   */
+  async resolveNote(noteId: number): Promise<void> {
+    this.requireState('editing');
+    if (!this.notesSupported) {
+      throw new Error('Notes are not supported. This feature requires WordPress 6.9 or later.');
+    }
+
+    // Delete all descendants (replies, replies-to-replies, etc.) then the note itself
+    const allNotes = await this.apiClient!.listNotes(this.currentPost!.id);
+    const childrenByParent = new Map<number, number[]>();
+    for (const note of allNotes) {
+      if (note.parent !== 0) {
+        const siblings = childrenByParent.get(note.parent) ?? [];
+        siblings.push(note.id);
+        childrenByParent.set(note.parent, siblings);
+      }
+    }
+
+    // Collect all descendant IDs via DFS
+    const descendantIds: number[] = [];
+    const stack = [noteId];
+    while (stack.length > 0) {
+      const currentId = stack.pop()!;
+      const children = childrenByParent.get(currentId);
+      if (children) {
+        for (const childId of children) {
+          descendantIds.push(childId);
+          stack.push(childId);
+        }
+      }
+    }
+
+    // Delete descendants first (leaves before parents), then the root note
+    for (const id of descendantIds.reverse()) {
+      await this.apiClient!.deleteNote(id);
+    }
+    await this.apiClient!.deleteNote(noteId);
+
+    // Find and remove the noteId from whichever block has it
+    const blockIndex = this.findBlockIndexByNoteId(noteId);
+    if (blockIndex) {
+      this.doc!.transact(() => {
+        this.documentManager.removeBlockNoteId(this.doc!, blockIndex);
+      }, LOCAL_ORIGIN);
+    }
+
+    this.notifyCommentChange();
+    if (this.syncClient) {
+      this.syncClient.flushQueue();
+    }
+  }
+
+  /**
+   * Update an existing note's content.
+   */
+  async updateNote(noteId: number, content: string): Promise<WPNote> {
+    this.requireState('editing');
+    if (!this.notesSupported) {
+      throw new Error('Notes are not supported. This feature requires WordPress 6.9 or later.');
+    }
+
+    const updated = await this.apiClient!.updateNote(noteId, { content });
+
+    this.notifyCommentChange();
+    if (this.syncClient) {
+      this.syncClient.flushQueue();
+    }
+
+    return updated;
+  }
+
   // --- Status ---
 
   getState(): SessionState {
@@ -770,6 +1003,10 @@ export class SessionManager {
 
   getRegistry(): BlockTypeRegistry {
     return this.registry;
+  }
+
+  getNotesSupported(): boolean {
+    return this.notesSupported;
   }
 
   /**
@@ -957,6 +1194,21 @@ export class SessionManager {
   // --- Internal ---
 
   /**
+   * Signal a note change to other collaborators via the root/comment room.
+   * Updates the comment doc's state map (savedAt/savedBy), which triggers
+   * other clients to re-fetch notes from the REST API.
+   */
+  private notifyCommentChange(): void {
+    if (!this.commentDoc) return;
+
+    this.commentDoc.transact(() => {
+      const stateMap = this.commentDoc!.getMap(CRDT_STATE_MAP_KEY);
+      stateMap.set(CRDT_STATE_MAP_SAVED_AT_KEY, Date.now());
+      stateMap.set(CRDT_STATE_MAP_SAVED_BY_KEY, this.commentDoc!.clientID);
+    }, LOCAL_ORIGIN);
+  }
+
+  /**
    * Assert that the session is in one of the allowed states.
    */
   private requireState(...allowed: SessionState[]): void {
@@ -965,5 +1217,27 @@ export class SessionManager {
         `Operation requires state ${allowed.join(' or ')}, but current state is '${this.state}'`,
       );
     }
+  }
+
+  /**
+   * Scan all blocks (including nested inner blocks) to find the block
+   * whose metadata.noteId matches the given noteId.
+   * Returns the block index (dot-notation) or null if not found.
+   */
+  private findBlockIndexByNoteId(noteId: number): string | null {
+    const blocks = this.documentManager.getBlocks(this.doc!);
+    const scan = (blockList: Block[], prefix: string): string | null => {
+      for (let i = 0; i < blockList.length; i++) {
+        const idx = prefix ? `${prefix}.${i}` : String(i);
+        const metadata = blockList[i].attributes.metadata as Record<string, unknown> | undefined;
+        if (metadata?.noteId === noteId) return idx;
+        if (blockList[i].innerBlocks.length > 0) {
+          const found = scan(blockList[i].innerBlocks, idx);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+    return scan(blocks, '');
   }
 }

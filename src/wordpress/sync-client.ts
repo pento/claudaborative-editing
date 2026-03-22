@@ -22,26 +22,37 @@ export interface SyncCallbacks {
   getAwarenessState: () => LocalAwarenessState;
 }
 
+/** Room-specific callbacks (everything except the global onStatusChange). */
+export type RoomCallbacks = Omit<SyncCallbacks, 'onStatusChange'>;
+
+interface RoomState {
+  room: string;
+  clientId: number;
+  endCursor: number;
+  updateQueue: SyncUpdate[];
+  queuePaused: boolean;
+  hasCollaborators: boolean;
+  callbacks: RoomCallbacks;
+}
+
 /**
  * HTTP polling sync client that maintains the Gutenberg sync loop.
+ *
+ * Supports multiple rooms, each with their own state, while sending
+ * all rooms in a single HTTP request per poll cycle.
  *
  * Uses chained setTimeout (not setInterval) so polling interval
  * can adapt dynamically to collaborator presence and errors.
  */
 export class SyncClient {
   private pollTimer: ReturnType<typeof setTimeout> | null = null;
-  private endCursor: number = 0;
-  private updateQueue: SyncUpdate[] = [];
-  private queuePaused: boolean = true;
-  private hasCollaborators: boolean = false;
   private currentBackoff: number;
   private isPolling: boolean = false;
   private pollInProgress: boolean = false;
   private flushRequested: boolean = false;
-  private room: string = '';
-  private clientId: number = 0;
 
-  private callbacks: SyncCallbacks | null = null;
+  private rooms = new Map<string, RoomState>();
+  private onStatusChange: ((status: SyncStatus) => void) | null = null;
   private firstPollResolve: (() => void) | null = null;
 
   constructor(
@@ -64,6 +75,9 @@ export class SyncClient {
   /**
    * Start the polling loop for a room.
    *
+   * This is a backward-compatible wrapper that sets the global onStatusChange
+   * callback and adds the room via addRoom(), then starts polling if not already active.
+   *
    * @param room        Room identifier, e.g. 'postType/post:123'
    * @param clientId    Y.Doc clientID
    * @param initialUpdates  Initial sync updates to send (sync_step1)
@@ -75,22 +89,61 @@ export class SyncClient {
     initialUpdates: SyncUpdate[],
     callbacks: SyncCallbacks,
   ): void {
-    this.room = room;
-    this.clientId = clientId;
-    this.callbacks = callbacks;
-    this.endCursor = 0;
-    this.queuePaused = true;
-    this.hasCollaborators = false;
-    this.currentBackoff = this.config.pollingInterval;
-    this.isPolling = true;
+    this.onStatusChange = callbacks.onStatusChange;
 
-    // Seed queue with initial updates (e.g. sync_step1)
-    this.updateQueue = [...initialUpdates];
+    const roomCallbacks: RoomCallbacks = {
+      onUpdate: callbacks.onUpdate,
+      onAwareness: callbacks.onAwareness,
+      onCompactionRequested: callbacks.onCompactionRequested,
+      getAwarenessState: callbacks.getAwarenessState,
+    };
+    this.addRoom(room, clientId, initialUpdates, roomCallbacks);
 
-    this.callbacks.onStatusChange('connecting');
+    if (!this.isPolling) {
+      this.currentBackoff = this.config.pollingInterval;
+      this.isPolling = true;
+      this.onStatusChange('connecting');
+      this.pollTimer = setTimeout(() => this.poll(), 0);
+    }
+  }
 
-    // Kick off the first poll immediately
-    this.pollTimer = setTimeout(() => this.poll(), 0);
+  /**
+   * Add a room to the sync loop.
+   *
+   * @param room        Room identifier
+   * @param clientId    Y.Doc clientID for this room
+   * @param initialUpdates  Initial sync updates to send (sync_step1)
+   * @param callbacks   Room-specific event callbacks
+   */
+  addRoom(
+    room: string,
+    clientId: number,
+    initialUpdates: SyncUpdate[],
+    callbacks: RoomCallbacks,
+  ): void {
+    if (this.rooms.has(room)) {
+      throw new Error(`Room '${room}' is already registered`);
+    }
+    this.rooms.set(room, {
+      room,
+      clientId,
+      endCursor: 0,
+      updateQueue: [...initialUpdates],
+      queuePaused: true,
+      hasCollaborators: false,
+      callbacks,
+    });
+  }
+
+  /**
+   * Remove a room from the sync loop.
+   * If this was the last room, stops polling entirely.
+   */
+  removeRoom(room: string): void {
+    this.rooms.delete(room);
+    if (this.rooms.size === 0) {
+      this.stop();
+    }
   }
 
   /**
@@ -102,8 +155,9 @@ export class SyncClient {
       clearTimeout(this.pollTimer);
       this.pollTimer = null;
     }
-    this.callbacks?.onStatusChange('disconnected');
-    this.callbacks = null;
+    this.rooms.clear();
+    this.onStatusChange?.('disconnected');
+    this.onStatusChange = null;
   }
 
   /**
@@ -131,14 +185,18 @@ export class SyncClient {
   }
 
   /**
-   * Add an update to the outgoing queue.
+   * Add an update to the outgoing queue for a specific room.
    */
-  queueUpdate(update: SyncUpdate): void {
-    this.updateQueue.push(update);
+  queueUpdate(room: string, update: SyncUpdate): void {
+    const state = this.rooms.get(room);
+    if (!state) {
+      throw new Error(`Room '${room}' is not registered`);
+    }
+    state.updateQueue.push(update);
   }
 
   /**
-   * Get sync status info.
+   * Get sync status info, aggregated across all rooms.
    */
   getStatus(): {
     isPolling: boolean;
@@ -147,12 +205,24 @@ export class SyncClient {
     endCursor: number;
     queueSize: number;
   } {
+    let hasCollaborators = false;
+    let queuePaused = false;
+    let totalQueueSize = 0;
+    let maxEndCursor = 0;
+
+    for (const state of this.rooms.values()) {
+      if (state.hasCollaborators) hasCollaborators = true;
+      if (state.queuePaused) queuePaused = true;
+      totalQueueSize += state.updateQueue.length;
+      if (state.endCursor > maxEndCursor) maxEndCursor = state.endCursor;
+    }
+
     return {
       isPolling: this.isPolling,
-      hasCollaborators: this.hasCollaborators,
-      queuePaused: this.queuePaused,
-      endCursor: this.endCursor,
-      queueSize: this.updateQueue.length,
+      hasCollaborators,
+      queuePaused,
+      endCursor: maxEndCursor,
+      queueSize: totalQueueSize,
     };
   }
 
@@ -160,65 +230,61 @@ export class SyncClient {
    * Execute one poll cycle.
    */
   private async poll(): Promise<void> {
-    if (!this.isPolling || !this.callbacks) {
-      return;
-    }
-
-    // Re-entrancy guard: if a poll is already running, skip
-    if (this.pollInProgress) {
-      return;
-    }
+    if (!this.isPolling || this.rooms.size === 0) return;
+    if (this.pollInProgress) return;
 
     this.pollInProgress = true;
     this.flushRequested = false;
 
-    // Drain the queue: take all pending updates.
-    // When paused, only initial/sync updates are sent (queue is drained regardless);
-    // the distinction is that new edits are only queued when unpaused.
-    const updates = this.updateQueue.splice(0);
+    // Drain all rooms' queues and build payload
+    const drainedQueues = new Map<string, SyncUpdate[]>();
+    const roomPayloads = [];
 
-    const awareness = this.callbacks.getAwarenessState();
+    for (const [name, state] of this.rooms) {
+      const updates = state.updateQueue.splice(0);
+      drainedQueues.set(name, updates);
+      roomPayloads.push({
+        room: name,
+        client_id: state.clientId,
+        after: state.endCursor,
+        awareness: state.callbacks.getAwarenessState(),
+        updates,
+      });
+    }
 
     try {
-      const payload = {
-        rooms: [
-          {
-            room: this.room,
-            client_id: this.clientId,
-            after: this.endCursor,
-            awareness,
-            updates,
-          },
-        ],
-      };
+      const response = await this.apiClient.sendSyncUpdate({ rooms: roomPayloads });
 
-      const response = await this.apiClient.sendSyncUpdate(payload);
-
-      // Success — reset backoff
-      this.currentBackoff = this.hasCollaborators
+      // Success — reset backoff based on collaborator presence
+      this.currentBackoff = this.anyCollaborators()
         ? this.config.pollingIntervalWithCollaborators
         : this.config.pollingInterval;
 
-      this.callbacks.onStatusChange('connected');
-
+      this.onStatusChange?.('connected');
       this.processResponse(response);
 
-      // Resolve the first-poll promise after processing the response
+      // Re-check after processing (collaborators may have changed)
+      this.currentBackoff = this.anyCollaborators()
+        ? this.config.pollingIntervalWithCollaborators
+        : this.config.pollingInterval;
+
       if (this.firstPollResolve) {
         this.firstPollResolve();
         this.firstPollResolve = null;
       }
     } catch (error) {
-      // Restore un-sent updates to front of queue,
-      // excluding compaction updates (which are stale after an error).
-      const restorable = updates.filter(
-        (u) => (u.type as SyncUpdateType) !== ('compaction' as SyncUpdateType),
-      );
-      this.updateQueue.unshift(...restorable);
+      // Restore un-sent updates for ALL rooms (excluding stale compaction updates)
+      for (const [name, updates] of drainedQueues) {
+        const state = this.rooms.get(name);
+        if (state) {
+          const restorable = updates.filter(
+            (u) => (u.type as SyncUpdateType) !== ('compaction' as SyncUpdateType),
+          );
+          state.updateQueue.unshift(...restorable);
+        }
+      }
 
-      this.callbacks.onStatusChange('error');
-
-      // Exponential backoff: double current, cap at max
+      this.onStatusChange?.('error');
       this.currentBackoff = Math.min(
         this.currentBackoff * 2,
         this.config.maxErrorBackoff,
@@ -227,7 +293,6 @@ export class SyncClient {
 
     this.pollInProgress = false;
 
-    // If a flush was requested during this poll, trigger an immediate follow-up
     if (this.flushRequested) {
       this.flushRequested = false;
       if (this.pollTimer !== null) {
@@ -238,6 +303,16 @@ export class SyncClient {
     } else {
       this.scheduleNextPoll();
     }
+  }
+
+  /**
+   * Check if any room has collaborators.
+   */
+  private anyCollaborators(): boolean {
+    for (const state of this.rooms.values()) {
+      if (state.hasCollaborators) return true;
+    }
+    return false;
   }
 
   /**
@@ -261,49 +336,39 @@ export class SyncClient {
     updates: SyncUpdate[];
     should_compact?: boolean;
   }> }): void {
-    if (!this.callbacks) {
-      return;
-    }
+    for (const roomData of response.rooms) {
+      const state = this.rooms.get(roomData.room);
+      if (!state) continue;
 
-    const roomData = response.rooms.find((r) => r.room === this.room);
-    if (!roomData) {
-      return;
-    }
+      // Update end cursor
+      state.endCursor = roomData.end_cursor;
 
-    // 1. Update end cursor
-    this.endCursor = roomData.end_cursor;
+      // Process awareness — detect collaborators
+      state.callbacks.onAwareness(roomData.awareness);
 
-    // 2. Process awareness — detect collaborators
-    this.callbacks.onAwareness(roomData.awareness);
+      const otherClients = Object.keys(roomData.awareness).filter(
+        (id) => Number(id) !== state.clientId && roomData.awareness[id] !== null,
+      );
+      const hadCollaborators = state.hasCollaborators;
+      state.hasCollaborators = otherClients.length > 0;
 
-    const otherClients = Object.keys(roomData.awareness).filter(
-      (id) => Number(id) !== this.clientId && roomData.awareness[id] !== null,
-    );
-    const hadCollaborators = this.hasCollaborators;
-    this.hasCollaborators = otherClients.length > 0;
-
-    // If we just gained collaborators, unpause the queue
-    if (this.hasCollaborators && !hadCollaborators) {
-      this.queuePaused = false;
-    }
-
-    // Adjust backoff/interval for collaborator presence
-    this.currentBackoff = this.hasCollaborators
-      ? this.config.pollingIntervalWithCollaborators
-      : this.config.pollingInterval;
-
-    // 3. Process incoming updates
-    for (const update of roomData.updates) {
-      const reply = this.callbacks.onUpdate(update);
-      if (reply) {
-        this.updateQueue.push(reply);
+      if (state.hasCollaborators && !hadCollaborators) {
+        state.queuePaused = false;
       }
-    }
 
-    // 4. Handle compaction request
-    if (roomData.should_compact) {
-      const compactionUpdate = this.callbacks.onCompactionRequested();
-      this.updateQueue.push(compactionUpdate);
+      // Process incoming updates
+      for (const update of roomData.updates) {
+        const reply = state.callbacks.onUpdate(update);
+        if (reply) {
+          state.updateQueue.push(reply);
+        }
+      }
+
+      // Handle compaction
+      if (roomData.should_compact) {
+        const compactionUpdate = state.callbacks.onCompactionRequested();
+        state.updateQueue.push(compactionUpdate);
+      }
     }
   }
 }

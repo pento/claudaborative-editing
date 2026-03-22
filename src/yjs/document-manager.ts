@@ -401,6 +401,55 @@ export class DocumentManager {
   }
 
   /**
+   * Set the noteId in a block's metadata attribute.
+   * Metadata is a plain JS object stored in the block's attribute Y.Map.
+   * Performs read-modify-write to preserve any existing metadata keys.
+   */
+  setBlockNoteId(doc: Y.Doc, index: string, noteId: number): void {
+    doc.transact(() => {
+      const ymap = this._resolveBlockYMap(doc, index);
+      if (!ymap) {
+        throw new Error(`Block not found at index ${index}`);
+      }
+
+      const attrMap = ymap.get('attributes') as Y.Map<unknown>;
+      const currentMetadata =
+        (attrMap.get('metadata') as Record<string, unknown> | undefined) ?? {};
+      attrMap.set('metadata', { ...currentMetadata, noteId });
+    });
+  }
+
+  /**
+   * Remove the noteId from a block's metadata attribute.
+   * If noteId was the only key, the metadata key is deleted entirely.
+   * If the block has no metadata or no noteId, this is a no-op.
+   */
+  removeBlockNoteId(doc: Y.Doc, index: string): void {
+    doc.transact(() => {
+      const ymap = this._resolveBlockYMap(doc, index);
+      if (!ymap) {
+        throw new Error(`Block not found at index ${index}`);
+      }
+
+      const attrMap = ymap.get('attributes') as Y.Map<unknown>;
+      const currentMetadata = attrMap.get('metadata') as
+        | Record<string, unknown>
+        | undefined;
+
+      if (!currentMetadata || !('noteId' in currentMetadata)) {
+        return;
+      }
+
+      const { noteId: _, ...rest } = currentMetadata;
+      if (Object.keys(rest).length === 0) {
+        attrMap.delete('metadata');
+      } else {
+        attrMap.set('metadata', rest);
+      }
+    });
+  }
+
+  /**
    * Resolve a dot-notation index to a Y.Map block reference.
    * E.g., "2" → top-level block 2, "2.1" → inner block 1 of block 2.
    */

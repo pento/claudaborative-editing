@@ -37,9 +37,12 @@ export function renderBlock(block: Block, index: string): string {
     .map(([k, v]) => `${k}=${typeof v === 'string' ? `"${v}"` : v}`)
     .join(', ');
 
+  const metadata = block.attributes.metadata as Record<string, unknown> | undefined;
+  const hasNote = metadata?.noteId != null;
+
   const header = attrStr
-    ? `[${index}] ${block.name} (${attrStr})`
-    : `[${index}] ${block.name}`;
+    ? `[${index}] ${block.name} (${attrStr})${hasNote ? ' [has note]' : ''}`
+    : `[${index}] ${block.name}${hasNote ? ' [has note]' : ''}`;
 
   const lines: string[] = [header];
 
@@ -112,7 +115,7 @@ function getBlockTextContent(block: Block): string {
 function getDisplayAttributes(
   block: Block,
 ): Record<string, string | number | boolean> {
-  const skipKeys = new Set(['content', 'text', 'value', 'citation']);
+  const skipKeys = new Set(['content', 'text', 'value', 'citation', 'metadata']);
   const result: Record<string, string | number | boolean> = {};
 
   for (const [key, val] of Object.entries(block.attributes)) {

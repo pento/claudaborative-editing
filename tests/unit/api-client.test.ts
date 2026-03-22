@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { WordPressApiClient, WordPressApiError } from '../../src/wordpress/api-client.js';
-import type { SyncPayload, WPBlockType, WPMediaItem, WPPost, WPUser } from '../../src/wordpress/types.js';
+import type { SyncPayload, WPBlockType, WPMediaItem, WPNote, WPPost, WPUser } from '../../src/wordpress/types.js';
 
 // Helper to build a mock Response
 function mockResponse(body: unknown, init?: { status?: number; statusText?: string }): Response {
@@ -531,6 +531,201 @@ describe('WordPressApiClient', () => {
       expect(result[1].attributes!.caption).toEqual({ type: 'rich-text', source: 'rich-text' });
       expect(result[2].name).toBe('core/separator');
       expect(result[2].attributes).toBeNull();
+    });
+  });
+
+  describe('note methods', () => {
+    const fakeNote: WPNote = {
+      id: 10,
+      post: 42,
+      parent: 0,
+      author: 1,
+      author_name: 'admin',
+      date: '2026-03-22T00:00:00',
+      content: { rendered: '<p>A note</p>', raw: 'A note' },
+      status: 'approved',
+      type: 'note',
+    };
+
+    describe('checkNotesSupport', () => {
+      it('returns true when the endpoint succeeds', async () => {
+        fetchMock.mockResolvedValue(mockResponse([]));
+        const client = createClient();
+        const result = await client.checkNotesSupport();
+
+        expect(result).toBe(true);
+        const url = fetchMock.mock.calls[0][0] as string;
+        expect(url).toBe('https://example.com/wp-json/wp/v2/comments?type=note&per_page=1');
+      });
+
+      it('returns false on 400 error', async () => {
+        fetchMock.mockResolvedValue(
+          mockResponse(
+            { code: 'rest_invalid_param', message: 'Invalid parameter(s): type' },
+            { status: 400, statusText: 'Bad Request' },
+          ),
+        );
+        const client = createClient();
+        const result = await client.checkNotesSupport();
+
+        expect(result).toBe(false);
+      });
+
+      it('returns false on 404 error', async () => {
+        fetchMock.mockResolvedValue(
+          mockResponse(
+            { code: 'rest_no_route', message: 'No route' },
+            { status: 404, statusText: 'Not Found' },
+          ),
+        );
+        const client = createClient();
+        const result = await client.checkNotesSupport();
+
+        expect(result).toBe(false);
+      });
+
+      it('re-throws non-API errors (e.g. network failure)', async () => {
+        fetchMock.mockRejectedValue(new TypeError('fetch failed'));
+        const client = createClient();
+
+        await expect(client.checkNotesSupport()).rejects.toThrow('fetch failed');
+      });
+
+      it('re-throws 5xx server errors instead of returning false', async () => {
+        fetchMock.mockResolvedValue(
+          mockResponse(
+            { code: 'internal_error', message: 'Internal Server Error' },
+            { status: 500, statusText: 'Internal Server Error' },
+          ),
+        );
+        const client = createClient();
+
+        await expect(client.checkNotesSupport()).rejects.toThrow(/500/);
+      });
+    });
+
+    describe('listNotes', () => {
+      it('fetches notes with correct query params', async () => {
+        fetchMock.mockResolvedValue(mockResponse([fakeNote]));
+        const client = createClient();
+        const result = await client.listNotes(42);
+
+        const url = fetchMock.mock.calls[0][0] as string;
+        expect(url).toContain('post=42');
+        expect(url).toContain('type=note');
+        expect(url).toContain('context=edit');
+        expect(url).toContain('per_page=100');
+        expect(url).toContain('page=1');
+        expect(result).toEqual([fakeNote]);
+      });
+
+      it('calls the comments endpoint', async () => {
+        fetchMock.mockResolvedValue(mockResponse([]));
+        const client = createClient();
+        await client.listNotes(99);
+
+        const url = fetchMock.mock.calls[0][0] as string;
+        expect(url).toContain('/wp/v2/comments?');
+      });
+
+      it('paginates when first page is full', async () => {
+        const fullPage = Array.from({ length: 100 }, (_, i) => ({
+          ...fakeNote,
+          id: i + 1,
+        }));
+        const secondPage = [{ ...fakeNote, id: 101 }];
+
+        fetchMock
+          .mockResolvedValueOnce(mockResponse(fullPage))
+          .mockResolvedValueOnce(mockResponse(secondPage));
+
+        const client = createClient();
+        const result = await client.listNotes(42);
+
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+        const url1 = fetchMock.mock.calls[0][0] as string;
+        const url2 = fetchMock.mock.calls[1][0] as string;
+        expect(url1).toContain('page=1');
+        expect(url2).toContain('page=2');
+        expect(result).toHaveLength(101);
+      });
+
+      it('does not paginate when first page is partial', async () => {
+        fetchMock.mockResolvedValue(mockResponse([fakeNote]));
+        const client = createClient();
+        await client.listNotes(42);
+
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    describe('createNote', () => {
+      it('posts to /wp/v2/comments with type note', async () => {
+        fetchMock.mockResolvedValue(mockResponse(fakeNote));
+        const client = createClient();
+        const result = await client.createNote({ post: 42, content: 'A note' });
+
+        const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+        expect(url).toBe('https://example.com/wp-json/wp/v2/comments');
+        expect(options.method).toBe('POST');
+        const body = JSON.parse(options.body as string);
+        expect(body.post).toBe(42);
+        expect(body.content).toBe('A note');
+        expect(body.type).toBe('note');
+        expect(body.parent).toBeUndefined();
+        expect(result).toEqual(fakeNote);
+      });
+
+      it('includes parent when provided', async () => {
+        const replyNote: WPNote = { ...fakeNote, id: 11, parent: 10 };
+        fetchMock.mockResolvedValue(mockResponse(replyNote));
+        const client = createClient();
+        const result = await client.createNote({ post: 42, content: 'A reply', parent: 10 });
+
+        const options = fetchMock.mock.calls[0][1] as RequestInit;
+        const body = JSON.parse(options.body as string);
+        expect(body.parent).toBe(10);
+        expect(body.type).toBe('note');
+        expect(result).toEqual(replyNote);
+      });
+
+      it('does not include parent when not provided', async () => {
+        fetchMock.mockResolvedValue(mockResponse(fakeNote));
+        const client = createClient();
+        await client.createNote({ post: 42, content: 'No parent' });
+
+        const options = fetchMock.mock.calls[0][1] as RequestInit;
+        const body = JSON.parse(options.body as string);
+        expect(body).not.toHaveProperty('parent');
+      });
+    });
+
+    describe('updateNote', () => {
+      it('posts to /wp/v2/comments/{noteId} with content', async () => {
+        const updatedNote: WPNote = { ...fakeNote, content: { rendered: '<p>Updated</p>', raw: 'Updated' } };
+        fetchMock.mockResolvedValue(mockResponse(updatedNote));
+        const client = createClient();
+        const result = await client.updateNote(10, { content: 'Updated' });
+
+        const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+        expect(url).toBe('https://example.com/wp-json/wp/v2/comments/10');
+        expect(options.method).toBe('POST');
+        const body = JSON.parse(options.body as string);
+        expect(body.content).toBe('Updated');
+        expect(result).toEqual(updatedNote);
+      });
+    });
+
+    describe('deleteNote', () => {
+      it('sends DELETE to /wp/v2/comments/{noteId} with force=true', async () => {
+        fetchMock.mockResolvedValue(mockResponse({ deleted: true }));
+        const client = createClient();
+        await client.deleteNote(10);
+
+        const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+        expect(url).toBe('https://example.com/wp-json/wp/v2/comments/10?force=true');
+        expect(options.method).toBe('DELETE');
+      });
     });
   });
 
