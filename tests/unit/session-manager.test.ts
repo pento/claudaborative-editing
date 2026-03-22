@@ -172,6 +172,27 @@ describe('SessionManager', () => {
 
       expect(session.getState()).toBe('connected');
     });
+
+    it('throws when a post is open (editing state)', async () => {
+      await connectAndOpen(session);
+
+      await expect(session.connect(fakeConfig)).rejects.toThrow(/closePost/);
+      expect(session.getState()).toBe('editing');
+    });
+
+    it('disconnects and reconnects when already connected', async () => {
+      await connectSession(session);
+      expect(session.getState()).toBe('connected');
+
+      // Connect again with (potentially different) config
+      mockValidateConnection.mockResolvedValue({ ...fakeUser, id: 2, name: 'other' });
+      mockValidateSyncEndpoint.mockResolvedValue(undefined);
+
+      const user = await session.connect(fakeConfig);
+
+      expect(user.name).toBe('other');
+      expect(session.getState()).toBe('connected');
+    });
   });
 
   describe('openPost()', () => {

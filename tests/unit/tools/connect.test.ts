@@ -50,6 +50,42 @@ describe('connect tools', () => {
       expect(result.content[0].text).toContain('Invalid credentials');
       expect(result.isError).toBe(true);
     });
+
+    it('returns guidance when already connected', async () => {
+      const connectedSession = createMockSession({ state: 'connected', user: fakeUser });
+      const connectedServer = createMockServer();
+      registerConnectTools(connectedServer as unknown as McpServer, connectedSession);
+
+      const tool = connectedServer.registeredTools.get('wp_connect')!;
+      const result = await tool.handler({
+        siteUrl: 'https://other.com',
+        username: 'other',
+        appPassword: 'xxxx',
+      });
+
+      expect(result.content[0].text).toContain('Already connected as Gary');
+      expect(result.content[0].text).toContain('wp_disconnect');
+      expect(result.isError).toBeUndefined();
+      expect(connectedSession.connect).not.toHaveBeenCalled();
+    });
+
+    it('returns guidance when editing a post', async () => {
+      const editingSession = createMockSession({ state: 'editing', user: fakeUser });
+      const editingServer = createMockServer();
+      registerConnectTools(editingServer as unknown as McpServer, editingSession);
+
+      const tool = editingServer.registeredTools.get('wp_connect')!;
+      const result = await tool.handler({
+        siteUrl: 'https://other.com',
+        username: 'other',
+        appPassword: 'xxxx',
+      });
+
+      expect(result.content[0].text).toContain('Already connected as Gary');
+      expect(result.content[0].text).toContain('wp_disconnect');
+      expect(result.isError).toBeUndefined();
+      expect(editingSession.connect).not.toHaveBeenCalled();
+    });
   });
 
   describe('wp_disconnect', () => {

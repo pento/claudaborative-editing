@@ -223,6 +223,13 @@ export class SessionManager {
    * Validates credentials and sync endpoint availability.
    */
   async connect(config: WordPressConfig): Promise<WPUser> {
+    if (this.state === 'editing') {
+      throw new Error('Cannot connect while a post is open. Call closePost() first.');
+    }
+    if (this.state === 'connected') {
+      this.disconnect();
+    }
+
     this.apiClient = new WordPressApiClient(config);
 
     // Validate credentials

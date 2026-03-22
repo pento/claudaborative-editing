@@ -13,14 +13,10 @@ declare const __PKG_VERSION__: string;
 export const VERSION = typeof __PKG_VERSION__ !== 'undefined' ? __PKG_VERSION__ : '0.0.0-dev';
 
 export async function startServer(): Promise<void> {
-  const server = new McpServer({
-    name: 'claudaborative-editing',
-    version: VERSION,
-  });
-
   const session = new SessionManager();
 
   // Auto-connect from env vars if available
+  let autoConnected = false;
   const siteUrl = process.env.WP_SITE_URL;
   const username = process.env.WP_USERNAME;
   const appPassword = process.env.WP_APP_PASSWORD;
@@ -28,11 +24,22 @@ export async function startServer(): Promise<void> {
   if (siteUrl && username && appPassword) {
     try {
       await session.connect({ siteUrl, username, appPassword });
+      autoConnected = true;
     } catch (e) {
       // Don't fail startup — user can connect via wp_connect tool
       console.error('Auto-connect failed:', e);
     }
   }
+
+  // Set instructions based on whether auto-connect succeeded
+  const instructions = autoConnected
+    ? 'Already connected to WordPress. Do NOT call wp_connect. Use wp_status to check connection state, then wp_open_post or wp_create_post to start editing.'
+    : 'Use wp_connect to connect to a WordPress site first, or use wp_status to check connection state.';
+
+  const server = new McpServer(
+    { name: 'claudaborative-editing', version: VERSION },
+    { instructions },
+  );
 
   // Register all tools
   registerConnectTools(server, session);
