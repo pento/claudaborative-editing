@@ -413,7 +413,7 @@ export class SessionManager {
       // Only queue updates from local edits, not from sync
       if (origin === LOCAL_ORIGIN) {
         const syncUpdate = createUpdateFromChange(update);
-        syncClient.queueUpdate(syncUpdate);
+        syncClient.queueUpdate(room, syncUpdate);
       }
     };
     doc.on('update', this.updateHandler);

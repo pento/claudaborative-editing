@@ -66,6 +66,18 @@ The WordPress sync endpoint is `POST /wp-sync/v1/updates`. Each request:
 
 Update types: `sync_step1` (state vector), `sync_step2` (missing updates response), `update` (regular change), `compaction` (full state merge).
 
+### Multi-Room Sync
+
+The `SyncClient` supports multiple Yjs rooms in a single HTTP polling loop. WordPress Gutenberg uses separate rooms for different data types (e.g., `postType/post:{id}` for block content, `root/comment` for notes). All rooms are sent/received in a single HTTP request for efficiency.
+
+- **`start(room, clientId, initialUpdates, callbacks)`** — Starts polling with one room (backward-compatible).
+- **`addRoom(room, clientId, initialUpdates, callbacks)`** — Adds an additional room to the polling loop. The room joins the next poll cycle.
+- **`removeRoom(room)`** — Removes a room. Stops polling if no rooms remain.
+- **`queueUpdate(room, update)`** — Queues an update for a specific room.
+- Each room has its own `endCursor`, `updateQueue`, `queuePaused`, `hasCollaborators`, and `RoomCallbacks`.
+- `onStatusChange` is global (HTTP-level), not per-room.
+- Collaborator-aware polling interval: if ANY room has collaborators, all rooms poll faster.
+
 ### Streaming Text Effect
 
 Rich-text edits (inserts and updates) are streamed to the browser in small chunks so changes appear progressively, like fast typing. This is implemented in `SessionManager.streamTextToYText()`.

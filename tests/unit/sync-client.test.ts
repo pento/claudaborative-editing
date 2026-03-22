@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { SyncClient } from '../../src/wordpress/sync-client.js';
-import type { SyncCallbacks } from '../../src/wordpress/sync-client.js';
+import type { SyncCallbacks, RoomCallbacks } from '../../src/wordpress/sync-client.js';
 import type { WordPressApiClient } from '../../src/wordpress/api-client.js';
 import {
   SyncUpdateType,
@@ -34,6 +34,19 @@ function createMockCallbacks(overrides?: Partial<SyncCallbacks>): SyncCallbacks 
   };
 }
 
+function createMockRoomCallbacks(overrides?: Partial<RoomCallbacks>): RoomCallbacks {
+  return {
+    onUpdate: vi.fn<(update: SyncUpdate) => SyncUpdate | null>().mockReturnValue(null),
+    onAwareness: vi.fn<(state: AwarenessState) => void>(),
+    onCompactionRequested: vi.fn<() => SyncUpdate>().mockReturnValue({
+      type: SyncUpdateType.COMPACTION,
+      data: 'compacted-data',
+    }),
+    getAwarenessState: vi.fn().mockReturnValue(null),
+    ...overrides,
+  };
+}
+
 function emptyRoomResponse(
   room: string,
   endCursor: number,
@@ -51,6 +64,26 @@ function emptyRoomResponse(
         should_compact: shouldCompact,
       },
     ],
+  };
+}
+
+function multiRoomResponse(
+  roomEntries: Array<{
+    room: string;
+    end_cursor: number;
+    awareness?: AwarenessState;
+    updates?: SyncUpdate[];
+    should_compact?: boolean;
+  }>,
+): SyncResponse {
+  return {
+    rooms: roomEntries.map((entry) => ({
+      room: entry.room,
+      end_cursor: entry.end_cursor,
+      awareness: entry.awareness ?? {},
+      updates: entry.updates ?? [],
+      should_compact: entry.should_compact ?? false,
+    })),
   };
 }
 
@@ -421,8 +454,11 @@ describe('SyncClient', () => {
 
   describe('queueUpdate()', () => {
     it('adds update to queue', () => {
+      const callbacks = createMockCallbacks();
+      syncClient.start('postType/post:1', 100, [], callbacks);
+
       const update: SyncUpdate = { type: SyncUpdateType.UPDATE, data: 'test' };
-      syncClient.queueUpdate(update);
+      syncClient.queueUpdate('postType/post:1', update);
       expect(syncClient.getStatus().queueSize).toBe(1);
     });
 
@@ -436,11 +472,21 @@ describe('SyncClient', () => {
       await vi.advanceTimersByTimeAsync(0);
 
       const update: SyncUpdate = { type: SyncUpdateType.UPDATE, data: 'queued-update' };
-      syncClient.queueUpdate(update);
+      syncClient.queueUpdate('postType/post:1', update);
 
       await vi.advanceTimersByTimeAsync(config.pollingInterval);
       const payload = apiClient.sendSyncUpdate.mock.calls[1][0] as SyncPayload;
       expect(payload.rooms[0].updates).toContainEqual(update);
+    });
+
+    it('throws for unknown room', () => {
+      const callbacks = createMockCallbacks();
+      syncClient.start('postType/post:1', 100, [], callbacks);
+
+      const update: SyncUpdate = { type: SyncUpdateType.UPDATE, data: 'test' };
+      expect(() => syncClient.queueUpdate('unknown-room', update)).toThrow(
+        "Room 'unknown-room' is not registered",
+      );
     });
   });
 
@@ -455,7 +501,7 @@ describe('SyncClient', () => {
       await vi.advanceTimersByTimeAsync(0); // First poll
 
       // Queue an update and flush
-      syncClient.queueUpdate({ type: SyncUpdateType.UPDATE, data: 'flush-me' });
+      syncClient.queueUpdate('postType/post:1', { type: SyncUpdateType.UPDATE, data: 'flush-me' });
       apiClient.sendSyncUpdate.mockClear();
       syncClient.flushQueue();
 
@@ -495,7 +541,7 @@ describe('SyncClient', () => {
       await vi.advanceTimersByTimeAsync(0);
 
       // Now call flushQueue while poll is in progress
-      syncClient.queueUpdate({ type: SyncUpdateType.UPDATE, data: 'during-poll' });
+      syncClient.queueUpdate('postType/post:1', { type: SyncUpdateType.UPDATE, data: 'during-poll' });
       syncClient.flushQueue();
 
       // Resolve the pending poll
@@ -556,6 +602,209 @@ describe('SyncClient', () => {
       const status = syncClient.getStatus();
       expect(status.isPolling).toBe(true);
       expect(status.endCursor).toBe(5);
+    });
+  });
+
+  describe('multi-room', () => {
+    const ROOM_A = 'postType/post:1';
+    const ROOM_B = 'root/comment';
+
+    it('addRoom sends both rooms in poll payload', async () => {
+      apiClient.sendSyncUpdate.mockResolvedValue(
+        multiRoomResponse([
+          { room: ROOM_A, end_cursor: 1 },
+          { room: ROOM_B, end_cursor: 2 },
+        ]),
+      );
+
+      const callbacks = createMockCallbacks();
+      syncClient.start(ROOM_A, 100, [], callbacks);
+
+      const roomBCallbacks = createMockRoomCallbacks();
+      syncClient.addRoom(ROOM_B, 200, [], roomBCallbacks);
+
+      await vi.advanceTimersByTimeAsync(0);
+
+      const payload = apiClient.sendSyncUpdate.mock.calls[0][0] as SyncPayload;
+      expect(payload.rooms).toHaveLength(2);
+
+      const roomNames = payload.rooms.map((r) => r.room);
+      expect(roomNames).toContain(ROOM_A);
+      expect(roomNames).toContain(ROOM_B);
+    });
+
+    it('removeRoom removes a room from poll payload', async () => {
+      apiClient.sendSyncUpdate.mockResolvedValue(
+        emptyRoomResponse(ROOM_A, 1),
+      );
+
+      const callbacks = createMockCallbacks();
+      syncClient.start(ROOM_A, 100, [], callbacks);
+
+      const roomBCallbacks = createMockRoomCallbacks();
+      syncClient.addRoom(ROOM_B, 200, [], roomBCallbacks);
+      syncClient.removeRoom(ROOM_B);
+
+      await vi.advanceTimersByTimeAsync(0);
+
+      const payload = apiClient.sendSyncUpdate.mock.calls[0][0] as SyncPayload;
+      expect(payload.rooms).toHaveLength(1);
+      expect(payload.rooms[0].room).toBe(ROOM_A);
+    });
+
+    it('removeRoom on last room stops polling', () => {
+      const callbacks = createMockCallbacks();
+      syncClient.start(ROOM_A, 100, [], callbacks);
+
+      syncClient.removeRoom(ROOM_A);
+
+      expect(syncClient.getStatus().isPolling).toBe(false);
+    });
+
+    it('addRoom throws on duplicate room', () => {
+      const callbacks = createMockCallbacks();
+      syncClient.start(ROOM_A, 100, [], callbacks);
+
+      const roomCallbacks = createMockRoomCallbacks();
+      expect(() => syncClient.addRoom(ROOM_A, 200, [], roomCallbacks)).toThrow(
+        `Room '${ROOM_A}' is already registered`,
+      );
+    });
+
+    it('per-room cursor tracking', async () => {
+      apiClient.sendSyncUpdate
+        .mockResolvedValueOnce(
+          multiRoomResponse([
+            { room: ROOM_A, end_cursor: 10 },
+            { room: ROOM_B, end_cursor: 5 },
+          ]),
+        )
+        .mockResolvedValue(
+          multiRoomResponse([
+            { room: ROOM_A, end_cursor: 20 },
+            { room: ROOM_B, end_cursor: 15 },
+          ]),
+        );
+
+      const callbacks = createMockCallbacks();
+      syncClient.start(ROOM_A, 100, [], callbacks);
+
+      const roomBCallbacks = createMockRoomCallbacks();
+      syncClient.addRoom(ROOM_B, 200, [], roomBCallbacks);
+
+      // First poll
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Second poll
+      await vi.advanceTimersByTimeAsync(config.pollingInterval);
+
+      const secondPayload = apiClient.sendSyncUpdate.mock.calls[1][0] as SyncPayload;
+      const roomAPayload = secondPayload.rooms.find((r) => r.room === ROOM_A);
+      const roomBPayload = secondPayload.rooms.find((r) => r.room === ROOM_B);
+
+      expect(roomAPayload?.after).toBe(10);
+      expect(roomBPayload?.after).toBe(5);
+    });
+
+    it('per-room update dispatch', async () => {
+      const roomAUpdate: SyncUpdate = { type: SyncUpdateType.UPDATE, data: 'update-for-A' };
+      const roomBUpdate: SyncUpdate = { type: SyncUpdateType.UPDATE, data: 'update-for-B' };
+
+      apiClient.sendSyncUpdate.mockResolvedValue(
+        multiRoomResponse([
+          { room: ROOM_A, end_cursor: 1, updates: [roomAUpdate] },
+          { room: ROOM_B, end_cursor: 1, updates: [roomBUpdate] },
+        ]),
+      );
+
+      const callbacksA = createMockCallbacks();
+      syncClient.start(ROOM_A, 100, [], callbacksA);
+
+      const callbacksB = createMockRoomCallbacks();
+      syncClient.addRoom(ROOM_B, 200, [], callbacksB);
+
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Room A's onUpdate should only receive room A's update
+      expect(callbacksA.onUpdate).toHaveBeenCalledTimes(1);
+      expect(callbacksA.onUpdate).toHaveBeenCalledWith(roomAUpdate);
+
+      // Room B's onUpdate should only receive room B's update
+      expect(callbacksB.onUpdate).toHaveBeenCalledTimes(1);
+      expect(callbacksB.onUpdate).toHaveBeenCalledWith(roomBUpdate);
+    });
+
+    it('per-room awareness', async () => {
+      const roomAAwareness: AwarenessState = {
+        '100': { cursor: null },
+        '300': { cursor: { x: 1, y: 1 } },
+      };
+
+      apiClient.sendSyncUpdate.mockResolvedValue(
+        multiRoomResponse([
+          { room: ROOM_A, end_cursor: 1, awareness: roomAAwareness },
+          { room: ROOM_B, end_cursor: 1, awareness: {} },
+        ]),
+      );
+
+      const callbacksA = createMockCallbacks();
+      syncClient.start(ROOM_A, 100, [], callbacksA);
+
+      const callbacksB = createMockRoomCallbacks();
+      syncClient.addRoom(ROOM_B, 200, [], callbacksB);
+
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(callbacksA.onAwareness).toHaveBeenCalledWith(roomAAwareness);
+      expect(callbacksB.onAwareness).toHaveBeenCalledWith({});
+    });
+
+    it('error recovery restores all rooms\' queues', async () => {
+      apiClient.sendSyncUpdate
+        .mockResolvedValueOnce(
+          multiRoomResponse([
+            { room: ROOM_A, end_cursor: 1 },
+            { room: ROOM_B, end_cursor: 1 },
+          ]),
+        )
+        .mockRejectedValueOnce(new Error('Network error'))
+        .mockResolvedValue(
+          multiRoomResponse([
+            { room: ROOM_A, end_cursor: 2 },
+            { room: ROOM_B, end_cursor: 2 },
+          ]),
+        );
+
+      const callbacksA = createMockCallbacks();
+      syncClient.start(ROOM_A, 100, [], callbacksA);
+
+      const callbacksB = createMockRoomCallbacks();
+      syncClient.addRoom(ROOM_B, 200, [], callbacksB);
+
+      // First poll succeeds — establishes rooms
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Queue updates for both rooms
+      const updateA: SyncUpdate = { type: SyncUpdateType.UPDATE, data: 'update-A' };
+      const updateB: SyncUpdate = { type: SyncUpdateType.UPDATE, data: 'update-B' };
+      syncClient.queueUpdate(ROOM_A, updateA);
+      syncClient.queueUpdate(ROOM_B, updateB);
+
+      // Second poll fails — updates should be restored
+      await vi.advanceTimersByTimeAsync(config.pollingInterval);
+
+      // Both rooms' updates should be restored
+      expect(syncClient.getStatus().queueSize).toBe(2);
+
+      // Next successful poll should send both restored updates
+      await vi.advanceTimersByTimeAsync(config.pollingInterval * 2);
+
+      const retryPayload = apiClient.sendSyncUpdate.mock.calls[2][0] as SyncPayload;
+      const retryRoomA = retryPayload.rooms.find((r) => r.room === ROOM_A);
+      const retryRoomB = retryPayload.rooms.find((r) => r.room === ROOM_B);
+
+      expect(retryRoomA?.updates).toContainEqual(updateA);
+      expect(retryRoomB?.updates).toContainEqual(updateB);
     });
   });
 });
