@@ -17,7 +17,7 @@ export function buildAwarenessState(user: WPUser): AwarenessLocalState {
   return {
     collaboratorInfo: {
       id: user.id,
-      name: `${user.name} (Claude)`,
+      name: `${user.name ?? user.slug} (Claude)`,
       slug: user.slug,
       avatar_urls: user.avatar_urls ?? {},
       browserType: 'Claude Code MCP',
