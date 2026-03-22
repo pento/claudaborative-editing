@@ -800,7 +800,10 @@ export class SessionManager {
       );
     }
 
-    // Set cursor position BEFORE edits — same reason as updateBlock
+    // Set cursor to the block being edited for collaborative awareness display.
+    // This targets the block's content Y.Text (regardless of which attribute we're
+    // actually editing) because that's what Gutenberg uses for cursor positioning.
+    // For blocks without a content attribute, this is a no-op — harmless.
     this.updateCursorPosition(index);
 
     const results: TextEditResult[] = [];
@@ -817,9 +820,20 @@ export class SessionManager {
         continue;
       }
 
+      // Validate occurrence before searching
+      const occurrence = edit.occurrence ?? 1;
+      if (!Number.isInteger(occurrence) || occurrence < 1) {
+        results.push({
+          find: edit.find,
+          replace: edit.replace,
+          applied: false,
+          error: `Invalid occurrence value: ${occurrence}. Must be a positive integer (>= 1).`,
+        });
+        continue;
+      }
+
       // Re-read current text for each edit (previous edits shift positions)
       const currentText = ytext.toString();
-      const occurrence = edit.occurrence ?? 1;
       const pos = findNthOccurrence(currentText, edit.find, occurrence);
 
       if (pos === -1) {

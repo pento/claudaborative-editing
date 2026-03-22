@@ -503,6 +503,24 @@ describe('SessionManager', () => {
       );
     });
 
+    it('rejects invalid occurrence values', async () => {
+      await connectAndOpen(session);
+
+      const result = session.editBlockText('0', [
+        { find: 'First', replace: 'My', occurrence: 0 },
+        { find: 'paragraph', replace: 'text', occurrence: -1 },
+        { find: 'First', replace: 'My', occurrence: 1.5 },
+      ]);
+
+      expect(result.appliedCount).toBe(0);
+      expect(result.failedCount).toBe(3);
+      expect(result.edits[0].error).toContain('Invalid occurrence value: 0');
+      expect(result.edits[1].error).toContain('Invalid occurrence value: -1');
+      expect(result.edits[2].error).toContain('Invalid occurrence value: 1.5');
+      // Content should be unchanged
+      expect(session.readBlock('0')).toContain('First paragraph');
+    });
+
     it('rejects empty find string', async () => {
       await connectAndOpen(session);
 
