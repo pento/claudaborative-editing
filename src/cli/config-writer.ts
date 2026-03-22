@@ -78,16 +78,33 @@ export function writeJsonConfig(
 
   const json = JSON.stringify(config, null, resolvedIndent) + '\n';
   const tmpPath = `${filePath}.tmp`;
-  writeFileSync(tmpPath, json, 'utf-8');
+
   try {
-    renameSync(tmpPath, filePath);
-  } catch (err: unknown) {
-    // On Windows, renameSync fails when destination exists. Fall back to unlink + rename.
-    if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'EPERM') {
-      unlinkSync(filePath);
+    writeFileSync(tmpPath, json, 'utf-8');
+    try {
       renameSync(tmpPath, filePath);
-    } else {
-      throw err;
+    } catch (err: unknown) {
+      // On Windows, renameSync fails when destination exists. Fall back to unlink + rename.
+      if (
+        err instanceof Error &&
+        'code' in err &&
+        (err as NodeJS.ErrnoException).code === 'EPERM'
+      ) {
+        unlinkSync(filePath);
+        renameSync(tmpPath, filePath);
+      } else {
+        throw err;
+      }
+    }
+  } finally {
+    // Clean up tmp file if it still exists (e.g., rename failed).
+    // Credentials are written to tmp, so we must not leave it behind.
+    try {
+      if (existsSync(tmpPath)) {
+        unlinkSync(tmpPath);
+      }
+    } catch {
+      // Best-effort cleanup
     }
   }
 }

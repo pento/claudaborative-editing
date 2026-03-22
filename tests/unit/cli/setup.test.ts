@@ -25,7 +25,7 @@ function mockResponse(body: unknown, init?: { status?: number; statusText?: stri
   } as unknown as Response;
 }
 
-const { runSetup, shellQuote } = await import('../../../src/cli/setup.js');
+const { runSetup } = await import('../../../src/cli/setup.js');
 
 class SetupExitError extends Error {
   constructor(public readonly code: number) {
@@ -190,6 +190,26 @@ describe('setup wizard', () => {
 
       expect(fetchMock).toHaveBeenCalledWith(
         expect.stringContaining('http://localhost:8080/wp-json/'),
+        expect.anything(),
+      );
+    });
+
+    it('strips trailing slashes from URLs', async () => {
+      mockSuccessfulValidation();
+      const writeConfig = vi.fn().mockResolvedValue(true);
+
+      const { deps } = createTestDeps(['https://example.com/', 'admin', 'xxxx xxxx xxxx'], {
+        detectClients: () => defaultClientList(),
+        selectCheckbox: mockCheckbox([0]),
+        writeConfig,
+        hasConfig: () => false,
+      });
+
+      await runSetup(deps, { manual: true });
+
+      // Should use the URL without trailing slash
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining('https://example.com/wp-json/'),
         expect.anything(),
       );
     });
@@ -874,32 +894,5 @@ describe('setup wizard', () => {
       const output = logs.join('\n');
       expect(output).toContain('Claude Code — failed: Permission denied');
     });
-  });
-});
-
-describe('shellQuote', () => {
-  it('returns simple values unquoted', () => {
-    expect(shellQuote('https://example.com')).toBe('https://example.com');
-    expect(shellQuote('admin')).toBe('admin');
-  });
-
-  it('quotes values with spaces', () => {
-    expect(shellQuote('xxxx xxxx xxxx')).toBe('"xxxx xxxx xxxx"');
-  });
-
-  it('escapes double quotes', () => {
-    expect(shellQuote('say "hello"')).toBe('"say \\"hello\\""');
-  });
-
-  it('escapes dollar signs', () => {
-    expect(shellQuote('$HOME/site')).toBe('"\\$HOME/site"');
-  });
-
-  it('escapes backticks', () => {
-    expect(shellQuote('`cmd`')).toBe('"\\`cmd\\`"');
-  });
-
-  it('escapes backslashes', () => {
-    expect(shellQuote('path\\to\\file')).toBe('"path\\\\to\\\\file"');
   });
 });

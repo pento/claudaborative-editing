@@ -434,11 +434,17 @@ async function runRemove(deps: SetupDeps): Promise<void> {
   const clients = deps.detectClients?.() ?? detectInstalledClients();
 
   // Find which clients have our entry
-  const configured = clients.filter(
-    (c) =>
-      deps.hasConfig?.(c.config) ??
-      hasServerInConfig(c.config.configPath(), c.config.configKey, SERVER_NAME),
-  );
+  const configured = clients.filter((c) => {
+    try {
+      return (
+        deps.hasConfig?.(c.config) ??
+        hasServerInConfig(c.config.configPath(), c.config.configKey, SERVER_NAME)
+      );
+    } catch {
+      // Corrupt or unreadable config file — treat as not configured
+      return false;
+    }
+  });
 
   if (configured.length === 0) {
     deps.log('No MCP clients have claudaborative-editing configured.');
@@ -510,33 +516,13 @@ async function removeSingleClient(deps: SetupDeps, client: McpClientConfig): Pro
 // ---------------------------------------------------------------------------
 
 /**
- * Ensure a site URL has a scheme. If the user enters a bare domain
- * like "pento.net", prepend "https://".
+ * Ensure a site URL has a scheme and no trailing slashes.
+ * If the user enters a bare domain like "pento.net", prepend "https://".
  */
 function normalizeSiteUrl(url: string): string {
-  if (/^https?:\/\//i.test(url)) {
-    return url;
+  let normalized = url;
+  if (!/^https?:\/\//i.test(normalized)) {
+    normalized = `https://${normalized}`;
   }
-  return `https://${url}`;
-}
-
-// ---------------------------------------------------------------------------
-// Utilities
-// ---------------------------------------------------------------------------
-
-/**
- * Quote a value for safe shell use in the output command.
- * Wraps in double quotes if it contains spaces or special characters.
- */
-export function shellQuote(value: string): string {
-  if (/^[a-zA-Z0-9_./:@-]+$/.test(value)) {
-    return value;
-  }
-  // Escape backslashes, double quotes, dollar signs, backticks
-  const escaped = value
-    .replace(/\\/g, '\\\\')
-    .replace(/"/g, '\\"')
-    .replace(/\$/g, '\\$')
-    .replace(/`/g, '\\`');
-  return `"${escaped}"`;
+  return normalized.replace(/\/+$/, '');
 }

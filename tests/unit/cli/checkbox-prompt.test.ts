@@ -1,9 +1,18 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { CheckboxItem } from '../../../src/cli/checkbox-prompt.js';
 
 const { checkboxPrompt } = await import('../../../src/cli/checkbox-prompt.js');
 
+// Store original value so we can restore it
+const originalIsTTY = process.stdin.isTTY;
+
+beforeEach(() => {
+  // Force non-TTY mode so tests use the fallback path
+  Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
+});
+
 afterEach(() => {
+  Object.defineProperty(process.stdin, 'isTTY', { value: originalIsTTY, configurable: true });
   vi.restoreAllMocks();
 });
 
