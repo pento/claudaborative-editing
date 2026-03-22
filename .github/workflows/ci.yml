@@ -36,8 +36,10 @@ jobs:
 
       - name: Check coverage
         if: matrix.node-version == 22
-        uses: pento/lcov-coverage-check@main
+        uses: pento/lcov-coverage-check@v2
         with:
           lcov-file: coverage/lcov.info
           path: src/
+          ignore-patterns: |
+            **/types.ts
           github-token: ${{ secrets.GITHUB_TOKEN }}
