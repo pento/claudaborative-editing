@@ -118,6 +118,41 @@ describe('status tools', () => {
       expect(text).toContain('Alice (Human, Chrome)');
     });
 
+    it('shows fallback when no user and no collaborators', async () => {
+      const session = createMockSession({
+        state: 'editing',
+        user: null,
+        post: fakePost,
+        collaborators: [],
+      });
+      registerStatusTools(server as unknown as McpServer, session);
+
+      const tool = server.registeredTools.get('wp_collaborators')!;
+      const result = await tool.handler({});
+
+      expect(result.content[0].text).toContain('No collaborators detected');
+    });
+
+    it('returns error on unexpected failure', async () => {
+      const session = createMockSession({
+        state: 'editing',
+        user: fakeUser,
+        post: fakePost,
+      });
+      (session.getCollaborators as ReturnType<typeof import('vitest').vi.fn>).mockImplementation(
+        () => {
+          throw new Error('unexpected');
+        },
+      );
+      registerStatusTools(server as unknown as McpServer, session);
+
+      const tool = server.registeredTools.get('wp_collaborators')!;
+      const result = await tool.handler({});
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Failed to get collaborators: unexpected');
+    });
+
     it('returns error when not editing', async () => {
       const session = createMockSession({
         state: 'connected',
