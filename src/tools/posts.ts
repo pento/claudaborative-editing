@@ -5,7 +5,7 @@ import type { SessionManager } from '../session/session-manager.js';
 export function registerPostTools(server: McpServer, session: SessionManager): void {
   server.tool(
     'wp_list_posts',
-    'List WordPress posts with optional filters. This will default to published posts, you should specify a status filter if you want to see drafts or other non-published posts.',
+    'List WordPress posts with optional filters. By default, this shows published posts; specify a status filter if you want to see drafts or other non-published posts.',
     {
       status: z.string().optional().describe('Filter by post status (e.g., publish, draft, pending)'),
       search: z.string().optional().describe('Search posts by keyword'),

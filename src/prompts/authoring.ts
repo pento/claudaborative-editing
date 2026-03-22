@@ -7,7 +7,7 @@ export function registerAuthoringPrompts(server: McpServer, session: SessionMana
     'draft',
     'Draft a new WordPress post from a topic or brief.',
     {
-      topic: z.string().describe('Topic or brief for the new post'),
+      topic: z.string().optional().describe('Topic or brief for the new post'),
       tone: z.string().optional().describe('Writing tone (e.g., "professional", "casual", "academic", "conversational")'),
       audience: z.string().optional().describe('Target audience (e.g., "developers", "beginners", "general public")'),
     },
@@ -81,7 +81,7 @@ Instructions:
     'translate',
     'Translate a WordPress post into another language.',
     {
-      language: z.string().describe('Target language (e.g., "Spanish", "French", "Japanese", "zh-CN")'),
+      language: z.string().optional().describe('Target language (e.g., "Spanish", "French", "Japanese", "zh-CN")'),
     },
     async ({ language }) => {
       const state = session.getState();
