@@ -197,5 +197,6 @@ export function createMockSession(
     getCollaborators: vi.fn().mockReturnValue(collaborators),
     getCurrentPost: vi.fn().mockReturnValue(post),
     getUser: vi.fn().mockReturnValue(user),
+    getTitle: vi.fn().mockReturnValue(post?.title.raw ?? 'Untitled'),
   } as unknown as SessionManager;
 }

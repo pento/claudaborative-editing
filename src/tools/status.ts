@@ -31,7 +31,7 @@ export function registerStatusTools(server: McpServer, session: SessionManager):
             `Sync: ${syncStatus?.isPolling ? 'polling' : 'stopped'} (${collaboratorCount + 1} collaborator${collaboratorCount + 1 !== 1 ? 's' : ''})`,
           );
           lines.push(
-            `Post: "${post.title.raw ?? post.title.rendered}" (ID: ${post.id}, status: ${post.status})`,
+            `Post: "${session.getTitle()}" (ID: ${post.id}, status: ${post.status})`,
           );
           lines.push(`Queue: ${syncStatus?.queueSize ?? 0} pending updates`);
         } else {
@@ -99,12 +99,11 @@ export function registerStatusTools(server: McpServer, session: SessionManager):
   server.registerTool('wp_save', { description: 'Save the current post' }, async () => {
     try {
       session.save();
-      const post = session.getCurrentPost();
       return {
         content: [
           {
             type: 'text' as const,
-            text: `Post "${post?.title.raw ?? post?.title.rendered ?? 'Untitled'}" saved.`,
+            text: `Post "${session.getTitle()}" saved.`,
           },
         ],
       };
