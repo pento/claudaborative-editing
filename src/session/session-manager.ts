@@ -845,7 +845,11 @@ export class SessionManager {
 
     const existingNoteId = (block.attributes.metadata as Record<string, unknown> | undefined)?.noteId;
     if (existingNoteId != null) {
-      throw new Error(`Block at index ${blockIndex} already has a note (ID: ${existingNoteId}). Reply to the existing note instead.`);
+      throw new Error(
+        `Block at index ${blockIndex} already has a note (ID: ${existingNoteId}). ` +
+        `Your view may be stale — call wp_read_post and wp_list_notes to refresh, ` +
+        `then use wp_reply_to_note to reply to the existing note.`,
+      );
     }
 
     const note = await this.apiClient!.createNote({ post: this.currentPost!.id, content });

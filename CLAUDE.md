@@ -159,10 +159,11 @@ Notes are editorial comments attached to individual blocks, visible in the WordP
 
 ### Architecture
 
-Notes use a dual-path architecture — the WordPress REST API for note content CRUD, and the Yjs Y.Doc for block metadata linkage:
+Notes use a dual-path architecture — the WordPress REST API for note content CRUD, and Yjs for block metadata linkage and real-time sync:
 
 - **REST API** (`/wp/v2/comments` with `type=note`): Create, read, update, and delete note content. Notes are stored as `wp_comments` with `comment_type = 'note'`.
-- **Yjs Y.Doc**: The `metadata.noteId` attribute on a block links it to a note. This metadata propagates via normal Yjs sync so all collaborators see note indicators in Gutenberg.
+- **Yjs post room** (`postType/post:{id}`): The `metadata.noteId` attribute on a block links it to a note. This metadata propagates via normal Yjs sync so all collaborators see note indicators in Gutenberg.
+- **Yjs comment room** (`root/comment`): A separate Y.Doc whose `state` map (savedAt/savedBy) acts as a change signal. When updated, other clients re-fetch notes from the REST API, enabling real-time note visibility.
 
 ### Tools
 

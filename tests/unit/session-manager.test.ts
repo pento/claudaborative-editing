@@ -1276,7 +1276,7 @@ describe('SessionManager', () => {
         await session.addNote('0', 'First note');
 
         await expect(session.addNote('0', 'Second note')).rejects.toThrow(
-          /already has a note.*ID: 10.*Reply to the existing note/,
+          /already has a note.*ID: 10.*wp_read_post.*wp_list_notes.*wp_reply_to_note/,
         );
       });
 
