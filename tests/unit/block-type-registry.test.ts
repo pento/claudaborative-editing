@@ -312,6 +312,7 @@ describe('BlockTypeRegistry', () => {
           content: { type: 'rich-text' },
           dropCap: { type: 'boolean', default: false },
         },
+        supports: { allowedBlocks: true },
         parent: ['core/group'],
         allowed_blocks: ['core/inline-image'],
       },
@@ -325,6 +326,7 @@ describe('BlockTypeRegistry', () => {
       expect(info!.parent).toEqual(['core/group']);
       expect(info!.allowedBlocks).toEqual(['core/inline-image']);
       expect(info!.ancestor).toBeNull();
+      expect(info!.supportsInnerBlocks).toBe(true);
       expect(info!.attributes).toEqual([
         { name: 'content', type: 'rich-text', richText: true },
         { name: 'dropCap', type: 'boolean', richText: false, default: false },
@@ -351,6 +353,50 @@ describe('BlockTypeRegistry', () => {
       const info = registry.getBlockTypeInfo('core/paragraph')!;
       const contentAttr = info.attributes.find((a) => a.name === 'content');
       expect('default' in contentAttr!).toBe(false);
+    });
+  });
+
+  describe('supportsInnerBlocks()', () => {
+    it('returns true when supports.allowedBlocks is true', () => {
+      const registry = BlockTypeRegistry.fromApiResponse([
+        {
+          name: 'core/quote',
+          attributes: { citation: { type: 'rich-text' } },
+          supports: { allowedBlocks: true },
+        },
+      ] as WPBlockType[]);
+      expect(registry.supportsInnerBlocks('core/quote')).toBe(true);
+    });
+
+    it('returns false when supports.allowedBlocks is absent', () => {
+      const registry = BlockTypeRegistry.fromApiResponse([
+        {
+          name: 'core/pullquote',
+          attributes: { value: { type: 'rich-text' } },
+        },
+      ] as WPBlockType[]);
+      expect(registry.supportsInnerBlocks('core/pullquote')).toBe(false);
+    });
+
+    it('returns false when supports is null', () => {
+      const registry = BlockTypeRegistry.fromApiResponse([
+        {
+          name: 'core/paragraph',
+          attributes: { content: { type: 'rich-text' } },
+          supports: null,
+        },
+      ] as WPBlockType[]);
+      expect(registry.supportsInnerBlocks('core/paragraph')).toBe(false);
+    });
+
+    it('returns false for unknown block types', () => {
+      const registry = BlockTypeRegistry.fromApiResponse([]);
+      expect(registry.supportsInnerBlocks('unknown/block')).toBe(false);
+    });
+
+    it('returns false for fallback registry entries', () => {
+      const fallback = BlockTypeRegistry.createFallback();
+      expect(fallback.supportsInnerBlocks('core/quote')).toBe(false);
     });
   });
 

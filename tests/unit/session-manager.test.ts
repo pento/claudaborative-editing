@@ -846,10 +846,37 @@ describe('SessionManager', () => {
       return s;
     }
 
-    it('rejects content parameter for blocks without a content attribute', async () => {
+    it('auto-wraps content into inner core/paragraph for blocks with InnerBlocks support', async () => {
+      vi.useFakeTimers();
       const s = await connectWithBlockTypes([
         { name: 'core/paragraph', attributes: { content: { type: 'rich-text' } } },
-        { name: 'core/heading', attributes: { content: { type: 'rich-text' } } },
+        {
+          name: 'core/quote',
+          attributes: {
+            citation: { type: 'rich-text' },
+          },
+          supports: { allowedBlocks: true },
+        },
+      ]);
+
+      try {
+        const promise = s.insertBlock(0, { name: 'core/quote', content: 'Quote text' });
+        await vi.runAllTimersAsync();
+        await promise;
+
+        const text = s.readPost();
+        expect(text).toContain('core/quote');
+        expect(text).toContain('core/paragraph');
+        expect(text).toContain('Quote text');
+      } finally {
+        s.disconnect();
+        vi.useRealTimers();
+      }
+    });
+
+    it('rejects content for blocks without content attribute and without InnerBlocks support', async () => {
+      const s = await connectWithBlockTypes([
+        { name: 'core/paragraph', attributes: { content: { type: 'rich-text' } } },
         {
           name: 'core/pullquote',
           attributes: {
@@ -868,12 +895,92 @@ describe('SessionManager', () => {
         await expect(s.insertBlock(0, { name: 'core/pullquote', content: 'text' })).rejects.toThrow(
           /value/,
         );
-
-        await expect(s.insertBlock(0, { name: 'core/pullquote', content: 'text' })).rejects.toThrow(
-          /citation/,
-        );
       } finally {
         s.disconnect();
+      }
+    });
+
+    it('rejects content for blocks that do not allow core/paragraph as inner block', async () => {
+      const s = await connectWithBlockTypes([
+        { name: 'core/paragraph', attributes: { content: { type: 'rich-text' } } },
+        {
+          name: 'core/custom-block',
+          attributes: {
+            someAttr: { type: 'string' },
+          },
+          supports: { allowedBlocks: true },
+          allowed_blocks: ['core/heading'],
+        },
+      ]);
+
+      try {
+        await expect(
+          s.insertBlock(0, { name: 'core/custom-block', content: 'text' }),
+        ).rejects.toThrow(/does not have a "content" attribute/);
+      } finally {
+        s.disconnect();
+      }
+    });
+
+    it('prepends content paragraph before existing innerBlocks', async () => {
+      vi.useFakeTimers();
+      const s = await connectWithBlockTypes([
+        { name: 'core/paragraph', attributes: { content: { type: 'rich-text' } } },
+        {
+          name: 'core/quote',
+          attributes: {
+            citation: { type: 'rich-text' },
+          },
+          supports: { allowedBlocks: true },
+        },
+      ]);
+
+      try {
+        const promise = s.insertBlock(0, {
+          name: 'core/quote',
+          content: 'Main quote',
+          innerBlocks: [{ name: 'core/paragraph', content: 'Extra paragraph' }],
+        });
+        await vi.runAllTimersAsync();
+        await promise;
+
+        const text = s.readPost();
+        expect(text).toContain('Main quote');
+        expect(text).toContain('Extra paragraph');
+        const mainIdx = text.indexOf('Main quote');
+        const extraIdx = text.indexOf('Extra paragraph');
+        expect(mainIdx).toBeLessThan(extraIdx);
+      } finally {
+        s.disconnect();
+        vi.useRealTimers();
+      }
+    });
+
+    it('streams auto-wrapped content exceeding STREAM_THRESHOLD', async () => {
+      vi.useFakeTimers();
+      const longText =
+        'This is a long quote that exceeds the streaming threshold for progressive insertion.';
+      const s = await connectWithBlockTypes([
+        { name: 'core/paragraph', attributes: { content: { type: 'rich-text' } } },
+        {
+          name: 'core/quote',
+          attributes: {
+            citation: { type: 'rich-text' },
+          },
+          supports: { allowedBlocks: true },
+        },
+      ]);
+
+      try {
+        const promise = s.insertBlock(0, { name: 'core/quote', content: longText });
+        await vi.runAllTimersAsync();
+        await promise;
+
+        const text = s.readPost();
+        expect(text).toContain(longText);
+      } finally {
+        s.disconnect();
+        vi.useRealTimers();
       }
     });
 
@@ -977,6 +1084,40 @@ describe('SessionManager', () => {
         await expect(s.insertBlock(0, { name: 'core/column' })).rejects.toThrow(/core\/columns/);
       } finally {
         s.disconnect();
+      }
+    });
+
+    it('auto-wraps content in replaceBlocks', async () => {
+      vi.useFakeTimers();
+      const s = await connectWithBlockTypes([
+        { name: 'core/paragraph', attributes: { content: { type: 'rich-text' } } },
+        {
+          name: 'core/quote',
+          attributes: {
+            citation: { type: 'rich-text' },
+          },
+          supports: { allowedBlocks: true },
+        },
+      ]);
+
+      try {
+        // Insert a placeholder block first
+        let promise = s.insertBlock(0, { name: 'core/paragraph', content: 'placeholder' });
+        await vi.runAllTimersAsync();
+        await promise;
+
+        // Replace it with a quote using content
+        promise = s.replaceBlocks(0, 1, [{ name: 'core/quote', content: 'Replaced quote' }]);
+        await vi.runAllTimersAsync();
+        await promise;
+
+        const text = s.readPost();
+        expect(text).toContain('core/quote');
+        expect(text).toContain('Replaced quote');
+        expect(text).not.toContain('placeholder');
+      } finally {
+        s.disconnect();
+        vi.useRealTimers();
       }
     });
 

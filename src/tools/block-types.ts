@@ -31,6 +31,9 @@ function formatBlockTypeInfo(info: BlockTypeInfo): string {
   if (info.allowedBlocks) {
     lines.push(`  Allowed inner blocks: ${info.allowedBlocks.join(', ')}`);
   }
+  if (info.supportsInnerBlocks) {
+    lines.push('  Supports InnerBlocks: yes');
+  }
 
   return lines.join('\n');
 }

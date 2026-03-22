@@ -21,6 +21,8 @@ interface BlockTypeEntry {
   ancestor: string[] | null;
   /** Block types allowed as direct children. Null = any. */
   allowedBlocks: string[] | null;
+  /** Whether this block declares InnerBlocks support via supports.allowedBlocks === true. */
+  supportsInnerBlocks: boolean;
 }
 
 /**
@@ -64,6 +66,8 @@ export interface BlockTypeInfo {
   parent: string[] | null;
   ancestor: string[] | null;
   allowedBlocks: string[] | null;
+  /** Whether this block uses InnerBlocks (supports.allowedBlocks === true from API). */
+  supportsInnerBlocks: boolean;
 }
 
 export class BlockTypeRegistry {
@@ -114,6 +118,8 @@ export class BlockTypeRegistry {
       const ancestor = blockType.ancestor?.length ? blockType.ancestor : null;
       const allowedBlocks = blockType.allowed_blocks?.length ? blockType.allowed_blocks : null;
 
+      const supportsInnerBlocks = blockType.supports?.allowedBlocks === true;
+
       entries.set(blockType.name, {
         name: blockType.name,
         title: blockType.title ?? blockType.name,
@@ -123,6 +129,7 @@ export class BlockTypeRegistry {
         parent,
         ancestor,
         allowedBlocks,
+        supportsInnerBlocks,
       });
     }
 
@@ -152,6 +159,7 @@ export class BlockTypeRegistry {
         parent: null,
         ancestor: null,
         allowedBlocks: null,
+        supportsInnerBlocks: false,
       });
     }
 
@@ -243,6 +251,14 @@ export class BlockTypeRegistry {
   }
 
   /**
+   * Check if a block type supports InnerBlocks (via supports.allowedBlocks in the API).
+   * Returns false for unknown block types and for the fallback registry.
+   */
+  supportsInnerBlocks(blockName: string): boolean {
+    return this.entries.get(blockName)?.supportsInnerBlocks ?? false;
+  }
+
+  /**
    * Get detailed info for a single block type (for the wp_block_types tool).
    * Returns null if the block type is unknown.
    */
@@ -270,6 +286,7 @@ export class BlockTypeRegistry {
       parent: entry.parent,
       ancestor: entry.ancestor,
       allowedBlocks: entry.allowedBlocks,
+      supportsInnerBlocks: entry.supportsInnerBlocks,
     };
   }
 
