@@ -66,6 +66,22 @@ Credentials are passed as environment variables via the `claude mcp add` command
 | `wp_replace_blocks` | Replace a range of blocks with new ones         |
 | `wp_set_title`      | Update the post title                           |
 
+### Post Metadata
+
+| Tool                   | Description                                            |
+| ---------------------- | ------------------------------------------------------ |
+| `wp_list_categories`   | List existing categories (with optional search)        |
+| `wp_list_tags`         | List existing tags (with optional search)              |
+| `wp_set_status`        | Change publication status (draft, pending, publish, …) |
+| `wp_set_categories`    | Set categories by name (creates if needed)             |
+| `wp_set_tags`          | Set tags by name (creates if needed)                   |
+| `wp_set_excerpt`       | Set or clear the post excerpt                          |
+| `wp_set_featured_image`| Set featured image by attachment ID (0 to remove)      |
+| `wp_set_date`          | Set publication date (ISO 8601)                        |
+| `wp_set_slug`          | Set URL slug                                           |
+| `wp_set_sticky`        | Pin/unpin post on front page                           |
+| `wp_set_comment_status`| Enable/disable comments                                |
+
 ### Status
 
 | Tool               | Description                                    |
@@ -80,11 +96,13 @@ Credentials are passed as environment variables via the `claude mcp add` command
 1. wp_connect → Connect to your WordPress site
 2. wp_list_posts → See available posts
 3. wp_open_post(postId: 42) → Open post for editing
-4. wp_read_post → See the current content as blocks
+4. wp_read_post → See current content and metadata
 5. wp_update_block(index: "1", content: "Updated paragraph text") → Edit a block
 6. wp_insert_block(position: 2, name: "core/heading", content: "New Section", attributes: {level: 3})
-7. wp_save → Save changes
-8. wp_disconnect → Done
+7. wp_set_categories(categories: ["Tech", "Tutorial"]) → Assign categories
+8. wp_set_excerpt(excerpt: "A quick intro to widgets") → Set excerpt
+9. wp_set_status(status: "publish") → Publish the post
+10. wp_disconnect → Done
 ```
 
 ## How It Works

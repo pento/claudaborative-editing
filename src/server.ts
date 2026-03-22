@@ -9,6 +9,7 @@ import { registerStatusTools } from './tools/status.js';
 import { registerBlockTypeTools } from './tools/block-types.js';
 import { registerMediaTools } from './tools/media.js';
 import { registerNoteTools } from './tools/notes.js';
+import { registerMetadataTools } from './tools/metadata.js';
 
 declare const __PKG_VERSION__: string;
 
@@ -52,6 +53,7 @@ export async function startServer(): Promise<void> {
   registerBlockTypeTools(server, session);
   registerMediaTools(server, session);
   registerNoteTools(server, session);
+  registerMetadataTools(server, session);
 
   // Start stdio transport
   const transport = new StdioServerTransport();

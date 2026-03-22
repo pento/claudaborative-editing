@@ -22,7 +22,7 @@ import {
   findHtmlSafeChunkEnd,
 } from '../yjs/block-converter.js';
 import { parseBlocks, parsedBlockToBlock } from '../blocks/parser.js';
-import { renderPost, renderBlock } from '../blocks/renderer.js';
+import { renderPost, renderBlock, type PostMetadata } from '../blocks/renderer.js';
 import { buildAwarenessState, parseCollaborators } from './awareness.js';
 import { DEFAULT_SYNC_CONFIG } from '../wordpress/types.js';
 import {
@@ -39,6 +39,7 @@ import type {
   WordPressConfig,
   WPMediaItem,
   WPNote,
+  WPTerm,
   WPUser,
   WPPost,
 } from '../wordpress/types.js';
@@ -417,6 +418,26 @@ export class SessionManager {
         this.documentManager.setProperty(doc, 'status', post.status);
         this.documentManager.setProperty(doc, 'slug', post.slug);
         this.documentManager.setProperty(doc, 'author', post.author);
+
+        // Set additional synced post properties
+        if (post.categories) {
+          this.documentManager.setProperty(doc, 'categories', post.categories);
+        }
+        if (post.tags) {
+          this.documentManager.setProperty(doc, 'tags', post.tags);
+        }
+        if (post.featured_media !== undefined) {
+          this.documentManager.setProperty(doc, 'featured_media', post.featured_media);
+        }
+        if (post.comment_status) {
+          this.documentManager.setProperty(doc, 'comment_status', post.comment_status);
+        }
+        if (post.sticky !== undefined) {
+          this.documentManager.setProperty(doc, 'sticky', post.sticky);
+        }
+        if (post.date) {
+          this.documentManager.setProperty(doc, 'date', post.date);
+        }
       }, LOCAL_ORIGIN);
     }
 
@@ -524,14 +545,25 @@ export class SessionManager {
   // --- Reading ---
 
   /**
-   * Render the current post as Claude-friendly text.
+   * Render the current post as Claude-friendly text, including metadata.
    */
   readPost(): string {
     this.requireState('editing');
 
     const title = this.documentManager.getTitle(this.doc!);
     const blocks = this.documentManager.getBlocks(this.doc!);
-    return renderPost(title, blocks);
+
+    // Gather metadata from Y.Doc (preferred, reflects collaborative state) and currentPost (fallback)
+    const metadata: PostMetadata = {
+      status: (this.documentManager.getProperty(this.doc!, 'status') as string) ?? this.currentPost?.status,
+      date: (this.documentManager.getProperty(this.doc!, 'date') as string) ?? this.currentPost?.date ?? undefined,
+      slug: (this.documentManager.getProperty(this.doc!, 'slug') as string) ?? this.currentPost?.slug,
+      sticky: (this.documentManager.getProperty(this.doc!, 'sticky') as boolean | undefined) ?? this.currentPost?.sticky,
+      commentStatus: (this.documentManager.getProperty(this.doc!, 'comment_status') as string) ?? this.currentPost?.comment_status,
+      excerpt: (this.documentManager.getProperty(this.doc!, 'excerpt') as string) || undefined,
+    };
+
+    return renderPost(title, blocks, metadata);
   }
 
   /**
@@ -781,6 +813,117 @@ export class SessionManager {
     this.doc!.transact(() => {
       this.documentManager.markSaved(this.doc!);
     }, LOCAL_ORIGIN);
+  }
+
+  // --- Post Metadata ---
+
+  /**
+   * List categories, optionally filtered by search term.
+   */
+  async listCategories(options?: { search?: string; perPage?: number }): Promise<WPTerm[]> {
+    this.requireState('connected', 'editing');
+    return this.apiClient!.listTerms('categories', options);
+  }
+
+  /**
+   * List tags, optionally filtered by search term.
+   */
+  async listTags(options?: { search?: string; perPage?: number }): Promise<WPTerm[]> {
+    this.requireState('connected', 'editing');
+    return this.apiClient!.listTerms('tags', options);
+  }
+
+  /**
+   * Set the post publication status.
+   * Updates both the Y.Doc (for collaborative sync) and the REST API (for persistence).
+   */
+  async setPostStatus(status: string): Promise<WPPost> {
+    this.requireState('editing');
+    return this.updatePostMeta({ status });
+  }
+
+  /**
+   * Set the post excerpt.
+   * Updates both the Y.Doc and the REST API.
+   */
+  async setExcerpt(excerpt: string): Promise<WPPost> {
+    this.requireState('editing');
+    return this.updatePostMeta({ excerpt });
+  }
+
+  /**
+   * Set the post categories by name.
+   * Resolves names to IDs (creating categories that don't exist), then updates
+   * both the Y.Doc and the REST API.
+   */
+  async setCategories(
+    names: string[],
+  ): Promise<{ post: WPPost; resolved: Array<{ name: string; id: number; created: boolean }> }> {
+    this.requireState('editing');
+    const resolved = await this.resolveTerms('categories', names);
+    const ids = resolved.map((r) => r.id);
+
+    const post = await this.updatePostMeta({ categories: ids });
+    return { post, resolved };
+  }
+
+  /**
+   * Set the post tags by name.
+   * Resolves names to IDs (creating tags that don't exist), then updates
+   * both the Y.Doc and the REST API.
+   */
+  async setTags(
+    names: string[],
+  ): Promise<{ post: WPPost; resolved: Array<{ name: string; id: number; created: boolean }> }> {
+    this.requireState('editing');
+    const resolved = await this.resolveTerms('tags', names);
+    const ids = resolved.map((r) => r.id);
+
+    const post = await this.updatePostMeta({ tags: ids });
+    return { post, resolved };
+  }
+
+  /**
+   * Set the post featured image by media attachment ID.
+   * Pass 0 to remove the featured image.
+   */
+  async setFeaturedImage(attachmentId: number): Promise<WPPost> {
+    this.requireState('editing');
+    return this.updatePostMeta({ featured_media: attachmentId });
+  }
+
+  /**
+   * Set the post publication date (ISO 8601 format).
+   * Pass an empty string to clear (WordPress will use the current date).
+   */
+  async setDate(date: string): Promise<WPPost> {
+    this.requireState('editing');
+    return this.updatePostMeta({ date: date || null });
+  }
+
+  /**
+   * Set the post URL slug.
+   * Note: WordPress may auto-modify the slug to ensure uniqueness (appending -2, -3, etc.).
+   */
+  async setSlug(slug: string): Promise<WPPost> {
+    this.requireState('editing');
+    return this.updatePostMeta({ slug });
+  }
+
+  /**
+   * Set whether the post is sticky (pinned to the front page).
+   */
+  async setSticky(sticky: boolean): Promise<WPPost> {
+    this.requireState('editing');
+    return this.updatePostMeta({ sticky });
+  }
+
+  /**
+   * Set the post comment status ('open' or 'closed').
+   */
+  async setCommentStatus(commentStatus: string): Promise<WPPost> {
+    this.requireState('editing');
+    return this.updatePostMeta({ comment_status: commentStatus });
   }
 
   // --- Media ---
@@ -1192,6 +1335,63 @@ export class SessionManager {
   }
 
   // --- Internal ---
+
+  /**
+   * Shared helper for metadata updates: call REST API first, then update Y.Doc.
+   * REST-first ensures the Y.Doc only reflects committed state — if the API call
+   * fails, neither the collaborative doc nor currentPost are modified.
+   */
+  private async updatePostMeta(fields: Record<string, unknown>): Promise<WPPost> {
+    // Persist via REST API first — fail fast before touching collaborative state
+    const updated = await this.apiClient!.updatePost(this.currentPost!.id, fields);
+    this.currentPost = updated;
+
+    // Update Y.Doc properties to reflect the committed state.
+    // Use WordPress-returned values for scalar fields (e.g., slug may be deduplicated),
+    // but keep the caller's value for fields where the API returns a different shape
+    // (e.g., excerpt returns { rendered, raw } but Y.Doc stores a plain string).
+    this.doc!.transact(() => {
+      for (const [key, value] of Object.entries(fields)) {
+        const canonical = (updated as unknown as Record<string, unknown>)[key];
+        const useCanonical = canonical !== undefined && typeof canonical === typeof value;
+        this.documentManager.setProperty(this.doc!, key, useCanonical ? canonical : value);
+      }
+    }, LOCAL_ORIGIN);
+
+    // Flush sync queue so collaborators see the change
+    if (this.syncClient) {
+      this.syncClient.flushQueue();
+    }
+
+    return updated;
+  }
+
+  /**
+   * Resolve taxonomy term names to IDs, creating any that don't exist.
+   * Uses exact case-insensitive matching (WordPress search is substring-based).
+   */
+  private async resolveTerms(
+    taxonomy: 'categories' | 'tags',
+    names: string[],
+  ): Promise<Array<{ name: string; id: number; created: boolean }>> {
+    const results: Array<{ name: string; id: number; created: boolean }> = [];
+
+    for (const name of names) {
+      const matches = await this.apiClient!.searchTerms(taxonomy, name);
+      const exact = matches.find(
+        (t) => t.name.toLowerCase() === name.toLowerCase(),
+      );
+
+      if (exact) {
+        results.push({ name: exact.name, id: exact.id, created: false });
+      } else {
+        const created = await this.apiClient!.createTerm(taxonomy, name);
+        results.push({ name: created.name, id: created.id, created: true });
+      }
+    }
+
+    return results;
+  }
 
   /**
    * Signal a note change to other collaborators via the root/comment room.

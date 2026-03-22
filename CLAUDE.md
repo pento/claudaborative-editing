@@ -30,7 +30,7 @@ Claude Code  <--stdio-->  MCP Server (Node.js)  <--HTTP polling-->  WordPress
 - `src/wordpress/` — REST API client, HTTP polling sync client, MIME type detection
 - `src/yjs/` — Y.Doc management, block ↔ Yjs conversion, sync protocol encoding
 - `src/session/` — Connection lifecycle, awareness/presence
-- `src/tools/` — MCP tool handlers (connect, posts [open/close/create], read, edit, media, notes, status)
+- `src/tools/` — MCP tool handlers (connect, posts [open/close/create], read, edit, media, metadata, notes, status)
 - `src/blocks/` — Gutenberg HTML parser, Claude-friendly renderer
 - `tests/` — Unit and integration tests
 
@@ -179,6 +179,43 @@ Notes use a dual-path architecture — the WordPress REST API for note content C
 - `wp_read_post` shows `[has note]` markers on blocks that have notes. Use `wp_list_notes` to read note content.
 - Resolving a note also deletes all its replies (cascade delete).
 - The `notesSupported` flag on `SessionManager` gates all note operations — tools return a descriptive error on older WordPress versions.
+
+## Post Metadata
+
+Post metadata (status, categories, tags, excerpt, featured image, date, slug, sticky, comment status) can be managed via the `wp_set_*` tools. `wp_read_post` includes metadata in its output.
+
+### Dual-Update Pattern
+
+All metadata updates write to both the Y.Doc (for collaborative sync) and the REST API (for persistence):
+
+1. Y.Doc properties are set via `documentManager.setProperty()` within a `LOCAL_ORIGIN` transaction, then flushed via `syncClient.flushQueue()` so Gutenberg browser sessions see the change immediately.
+2. The REST API is called via `apiClient.updatePost()` to persist the change, and `currentPost` is refreshed from the response.
+
+This ensures changes survive even if no save is triggered, and that collaborators see updates in real time.
+
+### Category/Tag Resolution
+
+`wp_set_categories` and `wp_set_tags` accept term names (not IDs). Resolution:
+
+1. Search WordPress for an exact case-insensitive name match (`GET /wp/v2/{categories|tags}?search=...`, then filter for exact match since WordPress search is substring-based)
+2. If not found, create the term (`POST /wp/v2/{categories|tags}`)
+3. Collect IDs and update the post
+
+Both tools replace all existing terms (not append).
+
+### Tools
+
+- `wp_list_categories` — List existing categories (with optional search filter)
+- `wp_list_tags` — List existing tags (with optional search filter)
+- `wp_set_status` — Change publication status (draft, pending, publish, private, future)
+- `wp_set_categories` — Assign categories by name (creates if needed, replaces existing)
+- `wp_set_tags` — Assign tags by name (creates if needed, replaces existing; empty array removes all)
+- `wp_set_excerpt` — Set or clear the post excerpt
+- `wp_set_featured_image` — Set featured image by attachment ID (0 to remove)
+- `wp_set_date` — Set publication date (ISO 8601; empty string to reset)
+- `wp_set_slug` — Set URL slug (WordPress may auto-modify for uniqueness)
+- `wp_set_sticky` — Pin/unpin on front page
+- `wp_set_comment_status` — Enable/disable comments (open/closed)
 
 ## MCP Server Usage
 

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { WordPressApiClient, WordPressApiError } from '../../src/wordpress/api-client.js';
-import type { SyncPayload, WPBlockType, WPMediaItem, WPNote, WPPost, WPUser } from '../../src/wordpress/types.js';
+import type { SyncPayload, WPBlockType, WPMediaItem, WPNote, WPPost, WPTerm, WPUser } from '../../src/wordpress/types.js';
 
 // Helper to build a mock Response
 function mockResponse(body: unknown, init?: { status?: number; statusText?: string }): Response {
@@ -726,6 +726,238 @@ describe('WordPressApiClient', () => {
         expect(url).toBe('https://example.com/wp-json/wp/v2/comments/10?force=true');
         expect(options.method).toBe('DELETE');
       });
+    });
+  });
+
+  describe('updatePost', () => {
+    it('posts to /wp/v2/posts/{id}?context=edit with JSON body', async () => {
+      const updatedPost: WPPost = { ...fakePost, title: { rendered: 'Updated', raw: 'Updated' } };
+      fetchMock.mockResolvedValue(mockResponse(updatedPost));
+      const client = createClient();
+      const data = { title: 'Updated', status: 'publish' };
+      const result = await client.updatePost(42, data);
+
+      const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(url).toBe('https://example.com/wp-json/wp/v2/posts/42?context=edit');
+      expect(options.method).toBe('POST');
+      expect((options.headers as Record<string, string>)['Content-Type']).toBe('application/json');
+      expect(options.body).toBe(JSON.stringify(data));
+      expect(result).toEqual(updatedPost);
+    });
+
+    it('returns the updated post', async () => {
+      const updatedPost: WPPost = { ...fakePost, status: 'publish' };
+      fetchMock.mockResolvedValue(mockResponse(updatedPost));
+      const client = createClient();
+      const result = await client.updatePost(42, { status: 'publish' });
+
+      expect(result.status).toBe('publish');
+    });
+
+    it('throws on error', async () => {
+      fetchMock.mockResolvedValue(
+        mockResponse(
+          { code: 'rest_post_invalid_id', message: 'Invalid post ID.' },
+          { status: 404, statusText: 'Not Found' },
+        ),
+      );
+      const client = createClient();
+      await expect(client.updatePost(999, { title: 'Nope' })).rejects.toThrow(WordPressApiError);
+    });
+  });
+
+  describe('searchTerms', () => {
+    const fakeCat: WPTerm = { id: 1, name: 'Tech', slug: 'tech', taxonomy: 'category' };
+    const fakeTag: WPTerm = { id: 2, name: 'JavaScript', slug: 'javascript', taxonomy: 'post_tag' };
+
+    it('searches categories with correct URL params', async () => {
+      fetchMock.mockResolvedValue(mockResponse([fakeCat]));
+      const client = createClient();
+      const result = await client.searchTerms('categories', 'Tech');
+
+      const url = fetchMock.mock.calls[0][0] as string;
+      expect(url).toContain('/wp/v2/categories?');
+      expect(url).toContain('search=Tech');
+      expect(url).toContain('per_page=100');
+      expect(result).toEqual([fakeCat]);
+    });
+
+    it('searches tags with correct URL params', async () => {
+      fetchMock.mockResolvedValue(mockResponse([fakeTag]));
+      const client = createClient();
+      const result = await client.searchTerms('tags', 'JavaScript');
+
+      const url = fetchMock.mock.calls[0][0] as string;
+      expect(url).toContain('/wp/v2/tags?');
+      expect(url).toContain('search=JavaScript');
+      expect(url).toContain('per_page=100');
+      expect(result).toEqual([fakeTag]);
+    });
+
+    it('returns empty array when no matches', async () => {
+      fetchMock.mockResolvedValue(mockResponse([]));
+      const client = createClient();
+      const result = await client.searchTerms('categories', 'nonexistent');
+
+      expect(result).toEqual([]);
+    });
+
+    it('is a GET request without Content-Type', async () => {
+      fetchMock.mockResolvedValue(mockResponse([]));
+      const client = createClient();
+      await client.searchTerms('tags', 'test');
+
+      const options = fetchMock.mock.calls[0][1] as RequestInit;
+      expect(options.method).toBeUndefined();
+      expect((options.headers as Record<string, string>)['Content-Type']).toBeUndefined();
+    });
+  });
+
+  describe('listTerms', () => {
+    const fakeCat: WPTerm = { id: 1, name: 'Tech', slug: 'tech', taxonomy: 'category' };
+    const fakeTag: WPTerm = { id: 2, name: 'JavaScript', slug: 'javascript', taxonomy: 'post_tag' };
+
+    it('lists categories with default params', async () => {
+      fetchMock.mockResolvedValue(mockResponse([fakeCat]));
+      const client = createClient();
+      const result = await client.listTerms('categories');
+
+      const url = fetchMock.mock.calls[0][0] as string;
+      expect(url).toContain('/wp/v2/categories?');
+      expect(url).toContain('per_page=100');
+      expect(url).toContain('orderby=count');
+      expect(url).toContain('order=desc');
+      expect(result).toEqual([fakeCat]);
+    });
+
+    it('lists tags with correct endpoint', async () => {
+      fetchMock.mockResolvedValue(mockResponse([fakeTag]));
+      const client = createClient();
+      const result = await client.listTerms('tags');
+
+      const url = fetchMock.mock.calls[0][0] as string;
+      expect(url).toContain('/wp/v2/tags?');
+      expect(result).toEqual([fakeTag]);
+    });
+
+    it('passes search parameter when provided', async () => {
+      fetchMock.mockResolvedValue(mockResponse([fakeCat]));
+      const client = createClient();
+      await client.listTerms('categories', { search: 'Tech' });
+
+      const url = fetchMock.mock.calls[0][0] as string;
+      expect(url).toContain('search=Tech');
+    });
+
+    it('passes custom perPage', async () => {
+      fetchMock.mockResolvedValue(mockResponse([fakeCat]));
+      const client = createClient();
+      await client.listTerms('categories', { perPage: 10 });
+
+      const url = fetchMock.mock.calls[0][0] as string;
+      expect(url).toContain('per_page=10');
+    });
+
+    it('returns empty array when no terms', async () => {
+      fetchMock.mockResolvedValue(mockResponse([]));
+      const client = createClient();
+      const result = await client.listTerms('tags');
+
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe('createTerm', () => {
+    const fakeCat: WPTerm = { id: 5, name: 'New Category', slug: 'new-category', taxonomy: 'category' };
+    const fakeTag: WPTerm = { id: 6, name: 'New Tag', slug: 'new-tag', taxonomy: 'post_tag' };
+
+    it('creates a category with POST and JSON body', async () => {
+      fetchMock.mockResolvedValue(mockResponse(fakeCat));
+      const client = createClient();
+      const result = await client.createTerm('categories', 'New Category');
+
+      const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(url).toBe('https://example.com/wp-json/wp/v2/categories');
+      expect(options.method).toBe('POST');
+      expect((options.headers as Record<string, string>)['Content-Type']).toBe('application/json');
+      expect(options.body).toBe(JSON.stringify({ name: 'New Category' }));
+      expect(result).toEqual(fakeCat);
+    });
+
+    it('creates a tag with POST and JSON body', async () => {
+      fetchMock.mockResolvedValue(mockResponse(fakeTag));
+      const client = createClient();
+      const result = await client.createTerm('tags', 'New Tag');
+
+      const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(url).toBe('https://example.com/wp-json/wp/v2/tags');
+      expect(options.method).toBe('POST');
+      expect(options.body).toBe(JSON.stringify({ name: 'New Tag' }));
+      expect(result).toEqual(fakeTag);
+    });
+
+    it('throws on duplicate term', async () => {
+      fetchMock.mockResolvedValue(
+        mockResponse(
+          { code: 'term_exists', message: 'A term with the name provided already exists.' },
+          { status: 400, statusText: 'Bad Request' },
+        ),
+      );
+      const client = createClient();
+      await expect(client.createTerm('categories', 'Existing')).rejects.toThrow(WordPressApiError);
+    });
+  });
+
+  describe('getTerms', () => {
+    const fakeCats: WPTerm[] = [
+      { id: 1, name: 'Tech', slug: 'tech', taxonomy: 'category' },
+      { id: 2, name: 'Science', slug: 'science', taxonomy: 'category' },
+      { id: 3, name: 'Art', slug: 'art', taxonomy: 'category' },
+    ];
+
+    it('fetches categories by IDs with correct params', async () => {
+      fetchMock.mockResolvedValue(mockResponse(fakeCats));
+      const client = createClient();
+      const result = await client.getTerms('categories', [1, 2, 3]);
+
+      const url = fetchMock.mock.calls[0][0] as string;
+      expect(url).toContain('/wp/v2/categories?');
+      expect(url).toContain('include=1%2C2%2C3');
+      expect(url).toContain('per_page=3');
+      expect(result).toEqual(fakeCats);
+    });
+
+    it('fetches tags by IDs', async () => {
+      const fakeTags: WPTerm[] = [
+        { id: 10, name: 'JS', slug: 'js', taxonomy: 'post_tag' },
+      ];
+      fetchMock.mockResolvedValue(mockResponse(fakeTags));
+      const client = createClient();
+      const result = await client.getTerms('tags', [10]);
+
+      const url = fetchMock.mock.calls[0][0] as string;
+      expect(url).toContain('/wp/v2/tags?');
+      expect(url).toContain('include=10');
+      expect(url).toContain('per_page=1');
+      expect(result).toEqual(fakeTags);
+    });
+
+    it('returns empty array for empty IDs without making a request', async () => {
+      const client = createClient();
+      const result = await client.getTerms('categories', []);
+
+      expect(result).toEqual([]);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('is a GET request without Content-Type', async () => {
+      fetchMock.mockResolvedValue(mockResponse(fakeCats));
+      const client = createClient();
+      await client.getTerms('categories', [1, 2, 3]);
+
+      const options = fetchMock.mock.calls[0][1] as RequestInit;
+      expect(options.method).toBeUndefined();
+      expect((options.headers as Record<string, string>)['Content-Type']).toBeUndefined();
     });
   });
 
