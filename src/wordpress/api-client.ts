@@ -4,6 +4,7 @@ import type {
   WPMediaItem,
   WPNote,
   WPPost,
+  WPTerm,
   WPUser,
   SyncPayload,
   SyncResponse,
@@ -126,6 +127,81 @@ export class WordPressApiClient {
       method: 'POST',
       body: formData,
     });
+  }
+
+  /**
+   * Update an existing post's fields.
+   * POST /wp/v2/posts/{id}
+   */
+  async updatePost(
+    id: number,
+    data: Record<string, unknown>,
+  ): Promise<WPPost> {
+    return this.apiFetch<WPPost>(`/wp/v2/posts/${id}?context=edit`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  /**
+   * List taxonomy terms (categories or tags) with optional search filter.
+   * GET /wp/v2/{categories|tags}
+   */
+  async listTerms(
+    taxonomy: 'categories' | 'tags',
+    options?: { search?: string; perPage?: number },
+  ): Promise<WPTerm[]> {
+    const params = new URLSearchParams({
+      per_page: String(options?.perPage ?? 100),
+      orderby: 'count',
+      order: 'desc',
+    });
+    if (options?.search) {
+      params.set('search', options.search);
+    }
+    return this.apiFetch<WPTerm[]>(`/wp/v2/${taxonomy}?${params.toString()}`);
+  }
+
+  /**
+   * Search for taxonomy terms (categories or tags) by name.
+   * GET /wp/v2/{categories|tags}?search=...
+   */
+  async searchTerms(
+    taxonomy: 'categories' | 'tags',
+    search: string,
+  ): Promise<WPTerm[]> {
+    const params = new URLSearchParams({ search, per_page: '100' });
+    return this.apiFetch<WPTerm[]>(`/wp/v2/${taxonomy}?${params.toString()}`);
+  }
+
+  /**
+   * Create a new taxonomy term (category or tag).
+   * POST /wp/v2/{categories|tags}
+   */
+  async createTerm(
+    taxonomy: 'categories' | 'tags',
+    name: string,
+  ): Promise<WPTerm> {
+    return this.apiFetch<WPTerm>(`/wp/v2/${taxonomy}`, {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    });
+  }
+
+  /**
+   * Fetch taxonomy terms by IDs (for resolving IDs to names).
+   * GET /wp/v2/{categories|tags}?include=...
+   */
+  async getTerms(
+    taxonomy: 'categories' | 'tags',
+    ids: number[],
+  ): Promise<WPTerm[]> {
+    if (ids.length === 0) return [];
+    const params = new URLSearchParams({
+      include: ids.join(','),
+      per_page: String(ids.length),
+    });
+    return this.apiFetch<WPTerm[]>(`/wp/v2/${taxonomy}?${params.toString()}`);
   }
 
   /**

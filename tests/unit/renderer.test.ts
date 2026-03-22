@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { renderPost, renderBlock } from '../../src/blocks/renderer.js';
+import type { PostMetadata } from '../../src/blocks/renderer.js';
 import type { Block } from '../../src/yjs/types.js';
 
 function makeBlock(overrides: Partial<Block> & { name: string }): Block {
@@ -94,6 +95,105 @@ describe('renderPost', () => {
 
     expect(output).toBe('Title: "Empty Post"');
     expect(output).not.toContain('[');
+  });
+});
+
+describe('renderPost with metadata', () => {
+  const sampleBlocks: Block[] = [
+    makeBlock({
+      name: 'core/paragraph',
+      attributes: { content: 'Hello world.' },
+    }),
+  ];
+
+  it('should render all metadata fields', () => {
+    const metadata: PostMetadata = {
+      status: 'draft',
+      date: '2026-03-22T10:00:00',
+      slug: 'my-post',
+      sticky: true,
+      commentStatus: 'closed',
+      excerpt: 'A brief summary.',
+    };
+
+    const output = renderPost('Full Meta', sampleBlocks, metadata);
+
+    expect(output).toContain('Title: "Full Meta"');
+    expect(output).toContain('Status: draft');
+    expect(output).toContain('Date: 2026-03-22T10:00:00');
+    expect(output).toContain('Slug: my-post');
+    expect(output).toContain('Sticky: yes');
+    expect(output).toContain('Comments: closed');
+    expect(output).toContain('Excerpt: "A brief summary."');
+  });
+
+  it('should render only the provided metadata fields (partial)', () => {
+    const metadata: PostMetadata = {
+      status: 'publish',
+    };
+
+    const output = renderPost('Partial Meta', sampleBlocks, metadata);
+
+    expect(output).toContain('Status: publish');
+    expect(output).not.toContain('Date:');
+    expect(output).not.toContain('Slug:');
+    expect(output).not.toContain('Sticky:');
+    expect(output).not.toContain('Comments:');
+    expect(output).not.toContain('Excerpt:');
+  });
+
+  it('should not render extra lines for empty/falsy metadata values', () => {
+    const metadata: PostMetadata = {
+      status: '',
+      date: null,
+      slug: '',
+      sticky: false,
+      commentStatus: 'open',
+      excerpt: '',
+    };
+
+    const output = renderPost('Falsy Meta', sampleBlocks, metadata);
+
+    expect(output).toContain('Title: "Falsy Meta"');
+    expect(output).not.toContain('Status:');
+    expect(output).not.toContain('Date:');
+    expect(output).not.toContain('Slug:');
+    expect(output).not.toContain('Sticky:');
+    expect(output).not.toContain('Comments:');
+    expect(output).not.toContain('Excerpt:');
+  });
+
+  it('should be backward compatible when metadata is omitted', () => {
+    const output = renderPost('No Meta', sampleBlocks);
+
+    expect(output).toContain('Title: "No Meta"');
+    expect(output).toContain('[0] core/paragraph');
+    expect(output).not.toContain('Status:');
+    expect(output).not.toContain('Date:');
+    expect(output).not.toContain('Slug:');
+    expect(output).not.toContain('Sticky:');
+    expect(output).not.toContain('Comments:');
+    expect(output).not.toContain('Excerpt:');
+  });
+
+  it('should show "Comments: closed" when commentStatus is closed', () => {
+    const metadata: PostMetadata = {
+      commentStatus: 'closed',
+    };
+
+    const output = renderPost('Closed Comments', [], metadata);
+
+    expect(output).toContain('Comments: closed');
+  });
+
+  it('should not show Comments line when commentStatus is open', () => {
+    const metadata: PostMetadata = {
+      commentStatus: 'open',
+    };
+
+    const output = renderPost('Open Comments', [], metadata);
+
+    expect(output).not.toContain('Comments:');
   });
 });
 

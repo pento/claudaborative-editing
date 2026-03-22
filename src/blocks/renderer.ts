@@ -4,11 +4,22 @@
 
 import type { Block } from '../yjs/types.js';
 
+/** Post metadata to display in the rendered output. */
+export interface PostMetadata {
+  status?: string;
+  date?: string | null;
+  slug?: string;
+  sticky?: boolean;
+  commentStatus?: string;
+  excerpt?: string;
+}
+
 /**
  * Render a post's blocks as Claude-friendly text.
  *
  * Output format:
  * Title: "Post Title Here"
+ * Status: draft
  *
  * [0] core/heading (level=2)
  *   "What Are Widgets?"
@@ -16,9 +27,30 @@ import type { Block } from '../yjs/types.js';
  * [1] core/paragraph
  *   "Widgets are fundamental building blocks..."
  */
-export function renderPost(title: string, blocks: Block[]): string {
+export function renderPost(title: string, blocks: Block[], metadata?: PostMetadata): string {
   const parts: string[] = [];
   parts.push(`Title: "${title}"`);
+
+  if (metadata) {
+    if (metadata.status) {
+      parts.push(`Status: ${metadata.status}`);
+    }
+    if (metadata.date) {
+      parts.push(`Date: ${metadata.date}`);
+    }
+    if (metadata.slug) {
+      parts.push(`Slug: ${metadata.slug}`);
+    }
+    if (metadata.sticky) {
+      parts.push('Sticky: yes');
+    }
+    if (metadata.commentStatus === 'closed') {
+      parts.push('Comments: closed');
+    }
+    if (metadata.excerpt) {
+      parts.push(`Excerpt: "${metadata.excerpt}"`);
+    }
+  }
 
   if (blocks.length > 0) {
     parts.push('');

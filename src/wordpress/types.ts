@@ -71,7 +71,22 @@ export interface WPPost {
   modified: string;
   categories?: number[];
   tags?: number[];
+  featured_media?: number;
+  comment_status?: string;
+  ping_status?: string;
+  sticky?: boolean;
+  format?: string;
   meta?: Record<string, unknown>;
+}
+
+/** WordPress taxonomy term (category or tag) as returned by the REST API. */
+export interface WPTerm {
+  id: number;
+  name: string;
+  slug: string;
+  taxonomy: string;
+  count?: number;
+  parent?: number;
 }
 
 /** WordPress user as returned by /wp/v2/users/me. */
