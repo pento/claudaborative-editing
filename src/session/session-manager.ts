@@ -74,6 +74,37 @@ interface StreamTarget {
   value: string;
 }
 
+/** Result of a single find-and-replace edit operation. */
+export interface TextEditResult {
+  find: string;
+  replace: string;
+  applied: boolean;
+  /** Error message if the edit was not applied. */
+  error?: string;
+}
+
+/** Result of editBlockText(). */
+export interface EditBlockTextResult {
+  edits: TextEditResult[];
+  appliedCount: number;
+  failedCount: number;
+  /** The updated text content of the attribute after all edits. */
+  updatedText: string;
+}
+
+/**
+ * Find the Nth occurrence (1-indexed) of `search` within `text`.
+ * Returns the character index, or -1 if fewer than N occurrences exist.
+ */
+function findNthOccurrence(text: string, search: string, n: number): number {
+  let pos = -1;
+  for (let i = 0; i < n; i++) {
+    pos = text.indexOf(search, pos + 1);
+    if (pos === -1) return -1;
+  }
+  return pos;
+}
+
 /**
  * Recursively prepare a block tree for insertion.
  * Applies default attributes, sets isValid/clientId, and separates
@@ -724,6 +755,111 @@ export class SessionManager {
         await this.streamTextToYText(ytext, target.newValue, index);
       }
     }
+  }
+
+  /**
+   * Apply surgical find-and-replace edits to a block's rich-text attribute.
+   *
+   * Each edit is applied as an atomic Y.Text delta (retain + delete + insert).
+   * The Y.Text is re-read before each edit to get correct positions after
+   * previous edits and any concurrent remote changes.
+   *
+   * @param index Block index (e.g., "0", "2.1")
+   * @param edits Array of find/replace operations applied sequentially
+   * @param attribute Rich-text attribute name (default: "content")
+   * @returns Structured result with per-edit success/failure and updated text
+   */
+  editBlockText(
+    index: string,
+    edits: Array<{ find: string; replace: string; occurrence?: number }>,
+    attribute?: string,
+  ): EditBlockTextResult {
+    this.requireState('editing');
+
+    const attrName = attribute ?? 'content';
+
+    const block = this.documentManager.getBlockByIndex(this.doc, index);
+    if (!block) {
+      throw new Error(`Block ${index} not found.`);
+    }
+
+    if (!this.registry.isRichTextAttribute(block.name, attrName)) {
+      const richTextAttrs = this.registry.getRichTextAttributes(block.name).join(', ');
+      const hint = richTextAttrs
+        ? ` Rich-text attributes for ${block.name}: ${richTextAttrs}.`
+        : ` ${block.name} has no rich-text attributes.`;
+      throw new Error(
+        `Attribute "${attrName}" on ${block.name} is not a rich-text attribute. Use wp_update_block to change non-text attributes.${hint}`,
+      );
+    }
+
+    const ytext = this.documentManager.getBlockAttributeYText(this.doc, index, attrName);
+    if (!ytext) {
+      throw new Error(
+        `Attribute "${attrName}" is empty on block ${index}. Use wp_update_block to set initial content.`,
+      );
+    }
+
+    // Set cursor position BEFORE edits — same reason as updateBlock
+    this.updateCursorPosition(index);
+
+    const results: TextEditResult[] = [];
+    let appliedCount = 0;
+
+    for (const edit of edits) {
+      if (edit.find === '') {
+        results.push({
+          find: edit.find,
+          replace: edit.replace,
+          applied: false,
+          error: 'Empty find string is not allowed.',
+        });
+        continue;
+      }
+
+      // Re-read current text for each edit (previous edits shift positions)
+      const currentText = ytext.toString();
+      const occurrence = edit.occurrence ?? 1;
+      const pos = findNthOccurrence(currentText, edit.find, occurrence);
+
+      if (pos === -1) {
+        const reason =
+          occurrence > 1
+            ? `Occurrence ${occurrence} of "${edit.find}" not found in current content.`
+            : `"${edit.find}" not found in current content.`;
+        results.push({
+          find: edit.find,
+          replace: edit.replace,
+          applied: false,
+          error: reason,
+        });
+        continue;
+      }
+
+      // Apply as a single atomic delta: retain + delete + insert
+      this.doc.transact(() => {
+        const ops: Array<{ retain?: number; delete?: number; insert?: string }> = [];
+        if (pos > 0) ops.push({ retain: pos });
+        if (edit.find.length > 0) ops.push({ delete: edit.find.length });
+        if (edit.replace.length > 0) ops.push({ insert: edit.replace });
+        ytext.applyDelta(ops);
+      }, LOCAL_ORIGIN);
+
+      results.push({ find: edit.find, replace: edit.replace, applied: true });
+      appliedCount++;
+    }
+
+    // Flush once after all edits for prompt sync to browser
+    if (appliedCount > 0) {
+      this.syncClient.flushQueue();
+    }
+
+    return {
+      edits: results,
+      appliedCount,
+      failedCount: results.length - appliedCount,
+      updatedText: ytext.toString(),
+    };
   }
 
   /**

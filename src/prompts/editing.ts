@@ -70,7 +70,8 @@ Here is the current post content:
 ${postContent}
 
 Available tools:
-- wp_update_block — modify an existing block by index
+- wp_edit_block_text — make targeted find-and-replace corrections within a block (preferred for small edits)
+- wp_update_block — modify an existing block by index (for larger rewrites)
 - wp_insert_block — add a new block
 - wp_remove_blocks — remove blocks
 - wp_replace_blocks — replace a range of blocks
@@ -144,7 +145,8 @@ Here is the current post content:
 ${postContent}
 
 Instructions:
-- Use wp_update_block to fix errors in each block.
+- Use wp_edit_block_text for targeted corrections (typos, spelling, grammar fixes). This is faster and safer for concurrent editing than replacing the full block text.
+- Use wp_update_block only when rewriting a significant portion of a block.
 - Fix grammar, spelling, and punctuation errors.
 - Fix inconsistent capitalization, hyphenation, and number formatting.
 - Fix awkward phrasing or unclear sentences.

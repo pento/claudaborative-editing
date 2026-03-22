@@ -174,6 +174,15 @@ export class BlockTypeRegistry {
   }
 
   /**
+   * Get the names of all rich-text attributes for a block type.
+   * Returns an empty array if the block type is unknown.
+   */
+  getRichTextAttributes(blockName: string): string[] {
+    const entry = this.entries.get(blockName);
+    return entry ? Array.from(entry.richTextAttributes) : [];
+  }
+
+  /**
    * Get default attributes for a block type.
    * Returns an empty object if no defaults are defined.
    */
