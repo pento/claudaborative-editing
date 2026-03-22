@@ -583,6 +583,13 @@ describe('WordPressApiClient', () => {
 
         expect(result).toBe(false);
       });
+
+      it('re-throws non-API errors (e.g. network failure)', async () => {
+        fetchMock.mockRejectedValue(new TypeError('fetch failed'));
+        const client = createClient();
+
+        await expect(client.checkNotesSupport()).rejects.toThrow('fetch failed');
+      });
     });
 
     describe('listNotes', () => {
