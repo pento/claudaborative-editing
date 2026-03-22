@@ -54,6 +54,7 @@ export function checkboxPrompt(
     return Promise.resolve({ selected });
   }
 
+  /* v8 ignore start -- interactive TTY code requires a real terminal */
   return new Promise((resolve) => {
     const state = items.map((item) => item.selected);
     // Extra row at the end for the "Done" button
@@ -141,6 +142,7 @@ export function checkboxPrompt(
 
     stdin.on('keypress', onKeypress);
   });
+  /* v8 ignore stop */
 }
 
 /**

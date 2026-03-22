@@ -60,6 +60,7 @@ function readMasked(question: string): Promise<string> {
       return;
     }
 
+    /* v8 ignore start -- raw-mode TTY code requires a real terminal */
     const raw = process.stdin;
     raw.setRawMode(true);
     raw.resume();
@@ -69,9 +70,6 @@ function readMasked(question: string): Promise<string> {
     let finished = false;
 
     const onData = (chunk: string): void => {
-      // Pasted text arrives as a single multi-character string.
-      // Process each character individually so masking and
-      // special-key handling work correctly.
       for (const c of chunk) {
         if (finished) {
           break;
@@ -92,20 +90,18 @@ function readMasked(question: string): Promise<string> {
             process.stdout.write('\b \b');
           }
         } else if (c.charCodeAt(0) >= 32) {
-          // Only append printable characters (ignore other control chars)
           input += c;
           process.stdout.write('*');
         }
       }
     };
     raw.on('data', onData);
+    /* v8 ignore stop */
   });
 }
 
+/* v8 ignore start -- defaultDeps creates real readline/stdin bindings; tests inject deps directly */
 function defaultDeps(): SetupDeps {
-  // readline must be closed before any raw-mode operation (promptSecret,
-  // selectCheckbox) and reopened after, because readline attaches its own
-  // listeners to stdin that intercept keystrokes.
   let rl = createInterface({ input: process.stdin, output: process.stdout });
 
   function closeRl(): void {
@@ -150,6 +146,7 @@ function defaultDeps(): SetupDeps {
     },
   };
 }
+/* v8 ignore stop */
 
 export async function runSetup(
   deps: SetupDeps = defaultDeps(),

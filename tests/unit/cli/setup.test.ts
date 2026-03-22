@@ -581,6 +581,68 @@ describe('setup wizard', () => {
       expect(writeConfig).toHaveBeenCalledTimes(1);
     });
 
+    it('logs when writeConfig returns false', async () => {
+      mockSuccessfulValidation();
+      const writeConfig = vi.fn().mockResolvedValue(false);
+
+      const { deps, logs } = createTestDeps(manualAnswers, {
+        detectClients: () => defaultClientList(),
+        selectCheckbox: mockCheckbox([0]),
+        writeConfig,
+        hasConfig: () => false,
+      });
+
+      await runSetup(deps, { manual: true });
+
+      const output = logs.join('\n');
+      expect(output).toContain('Claude Code — configuration returned false');
+    });
+
+    it('uses client.useCli when no writeConfig override is provided', async () => {
+      mockSuccessfulValidation();
+      const useCli = vi.fn().mockResolvedValue(true);
+      const clientWithCli = makeMockClient('claude-code', 'Claude Code', {
+        useCli,
+      });
+
+      const { deps, logs } = createTestDeps(manualAnswers, {
+        detectClients: () => [
+          { type: 'claude-code' as McpClientType, config: clientWithCli, detected: true },
+        ],
+        selectCheckbox: mockCheckbox([0]),
+        hasConfig: () => false,
+      });
+
+      await runSetup(deps, { manual: true });
+
+      expect(useCli).toHaveBeenCalledTimes(1);
+      const output = logs.join('\n');
+      expect(output).toContain('Claude Code — configured via CLI');
+    });
+
+    it('falls back to addServerToConfig when useCli returns false', async () => {
+      mockSuccessfulValidation();
+      const useCli = vi.fn().mockResolvedValue(false);
+      const clientWithFailingCli = makeMockClient('claude-code', 'Claude Code', {
+        useCli,
+        configPath: () => '/private/tmp/claude-501/test-setup-fallback/config.json',
+      });
+
+      const { deps, logs } = createTestDeps(manualAnswers, {
+        detectClients: () => [
+          { type: 'claude-code' as McpClientType, config: clientWithFailingCli, detected: true },
+        ],
+        selectCheckbox: mockCheckbox([0]),
+        hasConfig: () => false,
+      });
+
+      await runSetup(deps, { manual: true });
+
+      const output = logs.join('\n');
+      // Should show the config file path (written via addServerToConfig)
+      expect(output).toContain('Claude Code — written to');
+    });
+
     it('logs failure when configuration throws', async () => {
       mockSuccessfulValidation();
       const writeConfig = vi.fn().mockRejectedValue(new Error('Permission denied'));
@@ -728,6 +790,63 @@ describe('setup wizard', () => {
       await runSetup(deps, { remove: true });
 
       expect(removeConfig).toHaveBeenCalledTimes(2);
+    });
+
+    it('uses client.removeCli when no removeConfig override is provided', async () => {
+      const removeCli = vi.fn().mockResolvedValue(true);
+      const clientWithRemove = makeMockClient('claude-code', 'Claude Code', { removeCli });
+
+      const { deps, logs } = createTestDeps([], {
+        detectClients: () => [
+          { type: 'claude-code' as McpClientType, config: clientWithRemove, detected: true },
+        ],
+        hasConfig: () => true,
+        selectCheckbox: mockCheckbox([0]),
+      });
+
+      await runSetup(deps, { remove: true });
+
+      expect(removeCli).toHaveBeenCalledTimes(1);
+      const output = logs.join('\n');
+      expect(output).toContain('Claude Code — removed via CLI');
+    });
+
+    it('falls back to removeServerFromConfig when removeCli returns false', async () => {
+      const removeCli = vi.fn().mockResolvedValue(false);
+      const clientWithFailingRemove = makeMockClient('claude-code', 'Claude Code', {
+        removeCli,
+        configPath: () => '/private/tmp/claude-501/test-remove-fallback/config.json',
+      });
+
+      const { deps, logs } = createTestDeps([], {
+        detectClients: () => [
+          { type: 'claude-code' as McpClientType, config: clientWithFailingRemove, detected: true },
+        ],
+        hasConfig: () => true,
+        selectCheckbox: mockCheckbox([0]),
+      });
+
+      await runSetup(deps, { remove: true });
+
+      const output = logs.join('\n');
+      // Entry doesn't exist on disk, so it reports "entry not found"
+      expect(output).toContain('Claude Code — entry not found');
+    });
+
+    it('removeConfig returning false logs accordingly', async () => {
+      const removeConfig = vi.fn().mockResolvedValue(false);
+
+      const { deps, logs } = createTestDeps([], {
+        detectClients: () => defaultClientList(),
+        hasConfig: (config: McpClientConfig) => config.name === 'claude-code',
+        selectCheckbox: mockCheckbox([0]),
+        removeConfig,
+      });
+
+      await runSetup(deps, { remove: true });
+
+      const output = logs.join('\n');
+      expect(output).toContain('Claude Code — removal returned false');
     });
 
     it('logs failure when removal throws', async () => {
