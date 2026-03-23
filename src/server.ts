@@ -74,7 +74,7 @@ export async function startServer(): Promise<void> {
     if (shutdownInProgress) return;
     shutdownInProgress = true;
 
-    session.disconnect();
+    await session.disconnect();
     await server.close();
     process.exit(0);
   };

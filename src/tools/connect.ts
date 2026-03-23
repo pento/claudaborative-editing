@@ -57,7 +57,7 @@ export function registerConnectTools(server: McpServer, session: SessionManager)
     'wp_disconnect',
     { description: 'Disconnect from the WordPress site' },
     async () => {
-      session.disconnect();
+      await session.disconnect();
       return {
         content: [{ type: 'text' as const, text: 'Disconnected from WordPress.' }],
       };

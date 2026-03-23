@@ -147,10 +147,10 @@ describe('SessionManager', () => {
     session.syncWaitTimeout = 0; // Skip sync wait in tests
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     // Clean up any open sessions
     if (session.getState() !== 'disconnected') {
-      session.disconnect();
+      await session.disconnect();
     }
   });
 
@@ -281,7 +281,7 @@ describe('SessionManager', () => {
     it('stops sync and clears doc', async () => {
       await connectAndOpen(session);
 
-      session.closePost();
+      await session.closePost();
 
       expect(mockSyncStop).toHaveBeenCalledTimes(1);
       expect(session.getState()).toBe('connected');
@@ -290,21 +290,17 @@ describe('SessionManager', () => {
 
     it('throws when not in editing state', async () => {
       await connectSession(session);
-      expect(() => {
-        session.closePost();
-      }).toThrow(/requires state/);
+      await expect(session.closePost()).rejects.toThrow(/requires state/);
     });
 
-    it('throws when disconnected', () => {
-      expect(() => {
-        session.closePost();
-      }).toThrow(/requires state/);
+    it('throws when disconnected', async () => {
+      await expect(session.closePost()).rejects.toThrow(/requires state/);
     });
 
     it('returns to connected state', async () => {
       await connectAndOpen(session);
 
-      session.closePost();
+      await session.closePost();
 
       expect(session.getState()).toBe('connected');
       // Can open another post
@@ -383,15 +379,120 @@ describe('SessionManager', () => {
       vi.useRealTimers();
     });
 
-    it('applies short content atomically without flushing', async () => {
+    it('applies short content atomically and flushes once', async () => {
       await connectAndOpen(session);
+      mockSyncFlushQueue.mockClear();
 
       await session.updateBlock('0', { content: 'Short' });
 
       const text = session.readPost();
       expect(text).toContain('Short');
-      // Short content should not trigger flush
-      expect(mockSyncFlushQueue).not.toHaveBeenCalled();
+      // Atomic changes are flushed once to push to browser immediately
+      expect(mockSyncFlushQueue).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('streaming queue', () => {
+    it('drainStreamQueue resolves immediately when queue is empty', async () => {
+      await connectAndOpen(session);
+
+      // Should resolve immediately — no-op when nothing is queued
+      await session.drainStreamQueue();
+    });
+
+    it('insertBlock returns before streaming completes', async () => {
+      vi.useFakeTimers();
+      await connectAndOpen(session);
+      mockSyncFlushQueue.mockClear();
+
+      const longContent = 'This is a long paragraph that will be streamed in the background.';
+      await session.insertBlock(0, { name: 'core/paragraph', content: longContent });
+
+      // Method returned, but content should NOT be fully in doc yet
+      // (only structure + possibly first chunk are committed synchronously)
+      const textBeforeDrain = session.readPost();
+      // Block structure exists
+      expect(textBeforeDrain).toContain('core/paragraph');
+
+      // Now drain the queue (advance all timers for streaming)
+      const drainPromise = session.drainStreamQueue();
+      await vi.runAllTimersAsync();
+      await drainPromise;
+
+      // Content should now be fully streamed
+      const textAfterDrain = session.readPost();
+      expect(textAfterDrain).toContain(longContent);
+
+      vi.useRealTimers();
+    });
+
+    it('multiple insertBlock calls queue and stream sequentially', async () => {
+      vi.useFakeTimers();
+      await connectAndOpen(session);
+
+      const content1 = 'First paragraph with enough text to trigger streaming.';
+      const content2 = 'Second paragraph with enough text to trigger streaming.';
+
+      // Both return immediately
+      await session.insertBlock(0, { name: 'core/paragraph', content: content1 });
+      await session.insertBlock(1, { name: 'core/paragraph', content: content2 });
+
+      // Drain both
+      const drainPromise = session.drainStreamQueue();
+      await vi.runAllTimersAsync();
+      await drainPromise;
+
+      const text = session.readPost();
+      expect(text).toContain(content1);
+      expect(text).toContain(content2);
+
+      vi.useRealTimers();
+    });
+
+    it('save drains queue before marking saved', async () => {
+      vi.useFakeTimers();
+      await connectAndOpen(session);
+
+      const longContent = 'Content that needs to be fully streamed before save.';
+      await session.insertBlock(0, { name: 'core/paragraph', content: longContent });
+
+      // save() should drain the queue first
+      const savePromise = session.save();
+      await vi.runAllTimersAsync();
+      await savePromise;
+
+      // Content should be fully in doc after save completes
+      const text = session.readPost();
+      expect(text).toContain(longContent);
+
+      vi.useRealTimers();
+    });
+
+    it('closePost drains queue before teardown', async () => {
+      vi.useFakeTimers();
+      await connectAndOpen(session);
+
+      const longContent = 'Content that needs to finish streaming before close.';
+      await session.insertBlock(0, { name: 'core/paragraph', content: longContent });
+
+      // closePost() should drain the queue first
+      const closePromise = session.closePost();
+      await vi.runAllTimersAsync();
+      await closePromise;
+
+      expect(session.getState()).toBe('connected');
+
+      vi.useRealTimers();
+    });
+
+    it('flushes block structure to browser immediately on insert', async () => {
+      await connectAndOpen(session);
+      mockSyncFlushQueue.mockClear();
+
+      await session.insertBlock(0, { name: 'core/paragraph', content: 'short' });
+
+      // flushQueue should be called synchronously after atomic insert
+      expect(mockSyncFlushQueue).toHaveBeenCalled();
     });
   });
 
@@ -462,6 +563,7 @@ describe('SessionManager', () => {
 
       // Set up block with repeated text
       await session.updateBlock('0', { content: 'the cat and the dog and the bird' });
+      await session.drainStreamQueue();
 
       const result = session.editBlockText('0', [{ find: 'the', replace: 'a', occurrence: 2 }]);
 
@@ -535,6 +637,7 @@ describe('SessionManager', () => {
       await connectAndOpen(session);
 
       await session.updateBlock('0', { content: 'This is <strong>bold</strong> text' });
+      await session.drainStreamQueue();
 
       const result = session.editBlockText('0', [
         { find: '<strong>bold</strong>', replace: '<strong>important</strong>' },
@@ -906,14 +1009,12 @@ describe('SessionManager', () => {
       await connectAndOpen(session);
 
       // Should not throw
-      session.save();
+      await session.save();
     });
 
     it('throws when not editing', async () => {
       await connectSession(session);
-      expect(() => {
-        session.save();
-      }).toThrow(/requires state/);
+      await expect(session.save()).rejects.toThrow(/requires state/);
     });
   });
 
@@ -964,7 +1065,7 @@ describe('SessionManager', () => {
     it('cleans up everything from connected state', async () => {
       await connectSession(session);
 
-      session.disconnect();
+      await session.disconnect();
 
       expect(session.getState()).toBe('disconnected');
       expect(session.getUser()).toBeNull();
@@ -975,7 +1076,7 @@ describe('SessionManager', () => {
     it('cleans up everything from editing state', async () => {
       await connectAndOpen(session);
 
-      session.disconnect();
+      await session.disconnect();
 
       expect(session.getState()).toBe('disconnected');
       expect(mockSyncStop).toHaveBeenCalledTimes(1);
@@ -983,8 +1084,8 @@ describe('SessionManager', () => {
       expect(session.getCurrentPost()).toBeNull();
     });
 
-    it('is safe to call when already disconnected', () => {
-      session.disconnect();
+    it('is safe to call when already disconnected', async () => {
+      await session.disconnect();
       expect(session.getState()).toBe('disconnected');
     });
   });
@@ -2181,7 +2282,7 @@ describe('SessionManager', () => {
         await session.connect(fakeConfig);
         expect(session.getNotesSupported()).toBe(true);
 
-        session.disconnect();
+        await session.disconnect();
         expect(session.getNotesSupported()).toBe(false);
       });
     });

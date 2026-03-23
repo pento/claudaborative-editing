@@ -96,7 +96,7 @@ export function registerStatusTools(server: McpServer, session: SessionManager):
 
   server.registerTool('wp_save', { description: 'Save the current post' }, async () => {
     try {
-      session.save();
+      await session.save();
       return {
         content: [
           {

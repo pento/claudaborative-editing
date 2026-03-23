@@ -94,7 +94,7 @@ export function registerPostTools(server: McpServer, session: SessionManager): v
     },
     async () => {
       try {
-        session.closePost();
+        await session.closePost();
         return {
           content: [
             {
