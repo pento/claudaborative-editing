@@ -279,6 +279,11 @@ export class SessionManager {
   private commentDoc: Y.Doc | null = null;
   private commentUpdateHandler: ((update: Uint8Array, origin: unknown) => void) | null = null;
 
+  /** Background streaming queue — closures that call streamTargets/streamTextToYText. */
+  private streamQueue: Array<() => Promise<void>> = [];
+  /** Promise for the currently running queue processor, or null if idle. */
+  private streamProcessor: Promise<void> | null = null;
+
   /** Room name for the comment sync room. */
   private static readonly COMMENT_ROOM = 'root/comment';
 
@@ -328,7 +333,7 @@ export class SessionManager {
       throw new Error('Cannot connect while a post is open. Call closePost() first.');
     }
     if (this.state === 'connected') {
-      this.disconnect();
+      await this.disconnect();
     }
 
     this._apiClient = new WordPressApiClient(config);
@@ -366,9 +371,9 @@ export class SessionManager {
   /**
    * Disconnect from the WordPress site.
    */
-  disconnect(): void {
+  async disconnect(): Promise<void> {
     if (this.state === 'editing') {
-      this.closePost();
+      await this.closePost();
     }
 
     this._apiClient = null;
@@ -595,9 +600,11 @@ export class SessionManager {
 
   /**
    * Close the currently open post (stop sync).
+   * Drains the streaming queue first to ensure all content is delivered.
    */
-  closePost(): void {
+  async closePost(): Promise<void> {
     this.requireState('editing');
+    await this.drainStreamQueue();
 
     if (this._syncClient) {
       this._syncClient.stop();
@@ -737,24 +744,16 @@ export class SessionManager {
       }, LOCAL_ORIGIN);
     }
 
-    // Stream each rich-text attribute
-    for (const target of streamTargets) {
-      let ytext = this.documentManager.getBlockAttributeYText(this.doc, index, target.attrName);
-      if (!ytext) {
-        // Y.Text doesn't exist yet — create it atomically before streaming
-        this.doc.transact(() => {
-          this.documentManager.updateBlock(this.doc, index, {
-            ...(target.attrName === 'content'
-              ? { content: '' }
-              : { attributes: { [target.attrName]: '' } }),
-          });
-        }, LOCAL_ORIGIN);
-        ytext = this.documentManager.getBlockAttributeYText(this.doc, index, target.attrName);
-      }
-      if (ytext) {
-        await this.streamTextToYText(ytext, target.newValue, index);
-      }
-    }
+    // Push atomic changes to browser immediately
+    this.syncClient.flushQueue();
+
+    // Queue rich-text attributes for background streaming
+    const queueTargets: StreamTarget[] = streamTargets.map((t) => ({
+      blockIndex: index,
+      attrName: t.attrName,
+      value: t.newValue,
+    }));
+    this.enqueueStreamTargets(queueTargets);
   }
 
   /**
@@ -889,13 +888,14 @@ export class SessionManager {
     const blockIndex = String(position);
     const { block: fullBlock, streamTargets } = prepareBlockTree(block, blockIndex, this.registry);
 
-    // Insert block structure atomically
+    // Insert block structure atomically and push to browser immediately
     this.doc.transact(() => {
       this.documentManager.insertBlock(this.doc, position, fullBlock);
     }, LOCAL_ORIGIN);
+    this.syncClient.flushQueue();
 
-    // Stream rich-text content (depth-first: parent first, then children)
-    await this.streamTargets(streamTargets);
+    // Queue rich-text content for background streaming
+    this.enqueueStreamTargets(streamTargets);
   }
 
   /**
@@ -944,8 +944,11 @@ export class SessionManager {
       }
     }, LOCAL_ORIGIN);
 
-    // Stream content for all blocks (depth-first order)
-    await this.streamTargets(allStreamTargets);
+    // Push block structures to browser immediately
+    this.syncClient.flushQueue();
+
+    // Queue rich-text content for background streaming
+    this.enqueueStreamTargets(allStreamTargets);
   }
 
   /**
@@ -960,8 +963,9 @@ export class SessionManager {
     this.doc.transact(() => {
       this.documentManager.insertInnerBlock(this.doc, parentIndex, position, fullBlock);
     }, LOCAL_ORIGIN);
+    this.syncClient.flushQueue();
 
-    await this.streamTargets(streamTargets);
+    this.enqueueStreamTargets(streamTargets);
   }
 
   /**
@@ -986,6 +990,7 @@ export class SessionManager {
       this.doc.transact(() => {
         this.documentManager.setTitle(this.doc, title);
       }, LOCAL_ORIGIN);
+      this.syncClient.flushQueue();
       return;
     }
 
@@ -1001,15 +1006,19 @@ export class SessionManager {
       ytext = documentMap.get('title');
     }
     if (ytext instanceof Y.Text) {
-      await this.streamTextToYText(ytext, title);
+      const titleYText = ytext;
+      this.syncClient.flushQueue();
+      this.enqueueStreaming(() => this.streamTextToYText(titleYText, title));
     }
   }
 
   /**
-   * Trigger a save.
+   * Trigger a save. Drains the streaming queue first to ensure
+   * all content is committed before marking saved.
    */
-  save(): void {
+  async save(): Promise<void> {
     this.requireState('editing');
+    await this.drainStreamQueue();
     this.doc.transact(() => {
       this.documentManager.markSaved(this.doc);
     }, LOCAL_ORIGIN);
@@ -1357,19 +1366,59 @@ export class SessionManager {
     return this.documentManager.getTitle(this.doc);
   }
 
+  // --- Background streaming queue ---
+
   /**
-   * Stream text into a Y.Text in chunks, flushing the sync client between
-   * each chunk so the browser sees progressive updates (like fast typing).
+   * Enqueue a streaming function for background processing.
+   * The function will be called when all previously queued functions complete.
+   * This allows tool calls to return immediately while text streams progressively.
+   */
+  private enqueueStreaming(fn: () => Promise<void>): void {
+    this.streamQueue.push(fn);
+    if (!this.streamProcessor) {
+      this.streamProcessor = this.processStreamQueue();
+    }
+  }
+
+  /**
+   * Process queued streaming functions sequentially.
+   * Errors are logged per-entry (block structure is already committed, so
+   * partial content is better than stopping the queue).
+   */
+  private async processStreamQueue(): Promise<void> {
+    try {
+      while (this.streamQueue.length > 0) {
+        const fn = this.streamQueue.shift();
+        if (!fn) break;
+        try {
+          await fn();
+        } catch (error) {
+          // Block structure is already committed; log and continue
+          console.error('Streaming error:', error);
+        }
+      }
+      // Flush after completing all queued streaming to ensure the
+      // last chunk of the last item is delivered promptly.
+      if (this._syncClient) {
+        this._syncClient.flushQueue();
+      }
+    } finally {
+      this.streamProcessor = null;
+    }
+  }
+
+  /**
+   * Resolve Y.Text references eagerly and enqueue for background streaming.
    *
-   * 1. Compute the delta between the current and target text.
-   * 2. Apply retain + delete atomically (old text removed immediately).
-   * 3. Split the insert text into HTML-safe chunks (~20 chars each).
-   * 4. For each chunk: apply in its own transaction, flush, and delay.
+   * Block indices are position-based and can shift when concurrent editors
+   * insert or remove blocks. By resolving Y.Text references NOW (while the
+   * index is known to be valid), the streaming closure writes to the correct
+   * Y.Text even if block positions change before it executes.
    */
-  /**
-   * Stream a list of targets (from prepareBlockTree) into their Y.Text instances.
-   */
-  private async streamTargets(targets: StreamTarget[]): Promise<void> {
+  private enqueueStreamTargets(targets: StreamTarget[]): void {
+    if (targets.length === 0) return;
+
+    const resolved: Array<{ ytext: Y.Text; value: string; blockIndex: string }> = [];
     for (const target of targets) {
       let ytext = this.documentManager.getBlockAttributeYText(
         this.doc,
@@ -1377,7 +1426,7 @@ export class SessionManager {
         target.attrName,
       );
       if (!ytext) {
-        // Y.Text doesn't exist yet — create it atomically before streaming
+        // Y.Text doesn't exist yet — create it atomically
         this.doc.transact(() => {
           this.documentManager.updateBlock(this.doc, target.blockIndex, {
             ...(target.attrName === 'content'
@@ -1392,11 +1441,41 @@ export class SessionManager {
         );
       }
       if (ytext) {
-        await this.streamTextToYText(ytext, target.value, target.blockIndex);
+        resolved.push({ ytext, value: target.value, blockIndex: target.blockIndex });
       }
+    }
+
+    if (resolved.length > 0) {
+      this.enqueueStreaming(async () => {
+        for (const { ytext, value, blockIndex } of resolved) {
+          await this.streamTextToYText(ytext, value, blockIndex);
+        }
+      });
     }
   }
 
+  /**
+   * Wait for all queued streaming to complete.
+   * Called by save(), closePost(), and disconnect() to ensure content
+   * integrity before persisting or tearing down.
+   */
+  async drainStreamQueue(): Promise<void> {
+    while (this.streamProcessor) {
+      await this.streamProcessor;
+    }
+  }
+
+  // --- Streaming internals ---
+
+  /**
+   * Stream text into a Y.Text in chunks, flushing the sync client between
+   * each chunk so the browser sees progressive updates (like fast typing).
+   *
+   * 1. Compute the delta between the current and target text.
+   * 2. Apply retain + delete atomically (old text removed immediately).
+   * 3. Split the insert text into HTML-safe chunks (~20 chars each).
+   * 4. For each chunk: apply in its own transaction, flush, and delay.
+   */
   private async streamTextToYText(
     ytext: Y.Text,
     newValue: string,

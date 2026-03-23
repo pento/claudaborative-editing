@@ -109,13 +109,20 @@ Rich-text edits (inserts and updates) are streamed to the browser in small chunk
 - `STREAM_CHUNK_DELAY_MS = 100` — delay between chunks
 - `STREAM_THRESHOLD = 20` — minimum text length to trigger streaming; shorter text is applied atomically
 
+**Background streaming queue**: Streaming is queued for background processing so that tool calls return immediately. This eliminates the pause between paragraphs when writing multi-block content — Claude can think about the next block while the current one is still "typing."
+
+- `insertBlock()`, `updateBlock()`, `replaceBlocks()`, `insertInnerBlock()`, and `setTitle()` commit block structures atomically (via `doc.transact()`), flush to the browser immediately, then enqueue the text streaming for background processing.
+- `save()` and `closePost()` call `drainStreamQueue()` to wait for all queued streaming to complete before proceeding.
+- `drainStreamQueue()` is the public API for waiting on all background streaming to finish.
+- Queue entries are processed sequentially (FIFO). Errors in one entry are logged but don't block subsequent entries.
+
 **Behavior**:
 
 - Deletions are applied atomically (old text disappears immediately)
 - Insertions are split into HTML-safe chunks (~20 chars) to avoid malformed intermediate states
 - Each chunk is applied in its own `doc.transact()` and flushed via `SyncClient.flushQueue()`
 - `flushQueue()` cancels the scheduled poll timer and triggers an immediate poll, with re-entrancy protection to prevent concurrent HTTP requests
-- `removeBlocks()`, `moveBlock()`, and `save()` are not streamed (no text content)
+- `removeBlocks()`, `moveBlock()`, and `editBlockText()` are not streamed (no text content)
 - Default block attributes (e.g., `dropCap: false` for `core/paragraph`) are applied automatically from the block type schema to prevent Gutenberg from marking blocks as invalid
 
 ## Block Type Support

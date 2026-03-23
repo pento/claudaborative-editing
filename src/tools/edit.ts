@@ -43,9 +43,8 @@ export function registerEditTools(server: McpServer, session: SessionManager): v
     async ({ index, content, attributes }) => {
       try {
         await session.updateBlock(index, { content, attributes });
-        const updated = session.readBlock(index);
         return {
-          content: [{ type: 'text' as const, text: `Updated block ${index}.\n\n${updated}` }],
+          content: [{ type: 'text' as const, text: `Updated block ${index}.` }],
         };
       } catch (error) {
         return {

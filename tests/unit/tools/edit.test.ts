@@ -294,6 +294,18 @@ describe('edit tools', () => {
       expect(session.removeBlocks).toHaveBeenCalledWith(0, 3);
       expect(result.content[0].text).toContain('Removed 3 blocks');
     });
+
+    it('returns error on failure', async () => {
+      (session.removeBlocks as ReturnType<typeof import('vitest').vi.fn>).mockImplementation(() => {
+        throw new Error('Index out of bounds');
+      });
+
+      const tool = server.registeredTools.get('wp_remove_blocks')!;
+      const result = await tool.handler({ startIndex: 99 });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Failed to remove blocks');
+    });
   });
 
   describe('wp_move_block', () => {
@@ -303,6 +315,18 @@ describe('edit tools', () => {
 
       expect(session.moveBlock).toHaveBeenCalledWith(0, 3);
       expect(result.content[0].text).toContain('Moved block from position 0 to 3');
+    });
+
+    it('returns error on failure', async () => {
+      (session.moveBlock as ReturnType<typeof import('vitest').vi.fn>).mockImplementation(() => {
+        throw new Error('Index out of bounds');
+      });
+
+      const tool = server.registeredTools.get('wp_move_block')!;
+      const result = await tool.handler({ fromIndex: 99, toIndex: 0 });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Failed to move block');
     });
   });
 
@@ -323,6 +347,22 @@ describe('edit tools', () => {
         { name: 'core/paragraph', content: 'New paragraph' },
       ]);
       expect(result.content[0].text).toContain('Replaced 2 blocks at index 1 with 2 new blocks');
+    });
+
+    it('returns error on failure', async () => {
+      (session.replaceBlocks as ReturnType<typeof import('vitest').vi.fn>).mockRejectedValue(
+        new Error('Index out of bounds'),
+      );
+
+      const tool = server.registeredTools.get('wp_replace_blocks')!;
+      const result = await tool.handler({
+        startIndex: 99,
+        count: 1,
+        blocks: [{ name: 'core/paragraph', content: 'test' }],
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Failed to replace blocks');
     });
   });
 

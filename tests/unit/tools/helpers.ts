@@ -141,11 +141,11 @@ export function createMockSession(
 
   return {
     connect: vi.fn().mockResolvedValue(user ?? fakeUser),
-    disconnect: vi.fn(),
+    disconnect: vi.fn().mockResolvedValue(undefined),
     listPosts: vi.fn().mockResolvedValue([fakePost]),
     openPost: vi.fn().mockResolvedValue(undefined),
     createPost: vi.fn().mockResolvedValue(post ?? fakePost),
-    closePost: vi.fn(),
+    closePost: vi.fn().mockResolvedValue(undefined),
     readPost: vi.fn().mockReturnValue(postContent),
     readBlock: vi.fn().mockReturnValue(blockContent),
     updateBlock: vi.fn().mockResolvedValue(undefined),
@@ -194,7 +194,7 @@ export function createMockSession(
       type: 'note',
     }),
     getNotesSupported: vi.fn().mockReturnValue(true),
-    save: vi.fn(),
+    save: vi.fn().mockResolvedValue(undefined),
     setPostStatus: vi.fn().mockResolvedValue(fakePost),
     setExcerpt: vi.fn().mockResolvedValue(fakePost),
     setCategories: vi.fn().mockResolvedValue({ post: fakePost, resolved: [] }),
@@ -212,5 +212,6 @@ export function createMockSession(
     getCurrentPost: vi.fn().mockReturnValue(post),
     getUser: vi.fn().mockReturnValue(user),
     getTitle: vi.fn().mockReturnValue(post?.title.raw ?? 'Untitled'),
+    drainStreamQueue: vi.fn().mockResolvedValue(undefined),
   } as unknown as SessionManager;
 }
