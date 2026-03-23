@@ -990,6 +990,7 @@ export class SessionManager {
       this.doc.transact(() => {
         this.documentManager.setTitle(this.doc, title);
       }, LOCAL_ORIGIN);
+      this.syncClient.flushQueue();
       return;
     }
 
