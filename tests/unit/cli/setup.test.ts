@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
 import type { SetupDeps } from '../../../src/cli/setup.js';
 import type { CheckboxResult } from '../../../src/cli/checkbox-prompt.js';
 import type { McpClientConfig, McpClientType } from '../../../src/cli/types.js';
+import type { AuthResult, AuthFlowHandle } from '../../../src/cli/auth-server.js';
 
 // Temp directory for tests that need real filesystem writes
 const testTmpDir = mkdtempSync(join(tmpdir(), 'setup-test-'));
@@ -111,10 +112,37 @@ function mockSuccessfulValidation(): void {
     .mockResolvedValueOnce(mockResponse({ rooms: [] }));
 }
 
-// Mock openAuth that returns the auth URL
-const mockOpenAuth = vi
-  .fn()
-  .mockResolvedValue('https://example.com/wp-admin/authorize-application.php?app_name=test');
+// Helper to build an AuthFlowHandle for test mocks.
+// The result promise resolves immediately with the given AuthResult.
+function mockAuthHandle(overrides?: Partial<AuthResult>): AuthFlowHandle {
+  const authResult: AuthResult = {
+    credentials: {
+      siteUrl: 'https://example.com',
+      username: 'admin',
+      appPassword: 'xxxx xxxx xxxx',
+    },
+    rejected: false,
+    ...overrides,
+  };
+  return {
+    authUrl: 'https://example.com/wp-admin/authorize-application.php?app_name=test',
+    result: Promise.resolve(authResult),
+    abort: vi.fn(),
+  };
+}
+
+// Handle where the callback never fires — simulates pre-WP 7.0.
+// The result promise never resolves, so the race prompt wins.
+function mockNeverHandle(authUrl?: string): AuthFlowHandle {
+  return {
+    authUrl: authUrl ?? 'https://example.com/wp-admin/authorize-application.php?app_name=test',
+    result: new Promise<AuthResult>(() => {}),
+    abort: vi.fn(),
+  };
+}
+
+// Mock openAuth that returns successful credentials via callback
+const mockOpenAuth = vi.fn().mockResolvedValue(mockAuthHandle());
 
 /** Create a selectCheckbox mock that returns the given indices */
 function mockCheckbox(selected: number[]): () => Promise<CheckboxResult> {
@@ -353,13 +381,12 @@ describe('setup wizard', () => {
   // -----------------------------------------------------------------------
 
   describe('browser auth flow', () => {
-    it('opens auth page and prompts for credentials', async () => {
+    it('auto-receives credentials via callback without manual prompts', async () => {
       mockSuccessfulValidation();
-      const openAuth = vi
-        .fn()
-        .mockResolvedValue('https://example.com/wp-admin/authorize-application.php?app_name=test');
+      const openAuth = vi.fn().mockResolvedValue(mockAuthHandle());
 
-      const { deps, logs } = createTestDeps(['https://example.com', 'admin', 'xxxx xxxx xxxx'], {
+      // site URL + race prompt answer (race prompt is consumed but callback wins)
+      const { deps, logs } = createTestDeps(['https://example.com', ''], {
         openAuth,
         detectClients: () => defaultClientList(),
         selectCheckbox: mockCheckbox([0, 1]),
@@ -373,18 +400,16 @@ describe('setup wizard', () => {
 
       const output = logs.join('\n');
       expect(output).toContain('Opening your browser to authorise');
-      expect(output).toContain('Approve the connection');
       expect(output).toContain('authorize-application.php');
+      expect(output).toContain('Credentials received automatically');
       expect(output).toContain('Authenticated as "admin"');
     });
 
-    it('prepends https:// to bare domain before opening auth page', async () => {
+    it('prepends https:// to bare domain before starting auth flow', async () => {
       mockSuccessfulValidation();
-      const openAuth = vi
-        .fn()
-        .mockResolvedValue('https://pento.net/wp-admin/authorize-application.php');
+      const openAuth = vi.fn().mockResolvedValue(mockAuthHandle());
 
-      const { deps } = createTestDeps(['pento.net', 'admin', 'xxxx xxxx xxxx'], {
+      const { deps } = createTestDeps(['pento.net', ''], {
         openAuth,
         detectClients: () => defaultClientList(),
         selectCheckbox: mockCheckbox([0]),
@@ -407,14 +432,69 @@ describe('setup wizard', () => {
       expect(errors.join('\n')).toContain('Site URL is required');
     });
 
-    it('exits when username is empty in browser flow', async () => {
+    it('exits with error when authorisation is rejected', async () => {
+      const openAuth = vi
+        .fn()
+        .mockResolvedValue(mockAuthHandle({ credentials: null, rejected: true }));
+
+      const { deps, errors } = createTestDeps(['https://example.com', ''], {
+        openAuth,
+        detectClients: () => defaultClientList(),
+      });
+
+      await expect(runSetup(deps)).rejects.toThrow(SetupExitError);
+      expect(errors.join('\n')).toContain('Authorisation was denied');
+    });
+
+    it('falls back to manual auth page when user presses Enter', async () => {
+      mockSuccessfulValidation();
+      const openAuth = vi.fn().mockResolvedValue(mockNeverHandle());
+      const openBrowser = vi.fn().mockResolvedValue(undefined);
+
+      // site URL, race prompt (Enter wins because callback never resolves),
+      // then manual username + password
+      const { deps, logs } = createTestDeps(
+        ['https://example.com', '', 'admin', 'xxxx xxxx xxxx'],
+        {
+          openAuth,
+          openBrowser,
+          detectClients: () => defaultClientList(),
+          selectCheckbox: mockCheckbox([0]),
+          writeConfig: vi.fn().mockResolvedValue(true),
+          hasConfig: () => false,
+        },
+      );
+
+      await runSetup(deps);
+
+      const output = logs.join('\n');
+      expect(output).toContain('Approve the connection');
+      expect(output).toContain('Authenticated as "admin"');
+
+      // Should have called abort on the auth flow handle
+      const resolvedHandle = (await openAuth.mock.results[0].value) as AuthFlowHandle;
+      expect(resolvedHandle.abort).toHaveBeenCalled();
+
+      // Should have opened the non-callback auth URL
+      expect(openBrowser).toHaveBeenCalledOnce();
+      const manualUrl = openBrowser.mock.calls[0][0] as string;
+      expect(manualUrl).toContain('authorize-application.php');
+      expect(manualUrl).not.toContain('success_url');
+    });
+
+    it('exits when username is empty in manual fallback', async () => {
+      const openAuth = vi.fn().mockResolvedValue(mockNeverHandle());
+      const openBrowser = vi.fn().mockResolvedValue(undefined);
+
       const { deps, errors } = createTestDeps(
         [
           'https://example.com',
-          '', // empty username
+          '', // race prompt (Enter)
+          '', // empty username in fallback
         ],
         {
-          openAuth: mockOpenAuth,
+          openAuth,
+          openBrowser,
           detectClients: () => defaultClientList(),
         },
       );
@@ -423,15 +503,20 @@ describe('setup wizard', () => {
       expect(errors.join('\n')).toContain('Username is required');
     });
 
-    it('exits when app password is empty in browser flow', async () => {
+    it('exits when app password is empty in manual fallback', async () => {
+      const openAuth = vi.fn().mockResolvedValue(mockNeverHandle());
+      const openBrowser = vi.fn().mockResolvedValue(undefined);
+
       const { deps, errors } = createTestDeps(
         [
           'https://example.com',
+          '', // race prompt (Enter)
           'admin',
-          '', // empty password
+          '', // empty password in fallback
         ],
         {
-          openAuth: mockOpenAuth,
+          openAuth,
+          openBrowser,
           detectClients: () => defaultClientList(),
         },
       );
