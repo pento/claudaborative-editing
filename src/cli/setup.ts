@@ -7,7 +7,8 @@
 
 import { createInterface } from 'readline';
 import { WordPressApiClient, WordPressApiError } from '../wordpress/api-client.js';
-import { openAuthPage } from './auth-server.js';
+import { startAuthFlow, buildManualAuthUrl, openBrowserDefault } from './auth-server.js';
+import type { AuthFlowHandle } from './auth-server.js';
 import { detectInstalledClients, SERVER_NAME } from './clients.js';
 import {
   addServerToConfig,
@@ -17,7 +18,7 @@ import {
 } from './config-writer.js';
 import { checkboxPrompt } from './checkbox-prompt.js';
 import type { CheckboxItem, CheckboxOptions, CheckboxResult } from './checkbox-prompt.js';
-import type { BrowserAuthOptions } from './auth-server.js';
+import type { AuthFlowOptions } from './auth-server.js';
 import type { McpClientConfig, McpClientType, SetupOptions, WpCredentials } from './types.js';
 
 export interface SetupDeps {
@@ -28,8 +29,10 @@ export interface SetupDeps {
   error: (message: string) => void;
   exit: (code: number) => never;
   cleanup: () => void;
-  /** Override browser auth page opener for testing */
-  openAuth?: (siteUrl: string, options?: BrowserAuthOptions) => Promise<string>;
+  /** Override auth flow for testing */
+  openAuth?: (siteUrl: string, options?: AuthFlowOptions) => Promise<AuthFlowHandle>;
+  /** Override browser opener for testing (used in manual fallback) */
+  openBrowser?: (url: string) => Promise<void>;
   /** Override client detection for testing */
   detectClients?: () => Array<{ type: McpClientType; config: McpClientConfig; detected: boolean }>;
   /** Override config writing for testing */
@@ -231,14 +234,46 @@ async function collectBrowserCredentials(deps: SetupDeps): Promise<WpCredentials
   const siteUrl = normaliseSiteUrl(rawUrl);
 
   deps.log('');
-  deps.log('Opening your browser to authorise with WordPress...');
-  deps.log('Approve the connection, then copy the credentials shown on the page.');
+
+  const doAuth = deps.openAuth ?? startAuthFlow;
+  const handle = await doAuth(siteUrl);
+
+  deps.log("Opening your browser to authorise with WordPress. If the browser didn't open, visit:");
+  deps.log('');
+  deps.log(`  ${handle.authUrl}`);
   deps.log('');
 
-  const doOpen = deps.openAuth ?? openAuthPage;
-  const authUrl = await doOpen(siteUrl);
-  deps.log(`If the browser didn't open, visit:`);
-  deps.log(`  ${authUrl}`);
+  // Race: WP 7.0+ callback vs user pressing Enter to switch to manual auth.
+  const manualPromise = deps.prompt('Press Enter to use the manual process, instead.\n');
+
+  const result = await Promise.race([
+    handle.result,
+    manualPromise.then(() => {
+      handle.abort();
+      return null;
+    }),
+  ]);
+
+  if (result?.rejected) {
+    deps.error('Authorisation was denied in the browser.');
+    deps.exit(1);
+  }
+
+  if (result?.credentials) {
+    deps.log('  Credentials received automatically.');
+    return result.credentials;
+  }
+
+  // Manual fallback: user pressed Enter (or callback server failed to start).
+  // Open the non-callback auth page so WordPress shows credentials directly.
+  const manualUrl = buildManualAuthUrl(siteUrl);
+  const doOpen = deps.openBrowser ?? openBrowserDefault;
+  await doOpen(manualUrl);
+
+  deps.log(
+    "Approve the connection, then copy the credentials shown on the page. If the browser didn't open, visit:",
+  );
+  deps.log(`  ${manualUrl}`);
   deps.log('');
 
   const username = await deps.prompt('WordPress username (shown after approval): ');
