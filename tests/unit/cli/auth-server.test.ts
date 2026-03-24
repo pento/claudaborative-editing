@@ -9,6 +9,15 @@ vi.mock('node:child_process', () => ({
   }),
 }));
 
+const MOCK_STATE = 'deadbeef1234567890abcdef12345678';
+vi.mock('node:crypto', async (importOriginal) => {
+  const original = await importOriginal<typeof import('node:crypto')>();
+  return {
+    ...original,
+    randomBytes: () => Buffer.from(MOCK_STATE, 'hex'),
+  };
+});
+
 // ---------------------------------------------------------------------------
 // Mock node:http to avoid sandbox restrictions on listen()
 // ---------------------------------------------------------------------------
@@ -148,6 +157,7 @@ describe('startAuthFlow', () => {
     expect(successUrl.hostname).toBe('127.0.0.1');
     expect(successUrl.port).toBe(String(MOCK_PORT));
     expect(successUrl.pathname).toBe('/callback');
+    expect(successUrl.searchParams.get('state')).toBe(MOCK_STATE);
 
     handle.abort();
     await handle.result;
@@ -183,7 +193,7 @@ describe('startAuthFlow', () => {
     const handle = await startAuthFlow('https://example.com', { openBrowser });
 
     simulateRequest(
-      '/callback?user_login=admin&password=xxxx+xxxx+xxxx&site_url=https%3A%2F%2Fexample.com',
+      `/callback?state=${MOCK_STATE}&user_login=admin&password=xxxx+xxxx+xxxx&site_url=https%3A%2F%2Fexample.com`,
     );
 
     const result = await handle.result;
@@ -201,7 +211,7 @@ describe('startAuthFlow', () => {
     const handle = await startAuthFlow('https://my-normalised-url.com', { openBrowser });
 
     simulateRequest(
-      '/callback?user_login=admin&password=xxxx&site_url=https%3A%2F%2FMY-NORMALISED-URL.COM%2F',
+      `/callback?state=${MOCK_STATE}&user_login=admin&password=xxxx&site_url=https%3A%2F%2FMY-NORMALISED-URL.COM%2F`,
     );
 
     const result = await handle.result;
@@ -213,7 +223,7 @@ describe('startAuthFlow', () => {
 
     const handle = await startAuthFlow('https://example.com', { openBrowser });
 
-    simulateRequest('/callback?rejected=true');
+    simulateRequest(`/callback?state=${MOCK_STATE}&rejected=true`);
 
     const result = await handle.result;
     expect(result.credentials).toBeNull();
@@ -237,7 +247,9 @@ describe('startAuthFlow', () => {
 
     const handle = await startAuthFlow('https://example.com', { openBrowser });
 
-    const response = simulateRequest('/callback?user_login=admin&password=xxxx');
+    const response = simulateRequest(
+      `/callback?state=${MOCK_STATE}&user_login=admin&password=xxxx`,
+    );
     expect(response.status).toBe(200);
     expect(response.headers['Content-Type']).toContain('text/html');
     expect(response.body).toContain('Authentication successful');
@@ -250,7 +262,7 @@ describe('startAuthFlow', () => {
 
     const handle = await startAuthFlow('https://example.com', { openBrowser });
 
-    const response = simulateRequest('/callback?rejected=true');
+    const response = simulateRequest(`/callback?state=${MOCK_STATE}&rejected=true`);
     expect(response.status).toBe(200);
     expect(response.headers['Content-Type']).toContain('text/html');
     expect(response.body).toContain('Authentication denied');
@@ -270,12 +282,24 @@ describe('startAuthFlow', () => {
     await handle.result;
   });
 
+  it('returns 403 when callback has invalid state', async () => {
+    const openBrowser = vi.fn().mockResolvedValue(undefined);
+
+    const handle = await startAuthFlow('https://example.com', { openBrowser });
+
+    const response = simulateRequest('/callback?state=wrong&user_login=admin&password=xxxx');
+    expect(response.status).toBe(403);
+
+    handle.abort();
+    await handle.result;
+  });
+
   it('returns 400 when callback is missing credentials', async () => {
     const openBrowser = vi.fn().mockResolvedValue(undefined);
 
     const handle = await startAuthFlow('https://example.com', { openBrowser });
 
-    const response = simulateRequest('/callback');
+    const response = simulateRequest(`/callback?state=${MOCK_STATE}`);
     expect(response.status).toBe(400);
 
     handle.abort();
@@ -299,7 +323,7 @@ describe('startAuthFlow', () => {
 
     const handle = await startAuthFlow('https://example.com', { openBrowser });
 
-    simulateRequest('/callback?user_login=admin&password=xxxx');
+    simulateRequest(`/callback?state=${MOCK_STATE}&user_login=admin&password=xxxx`);
     await handle.result;
 
     expect(mockServer.close).toHaveBeenCalled();
@@ -340,7 +364,7 @@ describe('startAuthFlow', () => {
     const result = await handle.result;
 
     // Second callback after abort — handler still runs but settle() is a no-op
-    simulateRequest('/callback?user_login=other&password=second');
+    simulateRequest(`/callback?state=${MOCK_STATE}&user_login=other&password=second`);
 
     expect(result.credentials).toBeNull();
   });

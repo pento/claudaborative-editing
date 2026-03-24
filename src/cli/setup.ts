@@ -236,35 +236,47 @@ async function collectBrowserCredentials(deps: SetupDeps): Promise<WpCredentials
   deps.log('');
 
   const doAuth = deps.openAuth ?? startAuthFlow;
-  const handle = await doAuth(siteUrl);
 
-  deps.log("Opening your browser to authorise with WordPress. If the browser didn't open, visit:");
-  deps.log('');
-  deps.log(`  ${handle.authUrl}`);
-  deps.log('');
-
-  // Race: WP 7.0+ callback vs user pressing Enter to switch to manual auth.
-  const manualPromise = deps.prompt('Press Enter to use the manual process, instead.\n');
-
-  const result = await Promise.race([
-    handle.result,
-    manualPromise.then(() => {
-      handle.abort();
-      return null;
-    }),
-  ]);
-
-  if (result?.rejected) {
-    deps.error('Authorisation was denied in the browser.');
-    deps.exit(1);
+  let handle: AuthFlowHandle | null = null;
+  try {
+    handle = await doAuth(siteUrl);
+  } catch {
+    // Callback server failed to start — fall through to manual auth.
   }
 
-  if (result?.credentials) {
-    deps.log('  Credentials received automatically.');
-    return result.credentials;
+  if (handle) {
+    const activeHandle = handle;
+
+    deps.log(
+      "Opening your browser to authorise with WordPress. If the browser didn't open, visit:",
+    );
+    deps.log('');
+    deps.log(`  ${activeHandle.authUrl}`);
+    deps.log('');
+
+    // Race: WP 7.0+ callback vs user pressing Enter to switch to manual auth.
+    const manualPromise = deps.prompt('Press Enter to use the manual process, instead.\n');
+
+    const result = await Promise.race([
+      activeHandle.result,
+      manualPromise.then(() => {
+        activeHandle.abort();
+        return null;
+      }),
+    ]);
+
+    if (result?.rejected) {
+      deps.error('Authorisation was denied in the browser.');
+      deps.exit(1);
+    }
+
+    if (result?.credentials) {
+      deps.log('  Credentials received automatically.');
+      return result.credentials;
+    }
   }
 
-  // Manual fallback: user pressed Enter (or callback server failed to start).
+  // Manual fallback: user pressed Enter, or callback server failed to start.
   // Open the non-callback auth page so WordPress shows credentials directly.
   const manualUrl = buildManualAuthUrl(siteUrl);
   const doOpen = deps.openBrowser ?? openBrowserDefault;

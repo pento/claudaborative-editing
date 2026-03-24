@@ -13,6 +13,7 @@
  * authorisation page.
  */
 
+import { randomBytes } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
 import { execFile } from 'node:child_process';
 import type { WpCredentials } from './types.js';
@@ -92,6 +93,9 @@ export async function startAuthFlow(
 ): Promise<AuthFlowHandle> {
   const openFn = options?.openBrowser ?? openBrowserDefault;
 
+  // Per-flow state token to verify callbacks originated from our auth URL.
+  const state = randomBytes(16).toString('hex');
+
   return new Promise<AuthFlowHandle>((resolveHandle, rejectHandle) => {
     let settled = false;
     let resolveResult!: (value: AuthResult) => void;
@@ -114,6 +118,13 @@ export async function startAuthFlow(
       if (url.pathname !== '/callback') {
         res.writeHead(404, { 'Content-Type': 'text/plain' });
         res.end('Not Found');
+        return;
+      }
+
+      // Verify the state token to prevent spoofed callbacks from local processes.
+      if (url.searchParams.get('state') !== state) {
+        res.writeHead(403, { 'Content-Type': 'text/plain' });
+        res.end('Invalid state');
         return;
       }
 
@@ -142,22 +153,24 @@ export async function startAuthFlow(
     });
 
     server.on('error', (err) => {
-      // Server failed to start (e.g., permission denied).
-      // Reject the handle promise so the caller knows setup failed.
+      // Server failed to start (e.g., permission denied), or post-listen error.
+      // Reject the handle promise (no-op if already resolved) and settle the
+      // result promise so callers awaiting handle.result aren't left hanging.
       rejectHandle(err);
+      settle({ credentials: null, rejected: false });
     });
 
     server.listen(0, '127.0.0.1', () => {
       const addr = server.address();
       const port = typeof addr === 'object' && addr !== null ? addr.port : 0;
 
-      const callbackBase = `http://127.0.0.1:${port}/callback`;
+      const callbackBase = `http://127.0.0.1:${port}/callback?state=${state}`;
 
       const params = new URLSearchParams({
         app_name: APP_NAME,
         app_id: APP_ID,
         success_url: callbackBase,
-        reject_url: `${callbackBase}?rejected=true`,
+        reject_url: `${callbackBase}&rejected=true`,
       });
 
       const authUrl = `${siteUrl}/wp-admin/authorize-application.php?${params.toString()}`;
