@@ -1,5 +1,5 @@
 /**
- * Browser-based WordPress Application Password authorization flow.
+ * Browser-based WordPress Application Password authorisation flow.
  *
  * Opens the browser to WordPress's built-in `authorize-application.php` page.
  * After the user approves, WordPress displays the generated credentials on the
@@ -9,7 +9,7 @@
 
 import { execFile } from 'node:child_process';
 
-/** Application name shown in the WordPress authorization UI. */
+/** Application name shown in the WordPress authorisation UI. */
 export const APP_NAME = 'Claudaborative Editing';
 
 /**
@@ -35,7 +35,7 @@ export interface BrowserAuthOptions {
  * server can't satisfy that. Without callback URLs, WordPress simply shows
  * the credentials on the page for the user to copy back to the terminal.
  *
- * Returns the authorization URL (for display to the user).
+ * Returns the authorisation URL (for display to the user).
  */
 export async function openAuthPage(siteUrl: string, options?: BrowserAuthOptions): Promise<string> {
   const params = new URLSearchParams({

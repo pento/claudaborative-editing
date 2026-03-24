@@ -275,21 +275,21 @@ describe('BlockTypeRegistry', () => {
       expect(registry.getAncestor('core/column')).toBeNull();
     });
 
-    it('normalizes empty parent array to null', () => {
+    it('normalises empty parent array to null', () => {
       const reg = BlockTypeRegistry.fromApiResponse([
         { name: 'core/test', attributes: null, parent: [] },
       ]);
       expect(reg.getParent('core/test')).toBeNull();
     });
 
-    it('normalizes empty ancestor array to null', () => {
+    it('normalises empty ancestor array to null', () => {
       const reg = BlockTypeRegistry.fromApiResponse([
         { name: 'core/test', attributes: null, ancestor: [] },
       ]);
       expect(reg.getAncestor('core/test')).toBeNull();
     });
 
-    it('normalizes empty allowed_blocks array to null', () => {
+    it('normalises empty allowed_blocks array to null', () => {
       const reg = BlockTypeRegistry.fromApiResponse([
         { name: 'core/test', attributes: null, allowed_blocks: [] },
       ]);

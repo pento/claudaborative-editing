@@ -40,13 +40,13 @@ export class DocumentManager {
   }
 
   /**
-   * Create a new Y.Doc initialized with Gutenberg's expected structure.
+   * Create a new Y.Doc initialised with Gutenberg's expected structure.
    */
   createDoc(): Y.Doc {
     const doc = new Y.Doc();
 
     doc.transact(() => {
-      // Initialize state map only — matches Gutenberg's initializeYjsDoc.
+      // Initialise state map only — matches Gutenberg's initializeYjsDoc.
       // Do NOT pre-populate the document map with empty Y.Text/Y.Array.
       // Those keys will be created on demand when content is first set,
       // or populated from a remote peer's state via sync.

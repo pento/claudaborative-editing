@@ -317,7 +317,7 @@ describe('Two-client sync integration', () => {
 
     // Build up a complex document
     manager.setTitle(docA, 'Complex Post');
-    manager.setContent(docA, '<p>Some serialized content</p>');
+    manager.setContent(docA, '<p>Some serialised content</p>');
     manager.setProperty(docA, 'status', 'publish');
     manager.setProperty(docA, 'author', 1);
     manager.setBlocks(docA, [
@@ -344,7 +344,7 @@ describe('Two-client sync integration', () => {
     processIncomingUpdate(docB, compaction);
 
     expect(manager.getTitle(docB)).toBe('Complex Post');
-    expect(manager.getContent(docB)).toBe('<p>Some serialized content</p>');
+    expect(manager.getContent(docB)).toBe('<p>Some serialised content</p>');
     expect(manager.getProperty(docB, 'status')).toBe('publish');
     expect(manager.getProperty(docB, 'author')).toBe(1);
 

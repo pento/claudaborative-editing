@@ -15,7 +15,7 @@ afterEach(() => {
 });
 
 describe('openAuthPage', () => {
-  it('constructs the authorization URL with correct parameters', async () => {
+  it('constructs the authorisation URL with correct parameters', async () => {
     const openBrowser = vi.fn().mockResolvedValue(undefined);
 
     const url = await openAuthPage('https://my-site.example.com', { openBrowser });

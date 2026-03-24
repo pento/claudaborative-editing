@@ -201,7 +201,7 @@ async function collectManualCredentials(deps: SetupDeps): Promise<WpCredentials>
     deps.error('Site URL is required.');
     deps.exit(1);
   }
-  const siteUrl = normalizeSiteUrl(rawUrl);
+  const siteUrl = normaliseSiteUrl(rawUrl);
 
   const username = await deps.prompt('WordPress username: ');
   if (!username) {
@@ -228,10 +228,10 @@ async function collectBrowserCredentials(deps: SetupDeps): Promise<WpCredentials
     deps.error('Site URL is required.');
     deps.exit(1);
   }
-  const siteUrl = normalizeSiteUrl(rawUrl);
+  const siteUrl = normaliseSiteUrl(rawUrl);
 
   deps.log('');
-  deps.log('Opening your browser to authorize with WordPress...');
+  deps.log('Opening your browser to authorise with WordPress...');
   deps.log('Approve the connection, then copy the credentials shown on the page.');
   deps.log('');
 
@@ -512,17 +512,17 @@ async function removeSingleClient(deps: SetupDeps, client: McpClientConfig): Pro
 }
 
 // ---------------------------------------------------------------------------
-// URL normalization
+// URL normalisation
 // ---------------------------------------------------------------------------
 
 /**
  * Ensure a site URL has a scheme and no trailing slashes.
  * If the user enters a bare domain like "pento.net", prepend "https://".
  */
-function normalizeSiteUrl(url: string): string {
-  let normalized = url;
-  if (!/^https?:\/\//i.test(normalized)) {
-    normalized = `https://${normalized}`;
+function normaliseSiteUrl(url: string): string {
+  let normalised = url;
+  if (!/^https?:\/\//i.test(normalised)) {
+    normalised = `https://${normalised}`;
   }
-  return normalized.replace(/\/+$/, '');
+  return normalised.replace(/\/+$/, '');
 }

@@ -88,7 +88,7 @@ describe('DocumentManager', () => {
       expect(stateMap).toBeInstanceOf(Y.Map);
     });
 
-    it('initializes state map with version=1', () => {
+    it('initialises state map with version=1', () => {
       const { manager, doc } = createManager();
       const stateMap = manager.getStateMap(doc);
       expect(stateMap.get(CRDT_STATE_MAP_VERSION_KEY)).toBe(CRDT_DOC_VERSION);
@@ -700,7 +700,7 @@ describe('DocumentManager', () => {
     it('handles Y.Text properties via getProperty/setProperty', () => {
       const { manager, doc } = createManager();
 
-      // title is a Y.Text field initialized in createDoc
+      // title is a Y.Text field initialised in createDoc
       manager.setProperty(doc, 'title', 'My Post Title');
       expect(manager.getProperty(doc, 'title')).toBe('My Post Title');
 

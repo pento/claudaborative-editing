@@ -372,7 +372,7 @@ describe('setup wizard', () => {
       expect(openAuth).toHaveBeenCalledWith('https://example.com');
 
       const output = logs.join('\n');
-      expect(output).toContain('Opening your browser to authorize');
+      expect(output).toContain('Opening your browser to authorise');
       expect(output).toContain('Approve the connection');
       expect(output).toContain('authorize-application.php');
       expect(output).toContain('Authenticated as "admin"');
