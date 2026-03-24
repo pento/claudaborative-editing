@@ -545,7 +545,7 @@ export class SessionManager {
       const commentDoc = new Y.Doc();
       this.commentDoc = commentDoc;
 
-      // Initialize the state map (same pattern as the post doc)
+      // Initialise the state map (same pattern as the post doc)
       commentDoc.transact(() => {
         const stateMap = commentDoc.getMap(CRDT_STATE_MAP_KEY);
         stateMap.set(CRDT_STATE_MAP_VERSION_KEY, CRDT_DOC_VERSION);
@@ -1473,7 +1473,7 @@ export class SessionManager {
    *
    * 1. Compute the delta between the current and target text.
    * 2. Apply retain + delete atomically (old text removed immediately).
-   * 3. Split the insert text into HTML-safe chunks (~20 chars each).
+   * 3. Split the insert text into HTML-safe chunks (2–6 chars, randomized).
    * 4. For each chunk: apply in its own transaction, flush, and delay.
    */
   private async streamTextToYText(
@@ -1574,7 +1574,7 @@ export class SessionManager {
   /**
    * Update the awareness cursor to point to a block's Y.Text type.
    * References the Y.Text type itself (not items within it) so the
-   * cursor always resolves — even after updateYText deletes all items.
+   * cursor always resolves — even after all Y.Text items are deleted.
    */
   private updateCursorPosition(blockIndex: string): void {
     const ytext = this.documentManager.getBlockContentYText(this.doc, blockIndex);

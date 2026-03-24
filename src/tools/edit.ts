@@ -1,17 +1,6 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { SessionManager } from '../session/session-manager.js';
-
-/**
- * Recursive block input schema for nested blocks.
- * Uses z.lazy() for self-referential innerBlocks.
- */
-interface BlockInput {
-  name: string;
-  content?: string;
-  attributes?: Record<string, unknown>;
-  innerBlocks?: BlockInput[];
-}
+import type { SessionManager, BlockInput } from '../session/session-manager.js';
 
 const blockTypeDescription =
   'Block type name (e.g., "core/paragraph", "core/heading", "core/separator")';

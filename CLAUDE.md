@@ -75,7 +75,7 @@ disconnected ──connect──→ connected ──openPost/createPost──→
 - **Dynamic block type registry**: During `connect()`, all block types are fetched from `GET /wp/v2/block-types` and a `BlockTypeRegistry` is built. This registry maps every block type to its rich-text attributes, default values, attribute schemas, nesting constraints (`parent`, `ancestor`, `allowedBlocks`), and InnerBlocks capability (`supports.allowedBlocks`). Any block type registered on the WordPress site (core, third-party plugin, or custom) can be inserted — there is no hardcoded allowlist. If the API call fails, the registry falls back to a small hardcoded subset of core block types (with validation skipped for unknown types).
 - **Block insertion validation**: When inserting blocks (with an API-sourced registry), `prepareBlockTree()` validates: (1) block type exists, (2) `content` parameter is handled correctly (see content auto-wrapping below), (3) all provided attributes exist in the block schema, (4) inner blocks satisfy their `parent` constraint, (5) inner blocks are in the parent's `allowedBlocks` list. Use the `wp_block_types` tool to look up a block's schema before inserting unfamiliar block types.
 - **Content auto-wrapping**: When `content` is provided for a block without a `content` attribute (e.g., `core/quote`), `prepareBlockTree()` auto-wraps it into an inner `core/paragraph`, provided the block declares InnerBlocks support via `supports.allowedBlocks === true` in the REST API and allows `core/paragraph` as a child. Blocks without InnerBlocks support (e.g., `core/pullquote`) use their own rich-text attributes directly (`value`, `citation`) and are not auto-wrapped. Only applies with the API-sourced registry.
-- **Delta-based text updates**: Rich-text updates use `Y.Text.applyDelta()` with a common-prefix/common-suffix diff algorithm. Delta operations are position-based (retain/delete/insert), not CRDT-item-ID-based, so they work regardless of which client created the underlying items. This is critical for live sync with Gutenberg, which creates local Y.Text items via `applyChangesToCRDTDoc` alongside remote items. The legacy `updateYText()` (full replacement) is preserved but not used in editing paths.
+- **Delta-based text updates**: Rich-text updates use `Y.Text.applyDelta()` with a common-prefix/common-suffix diff algorithm. Delta operations are position-based (retain/delete/insert), not CRDT-item-ID-based, so they work regardless of which client created the underlying items. This is critical for live sync with Gutenberg, which creates local Y.Text items via `applyChangesToCRDTDoc` alongside remote items.
 
 ### Sync Protocol
 
@@ -119,7 +119,7 @@ Rich-text edits (inserts and updates) are streamed to the browser in small chunk
 **Behavior**:
 
 - Deletions are applied atomically (old text disappears immediately)
-- Insertions are split into HTML-safe chunks (~20 chars) to avoid malformed intermediate states
+- Insertions are split into HTML-safe chunks (2–6 chars, randomized) to avoid malformed intermediate states
 - Each chunk is applied in its own `doc.transact()` and flushed via `SyncClient.flushQueue()`
 - `flushQueue()` cancels the scheduled poll timer and triggers an immediate poll, with re-entrancy protection to prevent concurrent HTTP requests
 - `removeBlocks()`, `moveBlock()`, and `editBlockText()` are not streamed (no text content)
@@ -217,12 +217,12 @@ Post metadata (status, categories, tags, excerpt, featured image, date, slug, st
 
 ### Dual-Update Pattern
 
-All metadata updates write to both the Y.Doc (for collaborative sync) and the REST API (for persistence):
+All metadata updates write to both the REST API (for persistence) and the Y.Doc (for collaborative sync):
 
-1. Y.Doc properties are set via `documentManager.setProperty()` within a `LOCAL_ORIGIN` transaction, then flushed via `syncClient.flushQueue()` so Gutenberg browser sessions see the change immediately.
-2. The REST API is called via `apiClient.updatePost()` to persist the change, and `currentPost` is refreshed from the response.
+1. The REST API is called via `apiClient.updatePost()` to persist the change — fail fast before touching collaborative state. `currentPost` is refreshed from the response.
+2. Y.Doc properties are set via `documentManager.setProperty()` within a `LOCAL_ORIGIN` transaction, using WordPress-returned canonical values where applicable, then flushed via `syncClient.flushQueue()` so Gutenberg browser sessions see the committed state.
 
-This ensures changes survive even if no save is triggered, and that collaborators see updates in real time.
+This ensures the Y.Doc only reflects committed state — if the API call fails, neither the collaborative doc nor `currentPost` are modified.
 
 ### Category/Tag Resolution
 

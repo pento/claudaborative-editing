@@ -3,7 +3,6 @@ import * as Y from 'yjs';
 import {
   blockToYMap,
   yMapToBlock,
-  updateYText,
   deltaUpdateYText,
   computeTextDelta,
   findHtmlSafeChunkEnd,
@@ -197,39 +196,6 @@ describe('yMapToBlock', () => {
     const result2 = yMapToBlock(integratedBlockToYMap(blockWith));
     expect(result2.isValid).toBe(false);
     expect(result2.originalContent).toBe('<p>text</p>');
-  });
-});
-
-describe('updateYText', () => {
-  it('replaces content of an empty Y.Text', () => {
-    const doc = new Y.Doc();
-    const ytext = doc.getText('test');
-    updateYText(ytext, 'Hello');
-    expect(ytext.toString()).toBe('Hello');
-  });
-
-  it('replaces existing content', () => {
-    const doc = new Y.Doc();
-    const ytext = doc.getText('test');
-    ytext.insert(0, 'Old content');
-    updateYText(ytext, 'New content');
-    expect(ytext.toString()).toBe('New content');
-  });
-
-  it('clears content when given empty string', () => {
-    const doc = new Y.Doc();
-    const ytext = doc.getText('test');
-    ytext.insert(0, 'Some content');
-    updateYText(ytext, '');
-    expect(ytext.toString()).toBe('');
-  });
-
-  it('handles replacing with the same content', () => {
-    const doc = new Y.Doc();
-    const ytext = doc.getText('test');
-    ytext.insert(0, 'Same');
-    updateYText(ytext, 'Same');
-    expect(ytext.toString()).toBe('Same');
   });
 });
 
