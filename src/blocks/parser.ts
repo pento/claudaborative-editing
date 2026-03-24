@@ -1,6 +1,6 @@
 /**
  * Block parser: wraps @wordpress/block-serialization-default-parser to produce
- * normalized ParsedBlock[] from Gutenberg HTML, then converts to Block[].
+ * normalised ParsedBlock[] from Gutenberg HTML, then converts to Block[].
  */
 
 import { parse as wpParse } from '@wordpress/block-serialization-default-parser';
@@ -8,7 +8,7 @@ import type { RawParsedBlock, ParsedBlock } from './types.js';
 import type { Block } from '../yjs/types.js';
 
 /**
- * Parse Gutenberg HTML content into normalized blocks.
+ * Parse Gutenberg HTML content into normalised blocks.
  * - Null blockNames (freeform HTML) become 'core/freeform'
  * - Attributes are extracted from the block comment delimiters (attrs field)
  * - innerHTML is preserved as originalContent
@@ -18,7 +18,7 @@ export function parseBlocks(html: string): ParsedBlock[] {
   const raw = wpParse(html) as RawParsedBlock[];
   return raw
     .filter((block) => block.blockName !== null || block.innerHTML.trim() !== '')
-    .map(normalizeParsedBlock);
+    .map(normaliseParsedBlock);
 }
 
 /**
@@ -34,7 +34,7 @@ export function parsedBlockToBlock(parsed: ParsedBlock): Block {
   };
 }
 
-function normalizeParsedBlock(raw: RawParsedBlock): ParsedBlock {
+function normaliseParsedBlock(raw: RawParsedBlock): ParsedBlock {
   const blockName = raw.blockName ?? 'core/freeform';
   const commentAttrs = raw.attrs ?? {};
   const extractedAttrs = extractAttributesFromHTML(blockName, raw.innerHTML, commentAttrs);
@@ -44,7 +44,7 @@ function normalizeParsedBlock(raw: RawParsedBlock): ParsedBlock {
     attributes: { ...commentAttrs, ...extractedAttrs },
     innerBlocks: raw.innerBlocks
       .filter((block) => block.blockName !== null || block.innerHTML.trim() !== '')
-      .map(normalizeParsedBlock),
+      .map(normaliseParsedBlock),
     originalContent: raw.innerHTML,
   };
 }

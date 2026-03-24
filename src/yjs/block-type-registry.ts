@@ -113,7 +113,7 @@ export class BlockTypeRegistry {
         }
       }
 
-      // Normalize parent/ancestor/allowedBlocks: empty arrays and nulls both mean "no constraint"
+      // Normalise parent/ancestor/allowedBlocks: empty arrays and nulls both mean "no constraint"
       const parent = blockType.parent?.length ? blockType.parent : null;
       const ancestor = blockType.ancestor?.length ? blockType.ancestor : null;
       const allowedBlocks = blockType.allowed_blocks?.length ? blockType.allowed_blocks : null;

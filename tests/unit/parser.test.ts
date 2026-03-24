@@ -110,6 +110,19 @@ describe('parseBlocks', () => {
     }
   });
 
+  it('should extract button text and href from core/button', () => {
+    const html =
+      '<!-- wp:button -->\n' +
+      '<div class="wp-block-button"><a class="wp-block-button__link" href="https://example.com/go">Click me</a></div>\n' +
+      '<!-- /wp:button -->';
+    const blocks = parseBlocks(html);
+
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].name).toBe('core/button');
+    expect(blocks[0].attributes.text).toBe('Click me');
+    expect(blocks[0].attributes.url).toBe('https://example.com/go');
+  });
+
   it('should return empty array for empty string', () => {
     const blocks = parseBlocks('');
     expect(blocks).toEqual([]);

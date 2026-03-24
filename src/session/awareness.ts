@@ -23,7 +23,7 @@ export function buildAwarenessState(user: WPUser): AwarenessLocalState {
       browserType: 'Claude Code MCP',
       enteredAt: Date.now(),
     },
-    // editorState with selection is required for Gutenberg to recognize us
+    // editorState with selection is required for Gutenberg to recognise us
     // as an active editor and process our CRDT updates in the live session.
     editorState: {
       selection: { type: 'none' },

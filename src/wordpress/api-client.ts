@@ -20,7 +20,7 @@ export class WordPressApiClient {
   private authHeader: string;
 
   constructor(config: WordPressConfig) {
-    // Normalize URL: strip trailing slash(es)
+    // Normalise URL: strip trailing slash(es)
     const siteUrl = config.siteUrl.replace(/\/+$/, '');
     this.baseUrl = `${siteUrl}/wp-json`;
     this.authHeader = `Basic ${btoa(config.username + ':' + config.appPassword)}`;

@@ -103,25 +103,6 @@ export function yMapToBlock(ymap: Y.Map<unknown>): Block {
 }
 
 /**
- * Update a Y.Text with a new string value using full replacement.
- *
- * WARNING: This uses delete-all + insert which targets specific CRDT items by ID.
- * In multi-client scenarios where the browser creates LOCAL Y.Text items alongside
- * REMOTE items (e.g. after `applyChangesToCRDTDoc`), the delete only removes our
- * items while the browser's survive — so the visible content doesn't change.
- *
- * For live collaborative editing, use `deltaUpdateYText()` instead.
- */
-export function updateYText(ytext: Y.Text, newValue: string): void {
-  if (ytext.length > 0) {
-    ytext.delete(0, ytext.length);
-  }
-  if (newValue.length > 0) {
-    ytext.insert(0, newValue);
-  }
-}
-
-/**
  * Result of computing the delta between two strings.
  */
 export interface TextDelta {
