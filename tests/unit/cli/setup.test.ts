@@ -105,10 +105,11 @@ function createTestDeps(
   };
 }
 
-// Successful fetch responses for validation (user + sync endpoint)
+// Successful fetch responses for validation (user + version check + sync endpoint)
 function mockSuccessfulValidation(): void {
   fetchMock
     .mockResolvedValueOnce(mockResponse({ id: 1, name: 'admin', slug: 'admin', avatar_urls: {} }))
+    .mockResolvedValueOnce(mockResponse({ version: '7.0' }))
     .mockResolvedValueOnce(mockResponse({ rooms: [] }));
 }
 
@@ -264,6 +265,7 @@ describe('setup wizard', () => {
         .mockResolvedValueOnce(
           mockResponse({ id: 1, name: 'admin', slug: 'admin', avatar_urls: {} }),
         )
+        .mockResolvedValueOnce(mockResponse({ version: '7.0' }))
         .mockResolvedValueOnce(
           mockResponse(
             { code: 'rest_no_route', message: 'No route' },
@@ -324,6 +326,7 @@ describe('setup wizard', () => {
         .mockResolvedValueOnce(
           mockResponse({ id: 1, name: 'admin', slug: 'admin', avatar_urls: {} }),
         )
+        .mockResolvedValueOnce(mockResponse({ version: '7.0' }))
         .mockResolvedValueOnce(
           mockResponse(
             { code: 'internal_server_error', message: 'Something broke' },

@@ -94,7 +94,7 @@ describe('processIncomingUpdate', () => {
 
     // Capture an update from docB
     let capturedUpdate: Uint8Array | null = null;
-    docB.on('update', (update: Uint8Array) => {
+    docB.on('updateV2', (update: Uint8Array) => {
       capturedUpdate = update;
     });
     docB.getMap('data').set('foo', 'bar');
@@ -127,7 +127,7 @@ describe('createUpdateFromChange', () => {
   it('wraps a raw update in a SyncUpdate', () => {
     const doc = new Y.Doc();
     let capturedUpdate: Uint8Array | null = null;
-    doc.on('update', (update: Uint8Array) => {
+    doc.on('updateV2', (update: Uint8Array) => {
       capturedUpdate = update;
     });
     doc.getMap('m').set('k', 'v');
@@ -153,7 +153,7 @@ describe('createCompactionUpdate', () => {
 
     // Verify it can be applied to a fresh doc
     const newDoc = new Y.Doc();
-    Y.applyUpdate(newDoc, base64ToUint8Array(compaction.data));
+    Y.applyUpdateV2(newDoc, base64ToUint8Array(compaction.data));
     expect(newDoc.getMap('map1').get('a')).toBe(1);
     expect(newDoc.getMap('map2').get('b')).toBe(2);
   });

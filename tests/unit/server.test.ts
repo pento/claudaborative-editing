@@ -186,7 +186,7 @@ describe('graceful shutdown', () => {
     await startServer();
 
     // Trigger the SIGTERM handler
-    signalHandlers.SIGTERM[0]();
+    signalHandlers.SIGTERM![0]();
 
     // Allow the async cleanup to complete
     await vi.waitFor(() => {
@@ -201,7 +201,7 @@ describe('graceful shutdown', () => {
     const { startServer } = await import('../../src/server.js');
     await startServer();
 
-    signalHandlers.SIGINT[0]();
+    signalHandlers.SIGINT![0]();
 
     await vi.waitFor(() => {
       expect(processExitSpy).toHaveBeenCalledWith(0);
@@ -215,7 +215,7 @@ describe('graceful shutdown', () => {
     const { startServer } = await import('../../src/server.js');
     await startServer();
 
-    stdinHandlers.end[0]();
+    stdinHandlers.end![0]();
 
     await vi.waitFor(() => {
       expect(processExitSpy).toHaveBeenCalledWith(0);
@@ -230,8 +230,8 @@ describe('graceful shutdown', () => {
     await startServer();
 
     // Trigger both SIGTERM and stdin end simultaneously
-    signalHandlers.SIGTERM[0]();
-    stdinHandlers.end[0]();
+    signalHandlers.SIGTERM![0]();
+    stdinHandlers.end![0]();
 
     await vi.waitFor(() => {
       expect(processExitSpy).toHaveBeenCalled();

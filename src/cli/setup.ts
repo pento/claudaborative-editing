@@ -331,6 +331,15 @@ async function validateCredentials(deps: SetupDeps, credentials: WpCredentials):
   }
 
   try {
+    const wpVersion = await client.checkMinimumVersion();
+    deps.log(`  WordPress version: ${wpVersion}`);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    deps.error(message);
+    deps.exit(1);
+  }
+
+  try {
     await client.validateSyncEndpoint();
     deps.log('  ✓ Collaborative editing endpoint available');
   } catch (err) {

@@ -43,6 +43,54 @@ export class WordPressApiClient {
   }
 
   /**
+   * Check that the WordPress version meets the minimum requirement for
+   * collaborative editing (WordPress 7.0+ or Gutenberg plugin 22.8+).
+   *
+   * Fetches the REST API root (`GET /wp-json/`) and parses the `version`
+   * field. If the version is below 7.0, throws an error with a clear
+   * message. If the version cannot be determined (e.g. the endpoint is
+   * unavailable or the field is missing), the check is silently skipped.
+   *
+   * @returns The WordPress version string, or `'unknown'` if it could not
+   *          be determined.
+   */
+  async checkMinimumVersion(): Promise<string> {
+    const MINIMUM_MAJOR = 7;
+    const MINIMUM_MINOR = 0;
+
+    let data: { version?: string };
+    try {
+      data = await this.apiFetch<{ version?: string }>('/');
+    } catch {
+      // REST API root unavailable — skip the check rather than blocking.
+      return 'unknown';
+    }
+
+    const version = data.version;
+    if (typeof version !== 'string' || version.trim() === '') {
+      return 'unknown';
+    }
+
+    const parts = version.split('.');
+    const major = parseInt(parts[0], 10);
+    const minor = parseInt(parts[1] ?? '0', 10);
+
+    if (isNaN(major) || isNaN(minor)) {
+      return version;
+    }
+
+    if (major < MINIMUM_MAJOR || (major === MINIMUM_MAJOR && minor < MINIMUM_MINOR)) {
+      throw new Error(
+        `WordPress ${MINIMUM_MAJOR}.${MINIMUM_MINOR} or later is required for collaborative editing. ` +
+          `Current version: ${version}. ` +
+          `If you have the Gutenberg plugin installed, version 22.8 or later is required.`,
+      );
+    }
+
+    return version;
+  }
+
+  /**
    * Get the current authenticated user.
    * GET /wp/v2/users/me
    */

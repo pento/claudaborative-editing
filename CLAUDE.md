@@ -66,7 +66,8 @@ disconnected ──connect──→ connected ──openPost/createPost──→
 
 ### Key Design Decisions
 
-- **V1 encoding**: All Yjs updates use `encodeStateAsUpdate`/`applyUpdate` (V1). This matches Gutenberg's encoding. The sync_step1/step2 handshake uses y-protocols standard encoding (also V1 internally).
+- **Mixed V1/V2 encoding**: Gutenberg 22.8+ uses a mixed encoding approach. Sync step1/step2 use y-protocols' standard encoding (V1 internally — `syncProtocol.readSyncMessage` hardcodes `Y.encodeStateAsUpdate`/`Y.applyUpdate`). Regular updates and compactions use V2 encoding (`encodeStateAsUpdateV2`/`applyUpdateV2`, captured via `doc.on('updateV2')`). This split exists because Gutenberg switched updates/compactions to V2 (PR #76304) but still uses y-protocols for the sync handshake. Minimum compatible Gutenberg version: 22.8.
+- **Minimum version check**: During `connect()` and setup, `checkMinimumVersion()` fetches `GET /wp-json/` and verifies WordPress >= 7.0. If the version is below 7.0, an error is thrown with a message suggesting Gutenberg plugin 22.8+ as an alternative. If the REST API root is unavailable or the version field is missing, the check is silently skipped (non-blocking).
 - **yjs pinned to 13.6.29**: Must match the version Gutenberg uses. Different versions can produce incompatible binary updates.
 - **Rich-text attributes**: Block attributes whose type is `rich-text` in the block schema (e.g., `core/paragraph` `content`) are stored as `Y.Text` in the Y.Doc. Other attributes are plain values. Rich-text detection is handled by `BlockTypeRegistry` in `src/yjs/block-type-registry.ts`.
 - **Room format**: `postType/{type}:{id}` (e.g., `postType/post:123`)

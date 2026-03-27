@@ -6,7 +6,6 @@
     "lib": ["ES2022"],
     "types": ["node"],
     "outDir": "dist",
-    "rootDir": "src",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -27,6 +26,6 @@
       "#blocks/*": ["./src/blocks/*"]
     }
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "tests/**/*", "*.config.*"],
   "exclude": ["node_modules", "dist"]
 }
