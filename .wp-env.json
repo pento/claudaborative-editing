@@ -1,5 +1,10 @@
 {
+  "$schema": "https://schemas.wp.org/trunk/wp-env.json",
   "core": "WordPress/WordPress#master",
   "phpVersion": "8.5",
-  "testsEnvironment": false
+  "testsEnvironment": false,
+  "plugins": ["WordPress/gutenberg#trunk"],
+  "lifecycleScripts": {
+    "afterStart": "./bin/after-start.sh"
+  }
 }
