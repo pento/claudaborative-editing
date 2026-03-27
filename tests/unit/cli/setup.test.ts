@@ -260,6 +260,22 @@ describe('setup wizard', () => {
       expect(errors.join('\n')).toContain('Authentication failed');
     });
 
+    it('exits with error when WordPress version is too old', async () => {
+      fetchMock
+        .mockResolvedValueOnce(
+          mockResponse({ id: 1, name: 'admin', slug: 'admin', avatar_urls: {} }),
+        )
+        .mockResolvedValueOnce(mockResponse({ version: '6.7' }));
+
+      const { deps, errors } = createTestDeps(['https://example.com', 'admin', 'xxxx xxxx xxxx'], {
+        detectClients: () => defaultClientList(),
+        hasConfig: () => false,
+      });
+
+      await expect(runSetup(deps, { manual: true })).rejects.toThrow(SetupExitError);
+      expect(errors.join('\n')).toContain('WordPress 7.0 or later is required');
+    });
+
     it('exits with error when sync endpoint returns 404', async () => {
       fetchMock
         .mockResolvedValueOnce(
