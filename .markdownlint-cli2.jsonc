@@ -11,11 +11,5 @@
       "siblings_only": true
     }
   },
-  "ignores": [
-    "node_modules/",
-    "dist/",
-    "coverage/",
-    ".gutenberg/",
-    "test-results/"
-  ]
+  "ignores": ["node_modules/", "dist/", "coverage/", ".gutenberg/", "test-results/"]
 }
