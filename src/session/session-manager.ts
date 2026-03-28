@@ -1795,16 +1795,33 @@ export class SessionManager {
         if (post.status === 'trash') {
           this.postGone = true;
           this.postGoneReason = 'This post has been moved to the trash.';
+          this.stopBackgroundWork();
         }
       } catch (error) {
         if (error instanceof WordPressApiError && (error.status === 404 || error.status === 410)) {
           this.postGone = true;
           this.postGoneReason = 'This post has been deleted.';
+          this.stopBackgroundWork();
         }
       } finally {
         this.postGoneCheck = null;
       }
     })();
+  }
+
+  /**
+   * Stop sync polling and the health check timer.
+   * Called when `postGone` is confirmed — no point continuing background
+   * requests for a post that is known to be deleted/trashed.
+   */
+  private stopBackgroundWork(): void {
+    if (this._syncClient) {
+      this._syncClient.stop();
+    }
+    if (this.postHealthCheckTimer !== null) {
+      clearInterval(this.postHealthCheckTimer);
+      this.postHealthCheckTimer = null;
+    }
   }
 
   /**
