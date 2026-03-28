@@ -2564,6 +2564,9 @@ describe('SessionManager', () => {
       });
 
       expect(session.isPostGone().reason).toBe('This post has been deleted.');
+
+      // Background work should be stopped
+      expect(mockSyncStop).toHaveBeenCalled();
     });
 
     it('sets postGone when getPost returns trashed post', async () => {
@@ -2581,6 +2584,9 @@ describe('SessionManager', () => {
       });
 
       expect(session.isPostGone().reason).toBe('This post has been moved to the trash.');
+
+      // Background work should be stopped
+      expect(mockSyncStop).toHaveBeenCalled();
     });
 
     it('does not set postGone on transient errors', async () => {
@@ -2733,7 +2739,10 @@ describe('SessionManager', () => {
 
       expect(session.isPostGone().reason).toBe('This post has been moved to the trash.');
 
-      // closePost clears the timer
+      // Background work (including the health check timer) should be stopped
+      expect(mockSyncStop).toHaveBeenCalled();
+
+      // closePost still works for cleanup
       await session.closePost();
       expect(session.isPostGone().gone).toBe(false);
     });
