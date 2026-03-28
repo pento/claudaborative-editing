@@ -3,3 +3,5 @@ dist/
 coverage/
 *.tsbuildinfo
 .gutenberg/
+test-results/
+.DS_Store

@@ -125,6 +125,32 @@ describe('WordPressApiClient', () => {
     });
   });
 
+  describe('getWordPressVersion', () => {
+    it('returns version string', async () => {
+      fetchMock.mockResolvedValue(mockResponse({ version: '7.0' }));
+      const client = createClient();
+      expect(await client.getWordPressVersion()).toBe('7.0');
+    });
+
+    it('returns unknown when endpoint is unavailable', async () => {
+      fetchMock.mockRejectedValue(new Error('fetch failed'));
+      const client = createClient();
+      expect(await client.getWordPressVersion()).toBe('unknown');
+    });
+
+    it('returns unknown when version field is missing', async () => {
+      fetchMock.mockResolvedValue(mockResponse({}));
+      const client = createClient();
+      expect(await client.getWordPressVersion()).toBe('unknown');
+    });
+
+    it('returns unknown when version field is empty', async () => {
+      fetchMock.mockResolvedValue(mockResponse({ version: '' }));
+      const client = createClient();
+      expect(await client.getWordPressVersion()).toBe('unknown');
+    });
+  });
+
   describe('getCurrentUser', () => {
     it('fetches /wp/v2/users/me', async () => {
       fetchMock.mockResolvedValue(mockResponse(fakeUser));

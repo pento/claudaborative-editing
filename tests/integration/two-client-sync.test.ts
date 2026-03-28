@@ -42,7 +42,7 @@ describe('Two-client sync integration', () => {
 
     // Collect updates from docA
     const updatesFromA: Uint8Array[] = [];
-    docA.on('update', (update: Uint8Array) => {
+    docA.on('updateV2', (update: Uint8Array) => {
       updatesFromA.push(update);
     });
 
@@ -150,10 +150,10 @@ describe('Two-client sync integration', () => {
     const updatesFromA: SyncUpdate[] = [];
     const updatesFromB: SyncUpdate[] = [];
 
-    docA.on('update', (update: Uint8Array) => {
+    docA.on('updateV2', (update: Uint8Array) => {
       updatesFromA.push(createUpdateFromChange(update));
     });
-    docB.on('update', (update: Uint8Array) => {
+    docB.on('updateV2', (update: Uint8Array) => {
       updatesFromB.push(createUpdateFromChange(update));
     });
 
@@ -199,7 +199,7 @@ describe('Two-client sync integration', () => {
 
     // Collect updates from A
     const updatesFromA: SyncUpdate[] = [];
-    docA.on('update', (update: Uint8Array) => {
+    docA.on('updateV2', (update: Uint8Array) => {
       updatesFromA.push(createUpdateFromChange(update));
     });
 
@@ -227,10 +227,10 @@ describe('Two-client sync integration', () => {
     const updatesFromA: SyncUpdate[] = [];
     const updatesFromB: SyncUpdate[] = [];
 
-    docA.on('update', (update: Uint8Array) => {
+    docA.on('updateV2', (update: Uint8Array) => {
       updatesFromA.push(createUpdateFromChange(update));
     });
-    docB.on('update', (update: Uint8Array) => {
+    docB.on('updateV2', (update: Uint8Array) => {
       updatesFromB.push(createUpdateFromChange(update));
     });
 
@@ -269,7 +269,7 @@ describe('Two-client sync integration', () => {
 
     // Collect updates from A
     const updatesFromA: SyncUpdate[] = [];
-    docA.on('update', (update: Uint8Array) => {
+    docA.on('updateV2', (update: Uint8Array) => {
       updatesFromA.push(createUpdateFromChange(update));
     });
 

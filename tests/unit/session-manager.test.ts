@@ -15,6 +15,7 @@ const mockUploadMedia = vi.fn();
 const mockListTerms = vi.fn<() => Promise<WPTerm[]>>();
 const mockSearchTerms = vi.fn<() => Promise<WPTerm[]>>();
 const mockCreateTerm = vi.fn<() => Promise<WPTerm>>();
+const mockGetWordPressVersion = vi.fn<() => Promise<string>>();
 const mockCheckNotesSupport = vi.fn<() => Promise<boolean>>();
 const mockListNotes = vi.fn<() => Promise<WPNote[]>>();
 const mockCreateNote = vi.fn<() => Promise<WPNote>>();
@@ -36,6 +37,7 @@ vi.mock('../../src/wordpress/api-client.js', () => {
       this.listTerms = mockListTerms;
       this.searchTerms = mockSearchTerms;
       this.createTerm = mockCreateTerm;
+      this.getWordPressVersion = mockGetWordPressVersion;
       this.checkNotesSupport = mockCheckNotesSupport;
       this.listNotes = mockListNotes;
       this.createNote = mockCreateNote;
@@ -46,7 +48,7 @@ vi.mock('../../src/wordpress/api-client.js', () => {
 });
 
 // --- Mock node:fs/promises for uploadMedia tests ---
-const mockReadFile = vi.fn<() => Promise<Buffer>>();
+const mockReadFile = vi.fn<(...args: unknown[]) => Promise<Buffer>>();
 vi.mock('node:fs/promises', () => ({
   readFile: (...args: unknown[]) => mockReadFile(...args),
 }));
@@ -142,6 +144,7 @@ describe('SessionManager', () => {
       queueSize: 0,
     });
     mockGetBlockTypes.mockRejectedValue(new Error('Not available'));
+    mockGetWordPressVersion.mockResolvedValue('7.0');
     mockCheckNotesSupport.mockResolvedValue(false);
     session = new SessionManager();
     session.syncWaitTimeout = 0; // Skip sync wait in tests

@@ -43,6 +43,29 @@ export class WordPressApiClient {
   }
 
   /**
+   * Fetch the WordPress version from the REST API root.
+   *
+   * Returns the version string, or `'unknown'` if it could not be
+   * determined (e.g. the endpoint is unavailable or the field is missing).
+   * Never throws — callers decide how to act on the result.
+   */
+  async getWordPressVersion(): Promise<string> {
+    let data: { version?: string };
+    try {
+      data = await this.apiFetch<{ version?: string }>('/');
+    } catch {
+      return 'unknown';
+    }
+
+    const version = data.version;
+    if (typeof version !== 'string' || version.trim() === '') {
+      return 'unknown';
+    }
+
+    return version;
+  }
+
+  /**
    * Get the current authenticated user.
    * GET /wp/v2/users/me
    */

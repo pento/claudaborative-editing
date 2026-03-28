@@ -287,8 +287,14 @@ export class SessionManager {
   /** Room name for the comment sync room. */
   private static readonly COMMENT_ROOM = 'root/comment';
 
-  /** Max time (ms) to wait for sync to populate the doc before loading from REST API. Set to 0 in tests. */
-  syncWaitTimeout = 5000;
+  /**
+   * Max time (ms) to wait for sync to populate the doc before loading from REST API.
+   * Must be long enough for the step1/step2 handshake round-trip:
+   * Gutenberg 22.8+ polls at 4s solo / 1s with collaborators, so the handshake
+   * can take up to ~8s (step1 waits for browser poll, step2 waits for MCP poll).
+   * Set to 0 in tests to skip sync wait.
+   */
+  syncWaitTimeout = 15_000;
 
   // --- Throwing getters for state-dependent fields ---
 
@@ -342,7 +348,7 @@ export class SessionManager {
     const user = await this.apiClient.validateConnection();
     this._user = user;
 
-    // Validate sync endpoint is available
+    // Validate sync endpoint is available (the real gate for collaborative editing)
     await this.apiClient.validateSyncEndpoint();
 
     // Fetch block type registry from the API; fall back to hardcoded if unavailable
@@ -458,7 +464,7 @@ export class SessionManager {
         const done = () => {
           if (!resolved) {
             resolved = true;
-            doc.off('update', onDocUpdate);
+            doc.off('updateV2', onDocUpdate);
             resolve();
           }
         };
@@ -474,7 +480,7 @@ export class SessionManager {
           }
         };
 
-        doc.on('update', onDocUpdate);
+        doc.on('updateV2', onDocUpdate);
       });
     }
 
@@ -536,7 +542,7 @@ export class SessionManager {
         syncClient.queueUpdate(room, syncUpdate);
       }
     };
-    doc.on('update', this.updateHandler);
+    doc.on('updateV2', this.updateHandler);
 
     // Join the root/comment room for real-time note sync.
     // This room's state map acts as a change signal: when savedAt/savedBy
@@ -557,7 +563,7 @@ export class SessionManager {
           syncClient.queueUpdate(SessionManager.COMMENT_ROOM, syncUpdate);
         }
       };
-      commentDoc.on('update', this.commentUpdateHandler);
+      commentDoc.on('updateV2', this.commentUpdateHandler);
 
       syncClient.addRoom(
         SessionManager.COMMENT_ROOM,
@@ -612,12 +618,12 @@ export class SessionManager {
     }
 
     if (this._doc && this.updateHandler) {
-      this._doc.off('update', this.updateHandler);
+      this._doc.off('updateV2', this.updateHandler);
       this.updateHandler = null;
     }
 
     if (this.commentDoc && this.commentUpdateHandler) {
-      this.commentDoc.off('update', this.commentUpdateHandler);
+      this.commentDoc.off('updateV2', this.commentUpdateHandler);
       this.commentUpdateHandler = null;
     }
 

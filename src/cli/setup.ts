@@ -330,6 +330,9 @@ async function validateCredentials(deps: SetupDeps, credentials: WpCredentials):
     deps.exit(1);
   }
 
+  const wpVersion = await client.getWordPressVersion();
+  deps.log(`  WordPress version: ${wpVersion}`);
+
   try {
     await client.validateSyncEndpoint();
     deps.log('  ✓ Collaborative editing endpoint available');
@@ -337,9 +340,10 @@ async function validateCredentials(deps: SetupDeps, credentials: WpCredentials):
     if (err instanceof WordPressApiError && err.status === 404) {
       deps.log('');
       deps.error(
-        'Collaborative editing is not enabled.\n' +
-          '  Go to Settings → Writing in your WordPress admin and enable it.\n' +
-          '  (Requires WordPress 7.0 or later.)',
+        'Collaborative editing is not available.\n' +
+          '  Requires WordPress 7.0 or later, or the Gutenberg plugin 22.8 or later.\n' +
+          (wpVersion !== 'unknown' ? `  Current WordPress version: ${wpVersion}\n` : '') +
+          '  If using WordPress 7.0+, enable collaborative editing in Settings → Writing.',
       );
       deps.exit(1);
     }

@@ -445,7 +445,7 @@ describe('openBrowserDefault', () => {
 
   it('resolves even when execFile fails', async () => {
     vi.mocked(childProcess.execFile).mockImplementation(
-      (_cmd: string, _args: readonly string[], cb: unknown) => {
+      (_cmd: string, _args: readonly string[] | null | undefined, cb: unknown) => {
         (cb as (err: Error | null) => void)(new Error('spawn failed'));
         return {} as ReturnType<typeof childProcess.execFile>;
       },
