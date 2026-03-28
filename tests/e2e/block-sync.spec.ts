@@ -90,8 +90,8 @@ test.describe('block sync', () => {
   test('MCP inserts blocks visible in browser', async ({ page }) => {
     test.setTimeout(120_000);
 
-    const postId = createDraftPost('E2E block-sync insert', HEADING_CONTENT);
-    const appPassword = createAppPassword(`e2e-ins-${Date.now()}`);
+    const postId = await createDraftPost('E2E block-sync insert', HEADING_CONTENT);
+    const appPassword = await createAppPassword(`e2e-ins-${Date.now()}`);
     const { client, close, stderr } = await createMcpTestClient();
 
     try {
@@ -176,15 +176,15 @@ test.describe('block sync', () => {
       );
     } finally {
       await close();
-      deletePost(postId);
+      await deletePost(postId);
     }
   });
 
   test('MCP edits block content visible in browser', async ({ page }) => {
     test.setTimeout(120_000);
 
-    const postId = createDraftPost('E2E block-sync edit', HEADING_CONTENT);
-    const appPassword = createAppPassword(`e2e-edit-${Date.now()}`);
+    const postId = await createDraftPost('E2E block-sync edit', HEADING_CONTENT);
+    const appPassword = await createAppPassword(`e2e-edit-${Date.now()}`);
     const { client, close, stderr } = await createMcpTestClient();
 
     try {
@@ -248,15 +248,15 @@ test.describe('block sync', () => {
       );
     } finally {
       await close();
-      deletePost(postId);
+      await deletePost(postId);
     }
   });
 
   test('MCP changes block attributes visible in browser', async ({ page }) => {
     test.setTimeout(120_000);
 
-    const postId = createDraftPost('E2E block-sync attrs', HEADING_CONTENT);
-    const appPassword = createAppPassword(`e2e-attr-${Date.now()}`);
+    const postId = await createDraftPost('E2E block-sync attrs', HEADING_CONTENT);
+    const appPassword = await createAppPassword(`e2e-attr-${Date.now()}`);
     const { client, close, stderr } = await createMcpTestClient();
 
     try {
@@ -319,15 +319,15 @@ test.describe('block sync', () => {
       );
     } finally {
       await close();
-      deletePost(postId);
+      await deletePost(postId);
     }
   });
 
   test('MCP removes blocks visible in browser', async ({ page }) => {
     test.setTimeout(120_000);
 
-    const postId = createDraftPost('E2E block-sync remove', TWO_PARAGRAPHS);
-    const appPassword = createAppPassword(`e2e-rm-${Date.now()}`);
+    const postId = await createDraftPost('E2E block-sync remove', TWO_PARAGRAPHS);
+    const appPassword = await createAppPassword(`e2e-rm-${Date.now()}`);
     const { client, close, stderr } = await createMcpTestClient();
 
     try {
@@ -413,7 +413,7 @@ test.describe('block sync', () => {
       );
     } finally {
       await close();
-      deletePost(postId);
+      await deletePost(postId);
     }
   });
 
@@ -422,8 +422,8 @@ test.describe('block sync', () => {
 
     const initialContent =
       '<!-- wp:paragraph --><p>Browser editable paragraph</p><!-- /wp:paragraph -->';
-    const postId = createDraftPost('E2E block-sync browser-to-mcp', initialContent);
-    const appPassword = createAppPassword(`e2e-b2m-${Date.now()}`);
+    const postId = await createDraftPost('E2E block-sync browser-to-mcp', initialContent);
+    const appPassword = await createAppPassword(`e2e-b2m-${Date.now()}`);
     const { client, close, stderr } = await createMcpTestClient();
 
     try {
@@ -504,15 +504,15 @@ test.describe('block sync', () => {
       );
     } finally {
       await close();
-      deletePost(postId);
+      await deletePost(postId);
     }
   });
 
   test('multiple sequential edits in a single session', async ({ page }) => {
     test.setTimeout(180_000);
 
-    const postId = createDraftPost('E2E block-sync workflow', HEADING_CONTENT);
-    const appPassword = createAppPassword(`e2e-wf-${Date.now()}`);
+    const postId = await createDraftPost('E2E block-sync workflow', HEADING_CONTENT);
+    const appPassword = await createAppPassword(`e2e-wf-${Date.now()}`);
     const { client, close, stderr } = await createMcpTestClient();
 
     try {
@@ -619,7 +619,7 @@ test.describe('block sync', () => {
       );
     } finally {
       await close();
-      deletePost(postId);
+      await deletePost(postId);
     }
   });
 });

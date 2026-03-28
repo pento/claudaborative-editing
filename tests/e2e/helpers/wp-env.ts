@@ -8,8 +8,6 @@ import { fileURLToPath } from 'node:url';
 export const WP_BASE_URL = process.env.WP_BASE_URL ?? 'http://localhost:8888';
 export const WP_ADMIN_USER = process.env.WP_E2E_ADMIN_USER ?? 'admin';
 export const WP_ADMIN_PASSWORD = process.env.WP_E2E_ADMIN_PASSWORD ?? 'password';
-export const WP_MCP_USER = process.env.WP_E2E_MCP_USER ?? 'claudaborative-e2e';
-export const WP_MCP_PASSWORD = process.env.WP_E2E_MCP_PASSWORD ?? 'claudaborative-e2e-pass';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 // Include a hash of the repo root to avoid collisions between concurrent
@@ -17,24 +15,12 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 const repoHash = createHash('md5').update(REPO_ROOT).digest('hex').slice(0, 8);
 const STATE_FILE = path.join(tmpdir(), `claudaborative-editing-e2e-wp-env-${repoHash}.json`);
 
-function runCommand(command: string, args: string[], inheritOutput: boolean = false): string {
-  return execFileSync(command, args, {
+function runWpEnv(args: string[], inheritOutput: boolean = false): string {
+  return execFileSync('npx', ['wp-env', ...args], {
     cwd: REPO_ROOT,
     encoding: 'utf8',
     stdio: inheritOutput ? 'inherit' : ['ignore', 'pipe', 'pipe'],
   });
-}
-
-function runWpEnv(args: string[], inheritOutput: boolean = false): string {
-  return runCommand('npx', ['wp-env', ...args], inheritOutput);
-}
-
-function tryRunWpEnv(args: string[]): string | null {
-  try {
-    return runWpEnv(args);
-  } catch {
-    return null;
-  }
 }
 
 export async function waitForWordPress(timeoutMs: number = 180_000): Promise<void> {
@@ -59,6 +45,9 @@ export async function waitForWordPress(timeoutMs: number = 180_000): Promise<voi
 }
 
 export async function ensureWpEnvRunning(): Promise<void> {
+  // Always run wp-env start — it's idempotent (reconnects to existing
+  // containers) and ensures wp-env's internal state file is valid.
+  // Without this, `wp-env run cli` fails with "Environment not initialized".
   const alreadyRunning = await (async () => {
     try {
       const response = await fetch(`${WP_BASE_URL}/wp-login.php`, { redirect: 'manual' });
@@ -68,8 +57,9 @@ export async function ensureWpEnvRunning(): Promise<void> {
     }
   })();
 
+  runWpEnv(['start'], true);
+
   if (!alreadyRunning) {
-    runWpEnv(['start'], true);
     writeFileSync(STATE_FILE, JSON.stringify({ startedBySuite: true }), 'utf8');
   }
 
@@ -89,71 +79,59 @@ export function teardownWpEnv(): void {
   unlinkSync(STATE_FILE);
 }
 
-export function createAppPassword(label: string): string {
-  return runWpEnv([
-    'run',
-    'cli',
-    'wp',
-    'user',
-    'application-password',
-    'create',
-    WP_ADMIN_USER,
-    label,
-    '--porcelain',
-  ]).trim();
+// ---------------------------------------------------------------------------
+// REST API helpers — safe for concurrent test execution (no wp-cli needed)
+// ---------------------------------------------------------------------------
+
+function basicAuth(): string {
+  return 'Basic ' + Buffer.from(`${WP_ADMIN_USER}:${WP_ADMIN_PASSWORD}`).toString('base64');
 }
 
-export function ensureEditorUserExists(): void {
-  const existing = tryRunWpEnv(['run', 'cli', 'wp', 'user', 'get', WP_MCP_USER, '--field=ID']);
-  if (existing) {
-    return;
+async function apiFetch<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  const url = `${WP_BASE_URL}/wp-json${endpoint}`;
+  const headers = new Headers({
+    'Content-Type': 'application/json',
+    Authorization: basicAuth(),
+  });
+  if (options.headers) {
+    new Headers(options.headers).forEach((v, k) => {
+      headers.set(k, v);
+    });
   }
-
-  runWpEnv([
-    'run',
-    'cli',
-    'wp',
-    'user',
-    'create',
-    WP_MCP_USER,
-    `${WP_MCP_USER}@example.com`,
-    '--role=editor',
-    `--user_pass=${WP_MCP_PASSWORD}`,
-    '--display_name=E2E MCP Editor',
-  ]);
+  const response = await fetch(url, { ...options, headers });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(
+      `API ${options.method ?? 'GET'} ${endpoint} failed (${response.status}): ${text}`,
+    );
+  }
+  return (await response.json()) as T;
 }
 
-export function createAppPasswordForUser(username: string, label: string): string {
-  return runWpEnv([
-    'run',
-    'cli',
-    'wp',
-    'user',
-    'application-password',
-    'create',
-    username,
-    label,
-    '--porcelain',
-  ]).trim();
+export async function createDraftPost(title: string, content: string): Promise<number> {
+  const post = await apiFetch<{ id: number }>('/wp/v2/posts', {
+    method: 'POST',
+    body: JSON.stringify({
+      title,
+      content,
+      status: 'draft',
+    }),
+  });
+  return post.id;
 }
 
-export function createDraftPost(title: string, content: string): number {
-  const result = runWpEnv([
-    'run',
-    'cli',
-    'wp',
-    'post',
-    'create',
-    `--post_title=${title}`,
-    '--post_type=post',
-    '--post_status=draft',
-    `--post_content=${content}`,
-    '--porcelain',
-  ]).trim();
-
-  return Number.parseInt(result, 10);
+export async function deletePost(postId: number): Promise<void> {
+  await apiFetch(`/wp/v2/posts/${postId}?force=true`, {
+    method: 'DELETE',
+  });
 }
 
-export function deletePost(postId: number): void {
-  runWpEnv(['run', 'cli', 'wp', 'post', 'delete', String(postId), '--force']);
+export async function createAppPassword(label: string): Promise<string> {
+  const result = await apiFetch<{ password: string }>(`/wp/v2/users/me/application-passwords`, {
+    method: 'POST',
+    body: JSON.stringify({
+      name: label,
+    }),
+  });
+  return result.password;
 }

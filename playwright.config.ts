@@ -8,8 +8,8 @@ export default defineConfig({
   expect: {
     timeout: 30_000,
   },
-  fullyParallel: false,
-  workers: 1,
+  fullyParallel: true,
+  workers: 2,
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
   outputDir: 'test-results/playwright',
   use: {
