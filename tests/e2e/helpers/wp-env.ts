@@ -44,10 +44,27 @@ export async function waitForWordPress(timeoutMs: number = 180_000): Promise<voi
   throw new Error(`Timed out waiting for WordPress at ${WP_BASE_URL}: ${String(lastError)}`);
 }
 
+/** App password created during global setup, shared by all tests. */
+let sharedAppPassword: string | null = null;
+
+export function getSharedAppPassword(): string {
+  if (!sharedAppPassword) {
+    // Read from state file (workers don't share memory with global setup)
+    if (existsSync(STATE_FILE)) {
+      const state = JSON.parse(readFileSync(STATE_FILE, 'utf8')) as {
+        appPassword?: string;
+      };
+      if (state.appPassword) {
+        sharedAppPassword = state.appPassword;
+        return sharedAppPassword;
+      }
+    }
+    throw new Error('No shared app password available. Did global setup run?');
+  }
+  return sharedAppPassword;
+}
+
 export async function ensureWpEnvRunning(): Promise<void> {
-  // Always run wp-env start — it's idempotent (reconnects to existing
-  // containers) and ensures wp-env's internal state file is valid.
-  // Without this, `wp-env run cli` fails with "Environment not initialized".
   const alreadyRunning = await (async () => {
     try {
       const response = await fetch(`${WP_BASE_URL}/wp-login.php`, { redirect: 'manual' });
@@ -57,22 +74,48 @@ export async function ensureWpEnvRunning(): Promise<void> {
     }
   })();
 
-  runWpEnv(['start'], true);
-
   if (!alreadyRunning) {
-    writeFileSync(STATE_FILE, JSON.stringify({ startedBySuite: true }), 'utf8');
+    runWpEnv(['start'], true);
   }
 
   await waitForWordPress();
+
+  // Create a shared app password for REST API access (wp-cli runs once
+  // here in global setup, then all tests use the REST API).
+  const appPassword = runWpEnv([
+    'run',
+    'cli',
+    'wp',
+    'user',
+    'application-password',
+    'create',
+    WP_ADMIN_USER,
+    `e2e-shared-${Date.now()}`,
+    '--porcelain',
+  ]).trim();
+
+  sharedAppPassword = appPassword;
+
+  writeFileSync(
+    STATE_FILE,
+    JSON.stringify({
+      startedBySuite: !alreadyRunning,
+      appPassword,
+    }),
+    'utf8',
+  );
 }
 
 export function teardownWpEnv(): void {
-  if (!existsSync(STATE_FILE) || process.env.CLAUDABORATIVE_E2E_REUSE_ENV === '1') {
+  if (!existsSync(STATE_FILE)) {
     return;
   }
 
-  const state = JSON.parse(readFileSync(STATE_FILE, 'utf8')) as { startedBySuite?: boolean };
-  if (state.startedBySuite) {
+  const state = JSON.parse(readFileSync(STATE_FILE, 'utf8')) as {
+    startedBySuite?: boolean;
+  };
+
+  if (state.startedBySuite && process.env.CLAUDABORATIVE_E2E_REUSE_ENV !== '1') {
     runWpEnv(['stop'], true);
   }
 
@@ -84,7 +127,8 @@ export function teardownWpEnv(): void {
 // ---------------------------------------------------------------------------
 
 function basicAuth(): string {
-  return 'Basic ' + Buffer.from(`${WP_ADMIN_USER}:${WP_ADMIN_PASSWORD}`).toString('base64');
+  const password = getSharedAppPassword();
+  return 'Basic ' + Buffer.from(`${WP_ADMIN_USER}:${password}`).toString('base64');
 }
 
 async function apiFetch<T>(endpoint: string, options: RequestInit = {}): Promise<T> {

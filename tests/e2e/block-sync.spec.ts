@@ -4,7 +4,7 @@ import {
   WP_ADMIN_PASSWORD,
   WP_ADMIN_USER,
   WP_BASE_URL,
-  createAppPassword,
+  getSharedAppPassword,
   createDraftPost,
   deletePost,
 } from './helpers/wp-env';
@@ -91,7 +91,7 @@ test.describe('block sync', () => {
     test.setTimeout(120_000);
 
     const postId = await createDraftPost('E2E block-sync insert', HEADING_CONTENT);
-    const appPassword = await createAppPassword(`e2e-ins-${Date.now()}`);
+    const appPassword = getSharedAppPassword();
     const { client, close, stderr } = await createMcpTestClient();
 
     try {
@@ -184,7 +184,7 @@ test.describe('block sync', () => {
     test.setTimeout(120_000);
 
     const postId = await createDraftPost('E2E block-sync edit', HEADING_CONTENT);
-    const appPassword = await createAppPassword(`e2e-edit-${Date.now()}`);
+    const appPassword = getSharedAppPassword();
     const { client, close, stderr } = await createMcpTestClient();
 
     try {
@@ -256,7 +256,7 @@ test.describe('block sync', () => {
     test.setTimeout(120_000);
 
     const postId = await createDraftPost('E2E block-sync attrs', HEADING_CONTENT);
-    const appPassword = await createAppPassword(`e2e-attr-${Date.now()}`);
+    const appPassword = getSharedAppPassword();
     const { client, close, stderr } = await createMcpTestClient();
 
     try {
@@ -327,7 +327,7 @@ test.describe('block sync', () => {
     test.setTimeout(120_000);
 
     const postId = await createDraftPost('E2E block-sync remove', TWO_PARAGRAPHS);
-    const appPassword = await createAppPassword(`e2e-rm-${Date.now()}`);
+    const appPassword = getSharedAppPassword();
     const { client, close, stderr } = await createMcpTestClient();
 
     try {
@@ -423,7 +423,7 @@ test.describe('block sync', () => {
     const initialContent =
       '<!-- wp:paragraph --><p>Browser editable paragraph</p><!-- /wp:paragraph -->';
     const postId = await createDraftPost('E2E block-sync browser-to-mcp', initialContent);
-    const appPassword = await createAppPassword(`e2e-b2m-${Date.now()}`);
+    const appPassword = getSharedAppPassword();
     const { client, close, stderr } = await createMcpTestClient();
 
     try {
@@ -512,7 +512,7 @@ test.describe('block sync', () => {
     test.setTimeout(180_000);
 
     const postId = await createDraftPost('E2E block-sync workflow', HEADING_CONTENT);
-    const appPassword = await createAppPassword(`e2e-wf-${Date.now()}`);
+    const appPassword = getSharedAppPassword();
     const { client, close, stderr } = await createMcpTestClient();
 
     try {
