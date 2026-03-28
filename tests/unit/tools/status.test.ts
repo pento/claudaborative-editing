@@ -80,6 +80,28 @@ describe('status tools', () => {
       expect(text).toContain('Queue: 0 pending updates');
     });
 
+    it('shows warning when post is gone', async () => {
+      const session = createMockSession({
+        state: 'editing',
+        user: fakeUser,
+        post: fakePost,
+        postGone: { gone: true, reason: 'This post has been deleted.' },
+      });
+      registerStatusTools(server as unknown as McpServer, session);
+
+      const tool = server.registeredTools.get('wp_status');
+      assertDefined(tool);
+      const result = await tool.handler({});
+      const text = result.content[0].text;
+
+      expect(text).toContain('WARNING');
+      expect(text).toContain('This post has been deleted.');
+      expect(text).toContain('wp_close_post');
+      expect(text).toContain('ID: 42');
+      expect(text).not.toContain('Sync:');
+      expect(text).not.toContain('Queue:');
+    });
+
     it('reads title from Y.Doc via getTitle(), not from getCurrentPost()', async () => {
       const session = createMockSession({
         state: 'editing',

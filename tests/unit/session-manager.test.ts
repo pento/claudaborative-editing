@@ -2713,5 +2713,29 @@ describe('SessionManager', () => {
 
       expect(session.isPostGone().gone).toBe(false);
     });
+
+    it('periodic health check detects trashed post', async () => {
+      // Use a very short interval so the timer fires quickly
+      session.postHealthCheckInterval = 50;
+      await connectAndOpen(session);
+
+      // Return trashed post on next getPost call
+      const trashedPost: WPPost = { ...fakePost, status: 'trash' };
+      mockGetPost.mockResolvedValueOnce(trashedPost);
+
+      // Wait for the health check timer to fire
+      await vi.waitFor(
+        () => {
+          expect(session.isPostGone().gone).toBe(true);
+        },
+        { timeout: 1000 },
+      );
+
+      expect(session.isPostGone().reason).toBe('This post has been moved to the trash.');
+
+      // closePost clears the timer
+      await session.closePost();
+      expect(session.isPostGone().gone).toBe(false);
+    });
   });
 });
