@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { registerPostTools } from '../../../src/tools/posts.js';
 import { createMockServer, createMockSession, fakeUser, fakePost } from './helpers.js';
+import { assertDefined } from '../../test-utils.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { SessionManager } from '../../../src/session/session-manager.js';
 
@@ -27,7 +28,8 @@ describe('post tools', () => {
 
   describe('wp_list_posts', () => {
     it('returns formatted list of posts', async () => {
-      const tool = server.registeredTools.get('wp_list_posts')!;
+      const tool = server.registeredTools.get('wp_list_posts');
+      assertDefined(tool);
       const result = await tool.handler({});
 
       expect(result.content[0].text).toContain('Found 1 posts');
@@ -37,7 +39,8 @@ describe('post tools', () => {
     });
 
     it('passes filter options to session', async () => {
-      const tool = server.registeredTools.get('wp_list_posts')!;
+      const tool = server.registeredTools.get('wp_list_posts');
+      assertDefined(tool);
       await tool.handler({ status: 'draft', search: 'test', perPage: 5 });
 
       expect(session.listPosts).toHaveBeenCalledWith({
@@ -50,7 +53,8 @@ describe('post tools', () => {
     it('shows message when no posts found', async () => {
       (session.listPosts as ReturnType<typeof import('vitest').vi.fn>).mockResolvedValue([]);
 
-      const tool = server.registeredTools.get('wp_list_posts')!;
+      const tool = server.registeredTools.get('wp_list_posts');
+      assertDefined(tool);
       const result = await tool.handler({});
 
       expect(result.content[0].text).toBe('No posts found.');
@@ -61,7 +65,8 @@ describe('post tools', () => {
         new Error('API error'),
       );
 
-      const tool = server.registeredTools.get('wp_list_posts')!;
+      const tool = server.registeredTools.get('wp_list_posts');
+      assertDefined(tool);
       const result = await tool.handler({});
 
       expect(result.isError).toBe(true);
@@ -71,7 +76,8 @@ describe('post tools', () => {
 
   describe('wp_open_post', () => {
     it('opens post and returns rendered content', async () => {
-      const tool = server.registeredTools.get('wp_open_post')!;
+      const tool = server.registeredTools.get('wp_open_post');
+      assertDefined(tool);
       const result = await tool.handler({ postId: 42 });
 
       expect(session.openPost).toHaveBeenCalledWith(42);
@@ -84,7 +90,8 @@ describe('post tools', () => {
         new Error('Post not found'),
       );
 
-      const tool = server.registeredTools.get('wp_open_post')!;
+      const tool = server.registeredTools.get('wp_open_post');
+      assertDefined(tool);
       const result = await tool.handler({ postId: 999 });
 
       expect(result.isError).toBe(true);
@@ -104,7 +111,8 @@ describe('post tools', () => {
     });
 
     it('calls session.closePost() and returns success message', async () => {
-      const tool = server.registeredTools.get('wp_close_post')!;
+      const tool = server.registeredTools.get('wp_close_post');
+      assertDefined(tool);
       const result = await tool.handler({});
 
       expect(session.closePost).toHaveBeenCalledTimes(1);
@@ -117,7 +125,8 @@ describe('post tools', () => {
         throw new Error("Operation requires state editing, but current state is 'connected'");
       });
 
-      const tool = server.registeredTools.get('wp_close_post')!;
+      const tool = server.registeredTools.get('wp_close_post');
+      assertDefined(tool);
       const result = await tool.handler({});
 
       expect(result.isError).toBe(true);
@@ -127,7 +136,8 @@ describe('post tools', () => {
 
   describe('wp_create_post', () => {
     it('creates post and returns rendered content', async () => {
-      const tool = server.registeredTools.get('wp_create_post')!;
+      const tool = server.registeredTools.get('wp_create_post');
+      assertDefined(tool);
       const result = await tool.handler({ title: 'New Post' });
 
       expect(session.createPost).toHaveBeenCalledWith({ title: 'New Post', content: undefined });
@@ -139,7 +149,8 @@ describe('post tools', () => {
         new Error('Permission denied'),
       );
 
-      const tool = server.registeredTools.get('wp_create_post')!;
+      const tool = server.registeredTools.get('wp_create_post');
+      assertDefined(tool);
       const result = await tool.handler({});
 
       expect(result.isError).toBe(true);

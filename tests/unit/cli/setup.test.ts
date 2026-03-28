@@ -20,8 +20,12 @@ function mockResponse(body: unknown, init?: { status?: number; statusText?: stri
     ok: status >= 200 && status < 300,
     status,
     statusText: init?.statusText ?? 'OK',
-    json: async () => body,
-    text: async () => JSON.stringify(body),
+    json() {
+      return body;
+    },
+    text() {
+      return JSON.stringify(body);
+    },
     headers: new Headers(),
   } as unknown as Response;
 }
@@ -54,8 +58,8 @@ function makeMockClient(
 }
 
 const mockClaudeCode = makeMockClient('claude-code', 'Claude Code', {
-  useCli: async () => true,
-  removeCli: async () => true,
+  useCli: () => true,
+  removeCli: () => true,
 });
 
 const mockClaudeDesktop = makeMockClient('claude-desktop', 'Claude Desktop');
@@ -90,8 +94,8 @@ function createTestDeps(
 
   return {
     deps: {
-      prompt: async () => answers[answerIndex++] ?? '',
-      promptSecret: async () => answers[answerIndex++] ?? '',
+      prompt: () => Promise.resolve(answers[answerIndex++] ?? ''),
+      promptSecret: () => Promise.resolve(answers[answerIndex++] ?? ''),
       log: (msg: string) => logs.push(msg),
       error: (msg: string) => errors.push(msg),
       exit: ((code: number) => {

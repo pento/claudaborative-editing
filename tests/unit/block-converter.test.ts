@@ -9,6 +9,7 @@ import {
 } from '#yjs/block-converter';
 import { BlockTypeRegistry } from '#yjs/block-type-registry';
 import type { Block } from '#yjs/types';
+import { assertDefined } from '../test-utils.js';
 
 /**
  * Helper: create a Y.Map from a block and integrate it into a Y.Doc
@@ -43,7 +44,7 @@ describe('blockToYMap', () => {
     // content is a rich-text attribute for core/paragraph, so it should be Y.Text
     const content = attrs.get('content');
     expect(content).toBeInstanceOf(Y.Text);
-    expect((content as Y.Text).toString()).toBe('Hello world');
+    expect((content as Y.Text).toJSON()).toBe('Hello world');
 
     const innerBlocks = ymap.get('innerBlocks') as Y.Array<unknown>;
     expect(innerBlocks.length).toBe(0);
@@ -110,7 +111,7 @@ describe('blockToYMap', () => {
     const firstAttrs = firstItem.get('attributes') as Y.Map<unknown>;
     const firstContent = firstAttrs.get('content');
     expect(firstContent).toBeInstanceOf(Y.Text);
-    expect((firstContent as Y.Text).toString()).toBe('First item');
+    expect((firstContent as Y.Text).toJSON()).toBe('First item');
   });
 
   it('preserves isValid and originalContent', () => {
@@ -212,7 +213,7 @@ describe('deltaUpdateYText', () => {
     });
 
     deltaUpdateYText(ytext, 'Hello world');
-    expect(ytext.toString()).toBe('Hello world');
+    expect(ytext.toJSON()).toBe('Hello world');
     expect(updateCount).toBe(0);
   });
 
@@ -222,7 +223,7 @@ describe('deltaUpdateYText', () => {
     ytext.insert(0, 'Hello world');
 
     deltaUpdateYText(ytext, 'Goodbye universe');
-    expect(ytext.toString()).toBe('Goodbye universe');
+    expect(ytext.toJSON()).toBe('Goodbye universe');
   });
 
   it('handles prefix change', () => {
@@ -231,7 +232,7 @@ describe('deltaUpdateYText', () => {
     ytext.insert(0, 'Hello world');
 
     deltaUpdateYText(ytext, 'Howdy world');
-    expect(ytext.toString()).toBe('Howdy world');
+    expect(ytext.toJSON()).toBe('Howdy world');
   });
 
   it('handles suffix change', () => {
@@ -240,7 +241,7 @@ describe('deltaUpdateYText', () => {
     ytext.insert(0, 'Hello world');
 
     deltaUpdateYText(ytext, 'Hello there');
-    expect(ytext.toString()).toBe('Hello there');
+    expect(ytext.toJSON()).toBe('Hello there');
   });
 
   it('handles middle insertion', () => {
@@ -249,7 +250,7 @@ describe('deltaUpdateYText', () => {
     ytext.insert(0, 'Hello world');
 
     deltaUpdateYText(ytext, 'Hello beautiful world');
-    expect(ytext.toString()).toBe('Hello beautiful world');
+    expect(ytext.toJSON()).toBe('Hello beautiful world');
   });
 
   it('handles middle deletion', () => {
@@ -258,7 +259,7 @@ describe('deltaUpdateYText', () => {
     ytext.insert(0, 'Hello beautiful world');
 
     deltaUpdateYText(ytext, 'Hello world');
-    expect(ytext.toString()).toBe('Hello world');
+    expect(ytext.toJSON()).toBe('Hello world');
   });
 
   it('handles empty to non-empty', () => {
@@ -266,7 +267,7 @@ describe('deltaUpdateYText', () => {
     const ytext = doc.getText('test');
 
     deltaUpdateYText(ytext, 'Hello');
-    expect(ytext.toString()).toBe('Hello');
+    expect(ytext.toJSON()).toBe('Hello');
   });
 
   it('handles non-empty to empty', () => {
@@ -275,7 +276,7 @@ describe('deltaUpdateYText', () => {
     ytext.insert(0, 'Hello');
 
     deltaUpdateYText(ytext, '');
-    expect(ytext.toString()).toBe('');
+    expect(ytext.toJSON()).toBe('');
   });
 
   it('syncs delta edits between two clients', () => {
@@ -298,7 +299,7 @@ describe('deltaUpdateYText', () => {
     // Sync initial state
     Y.applyUpdate(doc2, Y.encodeStateAsUpdate(doc1));
 
-    expect(doc2.getText('test').toString()).toBe('Hello world');
+    expect(doc2.getText('test').toJSON()).toBe('Hello world');
 
     // Apply delta edit on doc1
     updates1.length = 0;
@@ -309,7 +310,7 @@ describe('deltaUpdateYText', () => {
       Y.applyUpdate(doc2, update);
     }
 
-    expect(doc2.getText('test').toString()).toBe('Hello there');
+    expect(doc2.getText('test').toJSON()).toBe('Hello there');
   });
 
   it('handles concurrent delta edits to different parts', () => {
@@ -346,9 +347,9 @@ describe('deltaUpdateYText', () => {
 
     // Both should converge (exact result depends on CRDT resolution,
     // but both docs must agree)
-    expect(doc1.getText('test').toString()).toBe(doc2.getText('test').toString());
+    expect(doc1.getText('test').toJSON()).toBe(doc2.getText('test').toJSON());
     // With non-overlapping edits, both should be applied
-    const result = doc1.getText('test').toString();
+    const result = doc1.getText('test').toJSON();
     expect(result).toContain('XXX');
     expect(result).toContain('BBB');
     expect(result).toContain('ZZZ');
@@ -366,50 +367,50 @@ describe('computeTextDelta', () => {
 
   it('computes delta for prefix change', () => {
     const delta = computeTextDelta('Hello world', 'Howdy world');
-    expect(delta).not.toBeNull();
-    expect(delta!.prefixLen).toBe(1); // 'H' is common
-    expect(delta!.deleteCount).toBe(4); // 'ello' deleted
-    expect(delta!.insertText).toBe('owdy');
+    assertDefined(delta);
+    expect(delta.prefixLen).toBe(1); // 'H' is common
+    expect(delta.deleteCount).toBe(4); // 'ello' deleted
+    expect(delta.insertText).toBe('owdy');
   });
 
   it('computes delta for suffix change', () => {
     const delta = computeTextDelta('Hello world', 'Hello there');
-    expect(delta).not.toBeNull();
-    expect(delta!.prefixLen).toBe(6); // 'Hello ' is common
-    expect(delta!.deleteCount).toBe(5); // 'world' deleted
-    expect(delta!.insertText).toBe('there');
+    assertDefined(delta);
+    expect(delta.prefixLen).toBe(6); // 'Hello ' is common
+    expect(delta.deleteCount).toBe(5); // 'world' deleted
+    expect(delta.insertText).toBe('there');
   });
 
   it('computes delta for middle insertion', () => {
     const delta = computeTextDelta('Hello world', 'Hello beautiful world');
-    expect(delta).not.toBeNull();
-    expect(delta!.prefixLen).toBe(6); // 'Hello '
-    expect(delta!.deleteCount).toBe(0);
-    expect(delta!.insertText).toBe('beautiful ');
+    assertDefined(delta);
+    expect(delta.prefixLen).toBe(6); // 'Hello '
+    expect(delta.deleteCount).toBe(0);
+    expect(delta.insertText).toBe('beautiful ');
   });
 
   it('computes delta for complete replacement', () => {
     const delta = computeTextDelta('abc', 'xyz');
-    expect(delta).not.toBeNull();
-    expect(delta!.prefixLen).toBe(0);
-    expect(delta!.deleteCount).toBe(3);
-    expect(delta!.insertText).toBe('xyz');
+    assertDefined(delta);
+    expect(delta.prefixLen).toBe(0);
+    expect(delta.deleteCount).toBe(3);
+    expect(delta.insertText).toBe('xyz');
   });
 
   it('computes delta for empty to non-empty', () => {
     const delta = computeTextDelta('', 'Hello');
-    expect(delta).not.toBeNull();
-    expect(delta!.prefixLen).toBe(0);
-    expect(delta!.deleteCount).toBe(0);
-    expect(delta!.insertText).toBe('Hello');
+    assertDefined(delta);
+    expect(delta.prefixLen).toBe(0);
+    expect(delta.deleteCount).toBe(0);
+    expect(delta.insertText).toBe('Hello');
   });
 
   it('computes delta for non-empty to empty', () => {
     const delta = computeTextDelta('Hello', '');
-    expect(delta).not.toBeNull();
-    expect(delta!.prefixLen).toBe(0);
-    expect(delta!.deleteCount).toBe(5);
-    expect(delta!.insertText).toBe('');
+    assertDefined(delta);
+    expect(delta.prefixLen).toBe(0);
+    expect(delta.deleteCount).toBe(5);
+    expect(delta.insertText).toBe('');
   });
 });
 

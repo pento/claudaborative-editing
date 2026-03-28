@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
+import { assertDefined } from '../../test-utils.js';
 import * as childProcess from 'node:child_process';
 import type { IncomingMessage, ServerResponse, Server } from 'node:http';
 import * as http from 'node:http';
@@ -153,7 +154,9 @@ describe('startAuthFlow', () => {
     const handle = await startAuthFlow('https://example.com', { openBrowser });
 
     const parsed = new URL(handle.authUrl);
-    const successUrl = new URL(parsed.searchParams.get('success_url')!);
+    const successUrlParam = parsed.searchParams.get('success_url');
+    assertDefined(successUrlParam);
+    const successUrl = new URL(successUrlParam);
     expect(successUrl.hostname).toBe('127.0.0.1');
     expect(successUrl.port).toBe(String(MOCK_PORT));
     expect(successUrl.pathname).toBe('/callback');
@@ -215,7 +218,8 @@ describe('startAuthFlow', () => {
     );
 
     const result = await handle.result;
-    expect(result.credentials!.siteUrl).toBe('https://my-normalised-url.com');
+    assertDefined(result.credentials);
+    expect(result.credentials.siteUrl).toBe('https://my-normalised-url.com');
   });
 
   it('resolves result with rejected=true when callback receives rejection', async () => {

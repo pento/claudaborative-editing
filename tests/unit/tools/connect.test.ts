@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { registerConnectTools } from '../../../src/tools/connect.js';
 import { createMockServer, createMockSession, fakeUser } from './helpers.js';
+import { assertDefined } from '../../test-utils.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { SessionManager } from '../../../src/session/session-manager.js';
 
@@ -21,7 +22,8 @@ describe('connect tools', () => {
 
   describe('wp_connect', () => {
     it('returns success message on connect', async () => {
-      const tool = server.registeredTools.get('wp_connect')!;
+      const tool = server.registeredTools.get('wp_connect');
+      assertDefined(tool);
       const result = await tool.handler({
         siteUrl: 'https://example.com',
         username: 'gary',
@@ -39,7 +41,8 @@ describe('connect tools', () => {
         new Error('Invalid credentials'),
       );
 
-      const tool = server.registeredTools.get('wp_connect')!;
+      const tool = server.registeredTools.get('wp_connect');
+      assertDefined(tool);
       const result = await tool.handler({
         siteUrl: 'https://example.com',
         username: 'bad',
@@ -56,7 +59,8 @@ describe('connect tools', () => {
       const connectedServer = createMockServer();
       registerConnectTools(connectedServer as unknown as McpServer, connectedSession);
 
-      const tool = connectedServer.registeredTools.get('wp_connect')!;
+      const tool = connectedServer.registeredTools.get('wp_connect');
+      assertDefined(tool);
       const result = await tool.handler({
         siteUrl: 'https://other.com',
         username: 'other',
@@ -74,7 +78,8 @@ describe('connect tools', () => {
       const editingServer = createMockServer();
       registerConnectTools(editingServer as unknown as McpServer, editingSession);
 
-      const tool = editingServer.registeredTools.get('wp_connect')!;
+      const tool = editingServer.registeredTools.get('wp_connect');
+      assertDefined(tool);
       const result = await tool.handler({
         siteUrl: 'https://other.com',
         username: 'other',
@@ -90,7 +95,8 @@ describe('connect tools', () => {
 
   describe('wp_disconnect', () => {
     it('calls session.disconnect and returns confirmation', async () => {
-      const tool = server.registeredTools.get('wp_disconnect')!;
+      const tool = server.registeredTools.get('wp_disconnect');
+      assertDefined(tool);
       const result = await tool.handler({});
 
       expect(session.disconnect).toHaveBeenCalled();

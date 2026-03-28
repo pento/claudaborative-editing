@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createMockServer, createMockSession, fakePost } from './helpers.js';
 import { registerAuthoringPrompts } from '../../../src/prompts/authoring.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { assertDefined } from '../../test-utils.js';
 
 describe('draft', () => {
   describe('when disconnected', () => {
@@ -10,7 +11,8 @@ describe('draft', () => {
       const session = createMockSession({ state: 'disconnected' });
       registerAuthoringPrompts(server as unknown as McpServer, session);
 
-      const prompt = server.registeredPrompts.get('draft')!;
+      const prompt = server.registeredPrompts.get('draft');
+      assertDefined(prompt);
       const result = await prompt.handler({ topic: 'Test topic' });
 
       expect(result.messages[0].content.text).toContain('wp_connect');
@@ -23,7 +25,8 @@ describe('draft', () => {
       const session = createMockSession({ state: 'connected' });
       registerAuthoringPrompts(server as unknown as McpServer, session);
 
-      const prompt = server.registeredPrompts.get('draft')!;
+      const prompt = server.registeredPrompts.get('draft');
+      assertDefined(prompt);
       const result = await prompt.handler({ topic: '' });
 
       expect(result.messages[0].content.text).toContain('Ask me what topic');
@@ -36,7 +39,8 @@ describe('draft', () => {
       const session = createMockSession({ state: 'connected' });
       registerAuthoringPrompts(server as unknown as McpServer, session);
 
-      const prompt = server.registeredPrompts.get('draft')!;
+      const prompt = server.registeredPrompts.get('draft');
+      assertDefined(prompt);
       const result = await prompt.handler({ topic: 'AI in healthcare' });
 
       expect(result.messages[0].content.text).toContain('AI in healthcare');
@@ -49,7 +53,8 @@ describe('draft', () => {
       const session = createMockSession({ state: 'connected' });
       registerAuthoringPrompts(server as unknown as McpServer, session);
 
-      const prompt = server.registeredPrompts.get('draft')!;
+      const prompt = server.registeredPrompts.get('draft');
+      assertDefined(prompt);
       const result = await prompt.handler({ topic: 'Test', tone: 'professional' });
 
       expect(result.messages[0].content.text).toContain('professional');
@@ -60,7 +65,8 @@ describe('draft', () => {
       const session = createMockSession({ state: 'connected' });
       registerAuthoringPrompts(server as unknown as McpServer, session);
 
-      const prompt = server.registeredPrompts.get('draft')!;
+      const prompt = server.registeredPrompts.get('draft');
+      assertDefined(prompt);
       const result = await prompt.handler({ topic: 'Test', audience: 'developers' });
 
       expect(result.messages[0].content.text).toContain('developers');
@@ -71,7 +77,8 @@ describe('draft', () => {
       const session = createMockSession({ state: 'connected' });
       registerAuthoringPrompts(server as unknown as McpServer, session);
 
-      const prompt = server.registeredPrompts.get('draft')!;
+      const prompt = server.registeredPrompts.get('draft');
+      assertDefined(prompt);
       const result = await prompt.handler({ topic: 'Test' });
 
       expect(result.messages[0].content.text).toContain('wp_set_categories');
@@ -86,7 +93,8 @@ describe('draft', () => {
       const session = createMockSession({ state: 'editing', post: fakePost });
       registerAuthoringPrompts(server as unknown as McpServer, session);
 
-      const prompt = server.registeredPrompts.get('draft')!;
+      const prompt = server.registeredPrompts.get('draft');
+      assertDefined(prompt);
       const result = await prompt.handler({ topic: 'New topic' });
 
       expect(result.messages[0].content.text).toContain('wp_close_post');
@@ -101,7 +109,8 @@ describe('translate', () => {
       const session = createMockSession({ state: 'connected' });
       registerAuthoringPrompts(server as unknown as McpServer, session);
 
-      const prompt = server.registeredPrompts.get('translate')!;
+      const prompt = server.registeredPrompts.get('translate');
+      assertDefined(prompt);
       const result = await prompt.handler({ language: '' });
 
       expect(result.messages[0].content.text).toContain('Ask me what language');
@@ -114,7 +123,8 @@ describe('translate', () => {
       const session = createMockSession({ state: 'disconnected' });
       registerAuthoringPrompts(server as unknown as McpServer, session);
 
-      const prompt = server.registeredPrompts.get('translate')!;
+      const prompt = server.registeredPrompts.get('translate');
+      assertDefined(prompt);
       const result = await prompt.handler({ language: 'Spanish' });
 
       expect(result.messages[0].content.text).toContain('wp_connect');
@@ -127,7 +137,8 @@ describe('translate', () => {
       const session = createMockSession({ state: 'connected' });
       registerAuthoringPrompts(server as unknown as McpServer, session);
 
-      const prompt = server.registeredPrompts.get('translate')!;
+      const prompt = server.registeredPrompts.get('translate');
+      assertDefined(prompt);
       const result = await prompt.handler({ language: 'French' });
 
       expect(result.messages[0].content.text).toContain('wp_open_post');
@@ -146,7 +157,8 @@ describe('translate', () => {
       });
       registerAuthoringPrompts(server as unknown as McpServer, session);
 
-      const prompt = server.registeredPrompts.get('translate')!;
+      const prompt = server.registeredPrompts.get('translate');
+      assertDefined(prompt);
       const result = await prompt.handler({ language: 'Japanese' });
 
       expect(result.messages[0].content.text).toContain(postContent);
@@ -165,7 +177,8 @@ describe('translate', () => {
       });
       registerAuthoringPrompts(server as unknown as McpServer, session);
 
-      const prompt = server.registeredPrompts.get('translate')!;
+      const prompt = server.registeredPrompts.get('translate');
+      assertDefined(prompt);
       const result = await prompt.handler({ language: 'Spanish' });
 
       expect(result.messages[0].content.text).toContain('wp_set_excerpt');
@@ -180,7 +193,8 @@ describe('translate', () => {
       });
       registerAuthoringPrompts(server as unknown as McpServer, session);
 
-      const prompt = server.registeredPrompts.get('translate')!;
+      const prompt = server.registeredPrompts.get('translate');
+      assertDefined(prompt);
       const result = await prompt.handler({ language: 'French' });
 
       expect(result.messages[0].content.text).toContain('Do NOT add, remove, or reorder blocks');

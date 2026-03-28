@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { createMockServer, createMockSession, fakePost, fakeNote } from './helpers.js';
 import { registerReviewPrompts } from '../../../src/prompts/review.js';
+import { assertDefined } from '../../test-utils.js';
 
 describe('review', () => {
   describe('when disconnected', () => {
@@ -9,7 +10,8 @@ describe('review', () => {
       const session = createMockSession({ state: 'disconnected' });
       registerReviewPrompts(server, session);
 
-      const prompt = server.registeredPrompts.get('review')!;
+      const prompt = server.registeredPrompts.get('review');
+      assertDefined(prompt);
       const result = await prompt.handler({});
 
       const text = result.messages[0].content.text;
@@ -23,7 +25,8 @@ describe('review', () => {
       const session = createMockSession({ state: 'connected' });
       registerReviewPrompts(server, session);
 
-      const prompt = server.registeredPrompts.get('review')!;
+      const prompt = server.registeredPrompts.get('review');
+      assertDefined(prompt);
       const result = await prompt.handler({});
 
       const text = result.messages[0].content.text;
@@ -37,7 +40,8 @@ describe('review', () => {
       const session = createMockSession({ state: 'editing', post: fakePost });
       registerReviewPrompts(server, session);
 
-      const prompt = server.registeredPrompts.get('review')!;
+      const prompt = server.registeredPrompts.get('review');
+      assertDefined(prompt);
       const result = await prompt.handler({});
 
       const text = result.messages[0].content.text;
@@ -50,10 +54,11 @@ describe('review', () => {
     it('falls back to text summary when notes not supported', async () => {
       const server = createMockServer();
       const session = createMockSession({ state: 'editing', post: fakePost });
-      (session.getNotesSupported as any).mockReturnValue(false);
+      vi.mocked(session.getNotesSupported).mockReturnValue(false);
       registerReviewPrompts(server, session);
 
-      const prompt = server.registeredPrompts.get('review')!;
+      const prompt = server.registeredPrompts.get('review');
+      assertDefined(prompt);
       const result = await prompt.handler({});
 
       const text = result.messages[0].content.text;
@@ -67,7 +72,8 @@ describe('review', () => {
       const session = createMockSession({ state: 'editing', post: fakePost });
       registerReviewPrompts(server, session);
 
-      const prompt = server.registeredPrompts.get('review')!;
+      const prompt = server.registeredPrompts.get('review');
+      assertDefined(prompt);
       const result = await prompt.handler({});
 
       const text = result.messages[0].content.text;
@@ -79,7 +85,8 @@ describe('review', () => {
       const session = createMockSession({ state: 'editing', post: fakePost });
       registerReviewPrompts(server, session);
 
-      const prompt = server.registeredPrompts.get('review')!;
+      const prompt = server.registeredPrompts.get('review');
+      assertDefined(prompt);
       const result = await prompt.handler({});
 
       const text = result.messages[0].content.text;
@@ -95,7 +102,8 @@ describe('respond-to-notes', () => {
       const session = createMockSession({ state: 'disconnected' });
       registerReviewPrompts(server, session);
 
-      const prompt = server.registeredPrompts.get('respond-to-notes')!;
+      const prompt = server.registeredPrompts.get('respond-to-notes');
+      assertDefined(prompt);
       const result = await prompt.handler({});
 
       const text = result.messages[0].content.text;
@@ -109,7 +117,8 @@ describe('respond-to-notes', () => {
       const session = createMockSession({ state: 'connected' });
       registerReviewPrompts(server, session);
 
-      const prompt = server.registeredPrompts.get('respond-to-notes')!;
+      const prompt = server.registeredPrompts.get('respond-to-notes');
+      assertDefined(prompt);
       const result = await prompt.handler({});
 
       const text = result.messages[0].content.text;
@@ -121,10 +130,11 @@ describe('respond-to-notes', () => {
     it('reports notes not supported on older WordPress', async () => {
       const server = createMockServer();
       const session = createMockSession({ state: 'editing', post: fakePost });
-      (session.getNotesSupported as any).mockReturnValue(false);
+      vi.mocked(session.getNotesSupported).mockReturnValue(false);
       registerReviewPrompts(server, session);
 
-      const prompt = server.registeredPrompts.get('respond-to-notes')!;
+      const prompt = server.registeredPrompts.get('respond-to-notes');
+      assertDefined(prompt);
       const result = await prompt.handler({});
 
       const text = result.messages[0].content.text;
@@ -136,7 +146,8 @@ describe('respond-to-notes', () => {
       const session = createMockSession({ state: 'editing', post: fakePost });
       registerReviewPrompts(server, session);
 
-      const prompt = server.registeredPrompts.get('respond-to-notes')!;
+      const prompt = server.registeredPrompts.get('respond-to-notes');
+      assertDefined(prompt);
       const result = await prompt.handler({});
 
       const text = result.messages[0].content.text;
@@ -146,13 +157,14 @@ describe('respond-to-notes', () => {
     it('embeds post content and formatted notes', async () => {
       const server = createMockServer();
       const session = createMockSession({ state: 'editing', post: fakePost });
-      (session.listNotes as any).mockResolvedValue({
+      vi.mocked(session.listNotes).mockResolvedValue({
         notes: [fakeNote],
         noteBlockMap: { 1: '0' },
       });
       registerReviewPrompts(server, session);
 
-      const prompt = server.registeredPrompts.get('respond-to-notes')!;
+      const prompt = server.registeredPrompts.get('respond-to-notes');
+      assertDefined(prompt);
       const result = await prompt.handler({});
 
       const text = result.messages[0].content.text;
@@ -176,13 +188,14 @@ describe('respond-to-notes', () => {
       };
       const server = createMockServer();
       const session = createMockSession({ state: 'editing', post: fakePost });
-      (session.listNotes as any).mockResolvedValue({
+      vi.mocked(session.listNotes).mockResolvedValue({
         notes: [fakeNote, replyNote],
         noteBlockMap: { 1: '0' },
       });
       registerReviewPrompts(server, session);
 
-      const prompt = server.registeredPrompts.get('respond-to-notes')!;
+      const prompt = server.registeredPrompts.get('respond-to-notes');
+      assertDefined(prompt);
       const result = await prompt.handler({});
 
       const text = result.messages[0].content.text;

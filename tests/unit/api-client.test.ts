@@ -9,6 +9,7 @@ import type {
   WPTerm,
   WPUser,
 } from '../../src/wordpress/types.js';
+import { assertDefined } from '../test-utils.js';
 
 // Helper to build a mock Response
 function mockResponse(body: unknown, init?: { status?: number; statusText?: string }): Response {
@@ -18,8 +19,12 @@ function mockResponse(body: unknown, init?: { status?: number; statusText?: stri
     ok: status >= 200 && status < 300,
     status,
     statusText,
-    json: async () => body,
-    text: async () => JSON.stringify(body),
+    json() {
+      return body;
+    },
+    text() {
+      return JSON.stringify(body);
+    },
     headers: new Headers(),
   } as unknown as Response;
 }
@@ -71,7 +76,7 @@ describe('WordPressApiClient', () => {
     it('strips trailing slashes from siteUrl', () => {
       fetchMock.mockResolvedValue(mockResponse(fakeUser));
       const client = createClient('https://example.com///');
-      client.getCurrentUser();
+      void client.getCurrentUser();
       expect(fetchMock).toHaveBeenCalledWith(
         'https://example.com/wp-json/wp/v2/users/me',
         expect.anything(),
@@ -81,7 +86,7 @@ describe('WordPressApiClient', () => {
     it('builds correct Basic auth header', () => {
       fetchMock.mockResolvedValue(mockResponse(fakeUser));
       const client = createClient();
-      client.getCurrentUser();
+      void client.getCurrentUser();
 
       const expectedAuth = `Basic ${btoa('admin:xxxx yyyy zzzz')}`;
       const callOptions = fetchMock.mock.calls[0][1] as RequestInit;
@@ -576,7 +581,10 @@ describe('WordPressApiClient', () => {
         placeholder: { type: 'string' },
       });
       expect(result[1].name).toBe('core/image');
-      expect(result[1].attributes!.caption).toEqual({ type: 'rich-text', source: 'rich-text' });
+      const imageBlock = result[1];
+      assertDefined(imageBlock);
+      assertDefined(imageBlock.attributes);
+      expect(imageBlock.attributes.caption).toEqual({ type: 'rich-text', source: 'rich-text' });
       expect(result[2].name).toBe('core/separator');
       expect(result[2].attributes).toBeNull();
     });
@@ -716,7 +724,12 @@ describe('WordPressApiClient', () => {
         const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
         expect(url).toBe('https://example.com/wp-json/wp/v2/comments');
         expect(options.method).toBe('POST');
-        const body = JSON.parse(options.body as string);
+        const body = JSON.parse(options.body as string) as {
+          post: number;
+          content: string;
+          type: string;
+          parent?: number;
+        };
         expect(body.post).toBe(42);
         expect(body.content).toBe('A note');
         expect(body.type).toBe('note');
@@ -731,7 +744,7 @@ describe('WordPressApiClient', () => {
         const result = await client.createNote({ post: 42, content: 'A reply', parent: 10 });
 
         const options = fetchMock.mock.calls[0][1] as RequestInit;
-        const body = JSON.parse(options.body as string);
+        const body = JSON.parse(options.body as string) as { parent: number; type: string };
         expect(body.parent).toBe(10);
         expect(body.type).toBe('note');
         expect(result).toEqual(replyNote);
@@ -743,7 +756,7 @@ describe('WordPressApiClient', () => {
         await client.createNote({ post: 42, content: 'No parent' });
 
         const options = fetchMock.mock.calls[0][1] as RequestInit;
-        const body = JSON.parse(options.body as string);
+        const body = JSON.parse(options.body as string) as Record<string, unknown>;
         expect(body).not.toHaveProperty('parent');
       });
     });
@@ -761,7 +774,7 @@ describe('WordPressApiClient', () => {
         const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
         expect(url).toBe('https://example.com/wp-json/wp/v2/comments/10');
         expect(options.method).toBe('POST');
-        const body = JSON.parse(options.body as string);
+        const body = JSON.parse(options.body as string) as { content: string };
         expect(body.content).toBe('Updated');
         expect(result).toEqual(updatedNote);
       });

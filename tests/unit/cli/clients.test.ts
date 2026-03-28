@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { assertDefined } from '../../test-utils.js';
 
 vi.mock('child_process', () => ({
   execSync: vi.fn(),
@@ -183,7 +184,9 @@ describe('clients registry', () => {
       execSyncMock.mockReturnValue(Buffer.from('/usr/local/bin/claude'));
       execFileSyncMock.mockReturnValue(Buffer.from(''));
 
-      const result = await MCP_CLIENTS['claude-code'].useCli!(credentials);
+      const useCli = MCP_CLIENTS['claude-code'].useCli;
+      assertDefined(useCli);
+      const result = await useCli(credentials);
 
       expect(result).toBe(true);
       // isOnPath uses execSync with `which claude`
@@ -219,7 +222,9 @@ describe('clients registry', () => {
         throw new Error('not found');
       });
 
-      const result = await MCP_CLIENTS['claude-code'].useCli!(credentials);
+      const useCli = MCP_CLIENTS['claude-code'].useCli;
+      assertDefined(useCli);
+      const result = await useCli(credentials);
 
       expect(result).toBe(false);
     });
@@ -232,7 +237,9 @@ describe('clients registry', () => {
         throw new Error('command failed');
       });
 
-      const result = await MCP_CLIENTS['claude-code'].useCli!(credentials);
+      const useCli = MCP_CLIENTS['claude-code'].useCli;
+      assertDefined(useCli);
+      const result = await useCli(credentials);
 
       expect(result).toBe(false);
     });
@@ -242,7 +249,9 @@ describe('clients registry', () => {
     it('runs claude mcp remove with the server name', async () => {
       execFileSyncMock.mockReturnValue(Buffer.from(''));
 
-      const result = await MCP_CLIENTS['claude-code'].removeCli!();
+      const removeCli = MCP_CLIENTS['claude-code'].removeCli;
+      assertDefined(removeCli);
+      const result = await removeCli();
 
       expect(result).toBe(true);
       expect(execFileSyncMock).toHaveBeenCalledWith(
@@ -257,7 +266,9 @@ describe('clients registry', () => {
         throw new Error('command failed');
       });
 
-      const result = await MCP_CLIENTS['claude-code'].removeCli!();
+      const removeCli = MCP_CLIENTS['claude-code'].removeCli;
+      assertDefined(removeCli);
+      const result = await removeCli();
 
       expect(result).toBe(false);
     });
@@ -273,7 +284,7 @@ describe('clients registry', () => {
       const clients = detectInstalledClients();
 
       expect(clients).toHaveLength(6);
-      const types = clients.map((c: any) => c.type);
+      const types = clients.map((c) => c.type);
       expect(types).toContain('claude-code');
       expect(types).toContain('claude-desktop');
       expect(types).toContain('vscode');
@@ -287,9 +298,9 @@ describe('clients registry', () => {
       execSyncMock.mockReturnValue(Buffer.from('/usr/local/bin/claude'));
 
       const clients = detectInstalledClients();
-      const claudeCode = clients.find((c: any) => c.type === 'claude-code');
-
-      expect(claudeCode!.detected).toBe(true);
+      const claudeCode = clients.find((c) => c.type === 'claude-code');
+      assertDefined(claudeCode);
+      expect(claudeCode.detected).toBe(true);
     });
 
     it('marks undetected clients correctly', () => {

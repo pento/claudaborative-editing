@@ -29,9 +29,9 @@ export function registerEditTools(server: McpServer, session: SessionManager): v
           .describe('Attributes to update (key-value pairs)'),
       },
     },
-    async ({ index, content, attributes }) => {
+    ({ index, content, attributes }) => {
       try {
-        await session.updateBlock(index, { content, attributes });
+        session.updateBlock(index, { content, attributes });
         return {
           content: [{ type: 'text' as const, text: `Updated block ${index}.` }],
         };
@@ -65,9 +65,9 @@ export function registerEditTools(server: McpServer, session: SessionManager): v
           .describe('Nested child blocks (e.g., list-items inside a list)'),
       },
     },
-    async ({ position, name, content, attributes, innerBlocks }) => {
+    ({ position, name, content, attributes, innerBlocks }) => {
       try {
-        await session.insertBlock(position, { name, content, attributes, innerBlocks });
+        session.insertBlock(position, { name, content, attributes, innerBlocks });
         return {
           content: [
             { type: 'text' as const, text: `Inserted ${name} block at position ${position}.` },
@@ -103,9 +103,9 @@ export function registerEditTools(server: McpServer, session: SessionManager): v
         innerBlocks: z.array(blockInputSchema).optional().describe('Nested child blocks'),
       },
     },
-    async ({ parentIndex, position, name, content, attributes, innerBlocks }) => {
+    ({ parentIndex, position, name, content, attributes, innerBlocks }) => {
       try {
-        await session.insertInnerBlock(parentIndex, position, {
+        session.insertInnerBlock(parentIndex, position, {
           name,
           content,
           attributes,
@@ -142,7 +142,7 @@ export function registerEditTools(server: McpServer, session: SessionManager): v
         count: z.number().optional().describe('Number of blocks to remove (default 1)'),
       },
     },
-    async ({ startIndex, count }) => {
+    ({ startIndex, count }) => {
       try {
         const removeCount = count ?? 1;
         session.removeBlocks(startIndex, removeCount);
@@ -178,7 +178,7 @@ export function registerEditTools(server: McpServer, session: SessionManager): v
         count: z.number().optional().describe('Number of inner blocks to remove (default 1)'),
       },
     },
-    async ({ parentIndex, startIndex, count }) => {
+    ({ parentIndex, startIndex, count }) => {
       try {
         const removeCount = count ?? 1;
         session.removeInnerBlocks(parentIndex, startIndex, removeCount);
@@ -213,7 +213,7 @@ export function registerEditTools(server: McpServer, session: SessionManager): v
         toIndex: z.number().describe('Target position for the block'),
       },
     },
-    async ({ fromIndex, toIndex }) => {
+    ({ fromIndex, toIndex }) => {
       try {
         session.moveBlock(fromIndex, toIndex);
         return {
@@ -251,9 +251,9 @@ export function registerEditTools(server: McpServer, session: SessionManager): v
           .describe('New blocks to insert in place of the removed ones'),
       },
     },
-    async ({ startIndex, count, blocks }) => {
+    ({ startIndex, count, blocks }) => {
       try {
-        await session.replaceBlocks(startIndex, count, blocks);
+        session.replaceBlocks(startIndex, count, blocks);
         return {
           content: [
             {
@@ -318,7 +318,7 @@ export function registerEditTools(server: McpServer, session: SessionManager): v
           .describe('List of find-and-replace operations applied sequentially'),
       },
     },
-    async ({ index, attribute, edits }) => {
+    ({ index, attribute, edits }) => {
       try {
         const result = session.editBlockText(index, edits, attribute);
 
@@ -367,9 +367,9 @@ export function registerEditTools(server: McpServer, session: SessionManager): v
         title: z.string().describe('New post title'),
       },
     },
-    async ({ title }) => {
+    ({ title }) => {
       try {
-        await session.setTitle(title);
+        session.setTitle(title);
         return {
           content: [{ type: 'text' as const, text: `Title set to "${title}".` }],
         };

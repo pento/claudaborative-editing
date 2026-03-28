@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { registerBlockTypeTools } from '../../../src/tools/block-types.js';
 import { createMockServer, createMockSession } from './helpers.js';
+import { assertDefined } from '../../test-utils.js';
 import { BlockTypeRegistry } from '../../../src/yjs/block-type-registry.js';
 import type { WPBlockType } from '../../../src/wordpress/types.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -13,7 +14,7 @@ import type { SessionManager } from '../../../src/session/session-manager.js';
 function createSessionWithRegistry(blockTypes: WPBlockType[]) {
   const registry = BlockTypeRegistry.fromApiResponse(blockTypes);
   const session = createMockSession({ state: 'connected' });
-  (session as any).getRegistry = vi.fn().mockReturnValue(registry);
+  Object.assign(session, { getRegistry: vi.fn().mockReturnValue(registry) });
   return session;
 }
 
@@ -24,7 +25,7 @@ function createSessionWithRegistry(blockTypes: WPBlockType[]) {
 function createSessionWithFallbackRegistry() {
   const registry = BlockTypeRegistry.createFallback();
   const session = createMockSession({ state: 'connected' });
-  (session as any).getRegistry = vi.fn().mockReturnValue(registry);
+  Object.assign(session, { getRegistry: vi.fn().mockReturnValue(registry) });
   return session;
 }
 
@@ -81,7 +82,8 @@ describe('block-types tool', () => {
 
   describe('exact name lookup', () => {
     it('returns full block type info for exact name', async () => {
-      const tool = server.registeredTools.get('wp_block_types')!;
+      const tool = server.registeredTools.get('wp_block_types');
+      assertDefined(tool);
       const result = await tool.handler({ name: 'core/pullquote' });
 
       expect(result.isError).toBeUndefined();
@@ -94,7 +96,8 @@ describe('block-types tool', () => {
     });
 
     it('returns error for unknown block type', async () => {
-      const tool = server.registeredTools.get('wp_block_types')!;
+      const tool = server.registeredTools.get('wp_block_types');
+      assertDefined(tool);
       const result = await tool.handler({ name: 'core/unknown' });
 
       expect(result.isError).toBe(true);
@@ -105,7 +108,8 @@ describe('block-types tool', () => {
 
   describe('search', () => {
     it('searches block types by name', async () => {
-      const tool = server.registeredTools.get('wp_block_types')!;
+      const tool = server.registeredTools.get('wp_block_types');
+      assertDefined(tool);
       const result = await tool.handler({ search: 'quote' });
 
       expect(result.isError).toBeUndefined();
@@ -115,7 +119,8 @@ describe('block-types tool', () => {
     });
 
     it('searches block types by title', async () => {
-      const tool = server.registeredTools.get('wp_block_types')!;
+      const tool = server.registeredTools.get('wp_block_types');
+      assertDefined(tool);
       const result = await tool.handler({ search: 'Pullquote' });
 
       expect(result.isError).toBeUndefined();
@@ -124,7 +129,8 @@ describe('block-types tool', () => {
     });
 
     it('returns message for no matches', async () => {
-      const tool = server.registeredTools.get('wp_block_types')!;
+      const tool = server.registeredTools.get('wp_block_types');
+      assertDefined(tool);
       const result = await tool.handler({ search: 'zzzzz' });
 
       expect(result.isError).toBeUndefined();
@@ -134,7 +140,8 @@ describe('block-types tool', () => {
 
   describe('list all', () => {
     it('lists all block types when no arguments given', async () => {
-      const tool = server.registeredTools.get('wp_block_types')!;
+      const tool = server.registeredTools.get('wp_block_types');
+      assertDefined(tool);
       const result = await tool.handler({});
 
       expect(result.isError).toBeUndefined();
@@ -153,7 +160,8 @@ describe('block-types tool', () => {
       session = createSessionWithFallbackRegistry();
       registerBlockTypeTools(server as unknown as McpServer, session);
 
-      const tool = server.registeredTools.get('wp_block_types')!;
+      const tool = server.registeredTools.get('wp_block_types');
+      assertDefined(tool);
       const result = await tool.handler({});
 
       expect(result.isError).toBeUndefined();
@@ -165,10 +173,11 @@ describe('block-types tool', () => {
       server = createMockServer();
       const registry = BlockTypeRegistry.createFallback();
       session = createMockSession({ state: 'disconnected' });
-      (session as any).getRegistry = vi.fn().mockReturnValue(registry);
+      Object.assign(session, { getRegistry: vi.fn().mockReturnValue(registry) });
       registerBlockTypeTools(server as unknown as McpServer, session);
 
-      const tool = server.registeredTools.get('wp_block_types')!;
+      const tool = server.registeredTools.get('wp_block_types');
+      assertDefined(tool);
       const result = await tool.handler({});
 
       expect(result.isError).toBeUndefined();
@@ -196,7 +205,8 @@ describe('block-types tool', () => {
       ]);
       registerBlockTypeTools(server as unknown as McpServer, session);
 
-      const tool = server.registeredTools.get('wp_block_types')!;
+      const tool = server.registeredTools.get('wp_block_types');
+      assertDefined(tool);
 
       const columnResult = await tool.handler({ name: 'core/column' });
       expect(columnResult.content[0].text).toContain('Parent: core/columns');
@@ -206,7 +216,8 @@ describe('block-types tool', () => {
     });
 
     it('shows default values', async () => {
-      const tool = server.registeredTools.get('wp_block_types')!;
+      const tool = server.registeredTools.get('wp_block_types');
+      assertDefined(tool);
       const result = await tool.handler({ name: 'core/paragraph' });
 
       const text = result.content[0].text;
@@ -227,7 +238,8 @@ describe('block-types tool', () => {
       ]);
       registerBlockTypeTools(server as unknown as McpServer, session);
 
-      const tool = server.registeredTools.get('wp_block_types')!;
+      const tool = server.registeredTools.get('wp_block_types');
+      assertDefined(tool);
       const result = await tool.handler({ name: 'core/quote' });
 
       expect(result.content[0].text).toContain('Supports InnerBlocks: yes');

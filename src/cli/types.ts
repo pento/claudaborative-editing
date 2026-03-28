@@ -20,9 +20,9 @@ export interface McpClientConfig {
   /** Check if this client appears to be installed */
   detectInstall: () => boolean;
   /** Optional: use CLI tool instead of direct file writing (e.g., Claude Code's `claude mcp add`) */
-  useCli?: (credentials: WpCredentials) => Promise<boolean>;
+  useCli?: (credentials: WpCredentials) => boolean | Promise<boolean>;
   /** Optional: use CLI tool for removal */
-  removeCli?: () => Promise<boolean>;
+  removeCli?: () => boolean | Promise<boolean>;
 }
 
 export interface WpCredentials {

@@ -66,7 +66,7 @@ export function yMapToBlock(ymap: Y.Map<unknown>): Block {
   if (attrMap) {
     for (const [key, value] of attrMap.entries()) {
       if (value instanceof Y.Text) {
-        attributes[key] = value.toString();
+        attributes[key] = value.toJSON();
       } else {
         attributes[key] = value;
       }
@@ -157,7 +157,7 @@ export function computeTextDelta(oldValue: string, newValue: string): TextDelta 
  * remote items in Y.Text.
  */
 export function deltaUpdateYText(ytext: Y.Text, newValue: string): void {
-  const oldValue = ytext.toString();
+  const oldValue = ytext.toJSON();
   const delta = computeTextDelta(oldValue, newValue);
   if (!delta) return;
 

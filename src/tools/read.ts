@@ -6,7 +6,7 @@ export function registerReadTools(server: McpServer, session: SessionManager): v
   server.registerTool(
     'wp_read_post',
     { description: 'Read the current post content as a block listing' },
-    async () => {
+    () => {
       try {
         const content = session.readPost();
         return {
@@ -35,7 +35,7 @@ export function registerReadTools(server: McpServer, session: SessionManager): v
         index: z.string().describe('Block index (e.g., "0", "2.1" for nested blocks)'),
       },
     },
-    async ({ index }) => {
+    ({ index }) => {
       try {
         const content = session.readBlock(index);
         return {

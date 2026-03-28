@@ -45,7 +45,7 @@ export function registerReviewPrompts(server: McpServer, session: SessionManager
       description:
         'Review a WordPress post and leave editorial feedback as notes on individual blocks.',
     },
-    async () => {
+    () => {
       const state = session.getState();
 
       if (state === 'disconnected') {

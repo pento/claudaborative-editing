@@ -7,6 +7,7 @@ import {
   fakePost,
   fakeCollaborator,
 } from './helpers.js';
+import { assertDefined } from '../../test-utils.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 describe('status tools', () => {
@@ -30,7 +31,8 @@ describe('status tools', () => {
       const session = createMockSession({ state: 'disconnected' });
       registerStatusTools(server as unknown as McpServer, session);
 
-      const tool = server.registeredTools.get('wp_status')!;
+      const tool = server.registeredTools.get('wp_status');
+      assertDefined(tool);
       const result = await tool.handler({});
 
       expect(result.content[0].text).toContain('Connection: disconnected');
@@ -44,7 +46,8 @@ describe('status tools', () => {
       });
       registerStatusTools(server as unknown as McpServer, session);
 
-      const tool = server.registeredTools.get('wp_status')!;
+      const tool = server.registeredTools.get('wp_status');
+      assertDefined(tool);
       const result = await tool.handler({});
 
       expect(result.content[0].text).toContain('Connection: connected');
@@ -62,7 +65,8 @@ describe('status tools', () => {
       });
       registerStatusTools(server as unknown as McpServer, session);
 
-      const tool = server.registeredTools.get('wp_status')!;
+      const tool = server.registeredTools.get('wp_status');
+      assertDefined(tool);
       const result = await tool.handler({});
       const text = result.content[0].text;
 
@@ -89,7 +93,8 @@ describe('status tools', () => {
       );
       registerStatusTools(server as unknown as McpServer, session);
 
-      const tool = server.registeredTools.get('wp_status')!;
+      const tool = server.registeredTools.get('wp_status');
+      assertDefined(tool);
       const result = await tool.handler({});
       const text = result.content[0].text;
 
@@ -109,7 +114,8 @@ describe('status tools', () => {
       });
       registerStatusTools(server as unknown as McpServer, session);
 
-      const tool = server.registeredTools.get('wp_collaborators')!;
+      const tool = server.registeredTools.get('wp_collaborators');
+      assertDefined(tool);
       const result = await tool.handler({});
       const text = result.content[0].text;
 
@@ -127,7 +133,8 @@ describe('status tools', () => {
       });
       registerStatusTools(server as unknown as McpServer, session);
 
-      const tool = server.registeredTools.get('wp_collaborators')!;
+      const tool = server.registeredTools.get('wp_collaborators');
+      assertDefined(tool);
       const result = await tool.handler({});
 
       expect(result.content[0].text).toContain('No collaborators detected');
@@ -146,7 +153,8 @@ describe('status tools', () => {
       );
       registerStatusTools(server as unknown as McpServer, session);
 
-      const tool = server.registeredTools.get('wp_collaborators')!;
+      const tool = server.registeredTools.get('wp_collaborators');
+      assertDefined(tool);
       const result = await tool.handler({});
 
       expect(result.isError).toBe(true);
@@ -160,7 +168,8 @@ describe('status tools', () => {
       });
       registerStatusTools(server as unknown as McpServer, session);
 
-      const tool = server.registeredTools.get('wp_collaborators')!;
+      const tool = server.registeredTools.get('wp_collaborators');
+      assertDefined(tool);
       const result = await tool.handler({});
 
       expect(result.isError).toBe(true);
@@ -177,7 +186,8 @@ describe('status tools', () => {
       });
       registerStatusTools(server as unknown as McpServer, session);
 
-      const tool = server.registeredTools.get('wp_save')!;
+      const tool = server.registeredTools.get('wp_save');
+      assertDefined(tool);
       const result = await tool.handler({});
 
       expect(session.save).toHaveBeenCalled();
@@ -195,7 +205,8 @@ describe('status tools', () => {
       );
       registerStatusTools(server as unknown as McpServer, session);
 
-      const tool = server.registeredTools.get('wp_save')!;
+      const tool = server.registeredTools.get('wp_save');
+      assertDefined(tool);
       const result = await tool.handler({});
 
       expect(result.content[0].text).toContain('Post "Updated Title" saved.');
@@ -209,7 +220,8 @@ describe('status tools', () => {
       });
       registerStatusTools(server as unknown as McpServer, session);
 
-      const tool = server.registeredTools.get('wp_save')!;
+      const tool = server.registeredTools.get('wp_save');
+      assertDefined(tool);
       const result = await tool.handler({});
 
       expect(result.isError).toBe(true);

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { BlockTypeRegistry } from '#yjs/block-type-registry';
 import type { WPBlockType } from '#wordpress/types';
+import { assertDefined } from '../test-utils.js';
 
 describe('BlockTypeRegistry', () => {
   describe('createFallback()', () => {
@@ -234,7 +235,8 @@ describe('BlockTypeRegistry', () => {
       const reg = BlockTypeRegistry.fromApiResponse([{ name: 'core/nextpage', attributes: null }]);
       const names = reg.getAttributeNames('core/nextpage');
       expect(names).toBeInstanceOf(Set);
-      expect(names!.size).toBe(0);
+      assertDefined(names);
+      expect(names.size).toBe(0);
     });
   });
 
@@ -320,14 +322,14 @@ describe('BlockTypeRegistry', () => {
 
     it('returns full info for a known block with attributes and constraints', () => {
       const info = registry.getBlockTypeInfo('core/paragraph');
-      expect(info).not.toBeNull();
-      expect(info!.name).toBe('core/paragraph');
-      expect(info!.title).toBe('Paragraph');
-      expect(info!.parent).toEqual(['core/group']);
-      expect(info!.allowedBlocks).toEqual(['core/inline-image']);
-      expect(info!.ancestor).toBeNull();
-      expect(info!.supportsInnerBlocks).toBe(true);
-      expect(info!.attributes).toEqual([
+      assertDefined(info);
+      expect(info.name).toBe('core/paragraph');
+      expect(info.title).toBe('Paragraph');
+      expect(info.parent).toEqual(['core/group']);
+      expect(info.allowedBlocks).toEqual(['core/inline-image']);
+      expect(info.ancestor).toBeNull();
+      expect(info.supportsInnerBlocks).toBe(true);
+      expect(info.attributes).toEqual([
         { name: 'content', type: 'rich-text', richText: true },
         { name: 'dropCap', type: 'boolean', richText: false, default: false },
       ]);
@@ -338,21 +340,27 @@ describe('BlockTypeRegistry', () => {
     });
 
     it('includes richText flag correctly for non-rich-text attributes', () => {
-      const info = registry.getBlockTypeInfo('core/paragraph')!;
+      const info = registry.getBlockTypeInfo('core/paragraph');
+      assertDefined(info);
       const dropCapAttr = info.attributes.find((a) => a.name === 'dropCap');
-      expect(dropCapAttr!.richText).toBe(false);
+      assertDefined(dropCapAttr);
+      expect(dropCapAttr.richText).toBe(false);
     });
 
     it('includes richText flag correctly for rich-text attributes', () => {
-      const info = registry.getBlockTypeInfo('core/paragraph')!;
+      const info = registry.getBlockTypeInfo('core/paragraph');
+      assertDefined(info);
       const contentAttr = info.attributes.find((a) => a.name === 'content');
-      expect(contentAttr!.richText).toBe(true);
+      assertDefined(contentAttr);
+      expect(contentAttr.richText).toBe(true);
     });
 
     it('omits default field when no default is defined', () => {
-      const info = registry.getBlockTypeInfo('core/paragraph')!;
+      const info = registry.getBlockTypeInfo('core/paragraph');
+      assertDefined(info);
       const contentAttr = info.attributes.find((a) => a.name === 'content');
-      expect('default' in contentAttr!).toBe(false);
+      assertDefined(contentAttr);
+      expect('default' in contentAttr).toBe(false);
     });
   });
 

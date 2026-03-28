@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { registerEditTools } from '../../../src/tools/edit.js';
 import { createMockServer, createMockSession, fakeUser, fakePost } from './helpers.js';
+import { assertDefined } from '../../test-utils.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { SessionManager } from '../../../src/session/session-manager.js';
 
@@ -33,7 +34,8 @@ describe('edit tools', () => {
 
   describe('wp_update_block', () => {
     it('updates block and returns confirmation', async () => {
-      const tool = server.registeredTools.get('wp_update_block')!;
+      const tool = server.registeredTools.get('wp_update_block');
+      assertDefined(tool);
       const result = await tool.handler({
         index: '0',
         content: 'New content',
@@ -47,7 +49,8 @@ describe('edit tools', () => {
     });
 
     it('passes attributes to updateBlock', async () => {
-      const tool = server.registeredTools.get('wp_update_block')!;
+      const tool = server.registeredTools.get('wp_update_block');
+      assertDefined(tool);
       await tool.handler({
         index: '1',
         attributes: { level: 3 },
@@ -60,11 +63,12 @@ describe('edit tools', () => {
     });
 
     it('returns error when not editing', async () => {
-      (session.updateBlock as ReturnType<typeof import('vitest').vi.fn>).mockRejectedValue(
-        new Error("Operation requires state editing, but current state is 'connected'"),
-      );
+      (session.updateBlock as ReturnType<typeof import('vitest').vi.fn>).mockImplementation(() => {
+        throw new Error("Operation requires state editing, but current state is 'connected'");
+      });
 
-      const tool = server.registeredTools.get('wp_update_block')!;
+      const tool = server.registeredTools.get('wp_update_block');
+      assertDefined(tool);
       const result = await tool.handler({ index: '0', content: 'test' });
 
       expect(result.isError).toBe(true);
@@ -74,7 +78,8 @@ describe('edit tools', () => {
 
   describe('wp_edit_block_text', () => {
     it('calls editBlockText and returns success message', async () => {
-      const tool = server.registeredTools.get('wp_edit_block_text')!;
+      const tool = server.registeredTools.get('wp_edit_block_text');
+      assertDefined(tool);
       const result = await tool.handler({
         index: '0',
         edits: [{ find: 'old', replace: 'new' }],
@@ -90,7 +95,8 @@ describe('edit tools', () => {
     });
 
     it('passes attribute parameter through', async () => {
-      const tool = server.registeredTools.get('wp_edit_block_text')!;
+      const tool = server.registeredTools.get('wp_edit_block_text');
+      assertDefined(tool);
       await tool.handler({
         index: '2',
         attribute: 'citation',
@@ -105,7 +111,8 @@ describe('edit tools', () => {
     });
 
     it('passes occurrence parameter through', async () => {
-      const tool = server.registeredTools.get('wp_edit_block_text')!;
+      const tool = server.registeredTools.get('wp_edit_block_text');
+      assertDefined(tool);
       await tool.handler({
         index: '0',
         edits: [{ find: 'the', replace: 'a', occurrence: 2 }],
@@ -141,7 +148,8 @@ describe('edit tools', () => {
       const partialServer = createMockServer();
       registerEditTools(partialServer as unknown as McpServer, partialSession);
 
-      const tool = partialServer.registeredTools.get('wp_edit_block_text')!;
+      const tool = partialServer.registeredTools.get('wp_edit_block_text');
+      assertDefined(tool);
       const result = await tool.handler({
         index: '0',
         edits: [
@@ -178,7 +186,8 @@ describe('edit tools', () => {
       const failServer = createMockServer();
       registerEditTools(failServer as unknown as McpServer, failSession);
 
-      const tool = failServer.registeredTools.get('wp_edit_block_text')!;
+      const tool = failServer.registeredTools.get('wp_edit_block_text');
+      assertDefined(tool);
       const result = await tool.handler({
         index: '0',
         edits: [{ find: 'missing', replace: 'found' }],
@@ -195,7 +204,8 @@ describe('edit tools', () => {
         },
       );
 
-      const tool = server.registeredTools.get('wp_edit_block_text')!;
+      const tool = server.registeredTools.get('wp_edit_block_text');
+      assertDefined(tool);
       const result = await tool.handler({
         index: '999',
         edits: [{ find: 'test', replace: 'test2' }],
@@ -207,7 +217,8 @@ describe('edit tools', () => {
     });
 
     it('includes updated block content in response', async () => {
-      const tool = server.registeredTools.get('wp_edit_block_text')!;
+      const tool = server.registeredTools.get('wp_edit_block_text');
+      assertDefined(tool);
       const result = await tool.handler({
         index: '0',
         edits: [{ find: 'old', replace: 'new' }],
@@ -236,7 +247,8 @@ describe('edit tools', () => {
       const multiServer = createMockServer();
       registerEditTools(multiServer as unknown as McpServer, multiSession);
 
-      const tool = multiServer.registeredTools.get('wp_edit_block_text')!;
+      const tool = multiServer.registeredTools.get('wp_edit_block_text');
+      assertDefined(tool);
       const result = await tool.handler({
         index: '0',
         edits: [
@@ -251,7 +263,8 @@ describe('edit tools', () => {
 
   describe('wp_insert_block', () => {
     it('inserts block and returns confirmation', async () => {
-      const tool = server.registeredTools.get('wp_insert_block')!;
+      const tool = server.registeredTools.get('wp_insert_block');
+      assertDefined(tool);
       const result = await tool.handler({
         position: 1,
         name: 'core/paragraph',
@@ -267,11 +280,12 @@ describe('edit tools', () => {
     });
 
     it('returns error on failure', async () => {
-      (session.insertBlock as ReturnType<typeof import('vitest').vi.fn>).mockRejectedValue(
-        new Error("Operation requires state editing, but current state is 'disconnected'"),
-      );
+      (session.insertBlock as ReturnType<typeof import('vitest').vi.fn>).mockImplementation(() => {
+        throw new Error("Operation requires state editing, but current state is 'disconnected'");
+      });
 
-      const tool = server.registeredTools.get('wp_insert_block')!;
+      const tool = server.registeredTools.get('wp_insert_block');
+      assertDefined(tool);
       const result = await tool.handler({ position: 0, name: 'core/paragraph' });
 
       expect(result.isError).toBe(true);
@@ -280,7 +294,8 @@ describe('edit tools', () => {
 
   describe('wp_remove_blocks', () => {
     it('removes blocks with default count of 1', async () => {
-      const tool = server.registeredTools.get('wp_remove_blocks')!;
+      const tool = server.registeredTools.get('wp_remove_blocks');
+      assertDefined(tool);
       const result = await tool.handler({ startIndex: 2 });
 
       expect(session.removeBlocks).toHaveBeenCalledWith(2, 1);
@@ -288,7 +303,8 @@ describe('edit tools', () => {
     });
 
     it('removes multiple blocks', async () => {
-      const tool = server.registeredTools.get('wp_remove_blocks')!;
+      const tool = server.registeredTools.get('wp_remove_blocks');
+      assertDefined(tool);
       const result = await tool.handler({ startIndex: 0, count: 3 });
 
       expect(session.removeBlocks).toHaveBeenCalledWith(0, 3);
@@ -300,7 +316,8 @@ describe('edit tools', () => {
         throw new Error('Index out of bounds');
       });
 
-      const tool = server.registeredTools.get('wp_remove_blocks')!;
+      const tool = server.registeredTools.get('wp_remove_blocks');
+      assertDefined(tool);
       const result = await tool.handler({ startIndex: 99 });
 
       expect(result.isError).toBe(true);
@@ -310,7 +327,8 @@ describe('edit tools', () => {
 
   describe('wp_move_block', () => {
     it('moves block and returns confirmation', async () => {
-      const tool = server.registeredTools.get('wp_move_block')!;
+      const tool = server.registeredTools.get('wp_move_block');
+      assertDefined(tool);
       const result = await tool.handler({ fromIndex: 0, toIndex: 3 });
 
       expect(session.moveBlock).toHaveBeenCalledWith(0, 3);
@@ -322,7 +340,8 @@ describe('edit tools', () => {
         throw new Error('Index out of bounds');
       });
 
-      const tool = server.registeredTools.get('wp_move_block')!;
+      const tool = server.registeredTools.get('wp_move_block');
+      assertDefined(tool);
       const result = await tool.handler({ fromIndex: 99, toIndex: 0 });
 
       expect(result.isError).toBe(true);
@@ -332,7 +351,8 @@ describe('edit tools', () => {
 
   describe('wp_replace_blocks', () => {
     it('replaces blocks and returns confirmation', async () => {
-      const tool = server.registeredTools.get('wp_replace_blocks')!;
+      const tool = server.registeredTools.get('wp_replace_blocks');
+      assertDefined(tool);
       const result = await tool.handler({
         startIndex: 1,
         count: 2,
@@ -350,11 +370,14 @@ describe('edit tools', () => {
     });
 
     it('returns error on failure', async () => {
-      (session.replaceBlocks as ReturnType<typeof import('vitest').vi.fn>).mockRejectedValue(
-        new Error('Index out of bounds'),
+      (session.replaceBlocks as ReturnType<typeof import('vitest').vi.fn>).mockImplementation(
+        () => {
+          throw new Error('Index out of bounds');
+        },
       );
 
-      const tool = server.registeredTools.get('wp_replace_blocks')!;
+      const tool = server.registeredTools.get('wp_replace_blocks');
+      assertDefined(tool);
       const result = await tool.handler({
         startIndex: 99,
         count: 1,
@@ -368,7 +391,8 @@ describe('edit tools', () => {
 
   describe('wp_insert_block with innerBlocks', () => {
     it('passes innerBlocks through to session.insertBlock', async () => {
-      const tool = server.registeredTools.get('wp_insert_block')!;
+      const tool = server.registeredTools.get('wp_insert_block');
+      assertDefined(tool);
       const result = await tool.handler({
         position: 0,
         name: 'core/list',
@@ -393,7 +417,8 @@ describe('edit tools', () => {
 
   describe('wp_insert_inner_block', () => {
     it('calls session.insertInnerBlock with correct args', async () => {
-      const tool = server.registeredTools.get('wp_insert_inner_block')!;
+      const tool = server.registeredTools.get('wp_insert_inner_block');
+      assertDefined(tool);
       const result = await tool.handler({
         parentIndex: '0',
         position: 1,
@@ -411,11 +436,14 @@ describe('edit tools', () => {
     });
 
     it('returns error on failure', async () => {
-      (session.insertInnerBlock as ReturnType<typeof import('vitest').vi.fn>).mockRejectedValue(
-        new Error('Block not found at index 99'),
+      (session.insertInnerBlock as ReturnType<typeof import('vitest').vi.fn>).mockImplementation(
+        () => {
+          throw new Error('Block not found at index 99');
+        },
       );
 
-      const tool = server.registeredTools.get('wp_insert_inner_block')!;
+      const tool = server.registeredTools.get('wp_insert_inner_block');
+      assertDefined(tool);
       const result = await tool.handler({
         parentIndex: '99',
         position: 0,
@@ -429,7 +457,8 @@ describe('edit tools', () => {
 
   describe('wp_remove_inner_blocks', () => {
     it('calls session.removeInnerBlocks with default count of 1', async () => {
-      const tool = server.registeredTools.get('wp_remove_inner_blocks')!;
+      const tool = server.registeredTools.get('wp_remove_inner_blocks');
+      assertDefined(tool);
       const result = await tool.handler({
         parentIndex: '0',
         startIndex: 1,
@@ -440,7 +469,8 @@ describe('edit tools', () => {
     });
 
     it('calls session.removeInnerBlocks with explicit count', async () => {
-      const tool = server.registeredTools.get('wp_remove_inner_blocks')!;
+      const tool = server.registeredTools.get('wp_remove_inner_blocks');
+      assertDefined(tool);
       const result = await tool.handler({
         parentIndex: '2',
         startIndex: 0,
@@ -458,7 +488,8 @@ describe('edit tools', () => {
         },
       );
 
-      const tool = server.registeredTools.get('wp_remove_inner_blocks')!;
+      const tool = server.registeredTools.get('wp_remove_inner_blocks');
+      assertDefined(tool);
       const result = await tool.handler({
         parentIndex: '0',
         startIndex: 0,
@@ -471,7 +502,8 @@ describe('edit tools', () => {
 
   describe('wp_replace_blocks with innerBlocks', () => {
     it('passes innerBlocks through to session.replaceBlocks', async () => {
-      const tool = server.registeredTools.get('wp_replace_blocks')!;
+      const tool = server.registeredTools.get('wp_replace_blocks');
+      assertDefined(tool);
       const result = await tool.handler({
         startIndex: 0,
         count: 1,
@@ -495,7 +527,8 @@ describe('edit tools', () => {
 
   describe('wp_set_title', () => {
     it('sets title and returns confirmation', async () => {
-      const tool = server.registeredTools.get('wp_set_title')!;
+      const tool = server.registeredTools.get('wp_set_title');
+      assertDefined(tool);
       const result = await tool.handler({ title: 'New Title' });
 
       expect(session.setTitle).toHaveBeenCalledWith('New Title');
@@ -503,11 +536,12 @@ describe('edit tools', () => {
     });
 
     it('returns error when not editing', async () => {
-      (session.setTitle as ReturnType<typeof import('vitest').vi.fn>).mockRejectedValue(
-        new Error("Operation requires state editing, but current state is 'disconnected'"),
-      );
+      (session.setTitle as ReturnType<typeof import('vitest').vi.fn>).mockImplementation(() => {
+        throw new Error("Operation requires state editing, but current state is 'disconnected'");
+      });
 
-      const tool = server.registeredTools.get('wp_set_title')!;
+      const tool = server.registeredTools.get('wp_set_title');
+      assertDefined(tool);
       const result = await tool.handler({ title: 'Test' });
 
       expect(result.isError).toBe(true);

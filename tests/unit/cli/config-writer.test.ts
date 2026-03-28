@@ -13,6 +13,12 @@ import {
   buildServerEntry,
 } from '../../../src/cli/config-writer.js';
 
+interface McpConfig {
+  otherKey?: string;
+  mcpServers?: Record<string, Record<string, unknown>>;
+  [key: string]: unknown;
+}
+
 let tempDir: string;
 
 function freshDir(): string {
@@ -113,7 +119,7 @@ describe('writeJsonConfig', () => {
     writeJsonConfig(filePath, { hello: 'world' }, '  ');
 
     expect(existsSync(filePath)).toBe(true);
-    const parsed = JSON.parse(readFileSync(filePath, 'utf-8'));
+    const parsed = JSON.parse(readFileSync(filePath, 'utf-8')) as McpConfig;
     expect(parsed).toEqual({ hello: 'world' });
   });
 
@@ -160,8 +166,8 @@ describe('addServerToConfig', () => {
 
     addServerToConfig(filePath, 'mcpServers', 'wpce', { command: 'npx', args: ['test'] });
 
-    const config = JSON.parse(readFileSync(filePath, 'utf-8'));
-    expect(config.mcpServers.wpce).toEqual({ command: 'npx', args: ['test'] });
+    const config = JSON.parse(readFileSync(filePath, 'utf-8')) as McpConfig;
+    expect(config.mcpServers?.wpce).toEqual({ command: 'npx', args: ['test'] });
   });
 
   it('preserves existing servers when adding a new one', () => {
@@ -174,9 +180,9 @@ describe('addServerToConfig', () => {
 
     addServerToConfig(filePath, 'mcpServers', 'wpce', { command: 'npx' });
 
-    const config = JSON.parse(readFileSync(filePath, 'utf-8'));
-    expect(config.mcpServers.existing).toEqual({ command: 'other' });
-    expect(config.mcpServers.wpce).toEqual({ command: 'npx' });
+    const config = JSON.parse(readFileSync(filePath, 'utf-8')) as McpConfig;
+    expect(config.mcpServers?.existing).toEqual({ command: 'other' });
+    expect(config.mcpServers?.wpce).toEqual({ command: 'npx' });
   });
 
   it('creates the configKey object if missing', () => {
@@ -186,9 +192,9 @@ describe('addServerToConfig', () => {
 
     addServerToConfig(filePath, 'mcpServers', 'wpce', { command: 'npx' });
 
-    const config = JSON.parse(readFileSync(filePath, 'utf-8'));
+    const config = JSON.parse(readFileSync(filePath, 'utf-8')) as McpConfig;
     expect(config.otherKey).toBe('value');
-    expect(config.mcpServers.wpce).toEqual({ command: 'npx' });
+    expect(config.mcpServers?.wpce).toEqual({ command: 'npx' });
   });
 
   it('overwrites an existing server entry with the same name', () => {
@@ -201,8 +207,8 @@ describe('addServerToConfig', () => {
 
     addServerToConfig(filePath, 'mcpServers', 'wpce', { command: 'new' });
 
-    const config = JSON.parse(readFileSync(filePath, 'utf-8'));
-    expect(config.mcpServers.wpce).toEqual({ command: 'new' });
+    const config = JSON.parse(readFileSync(filePath, 'utf-8')) as McpConfig;
+    expect(config.mcpServers?.wpce).toEqual({ command: 'new' });
   });
 
   it('preserves existing indentation', () => {
@@ -234,9 +240,9 @@ describe('removeServerFromConfig', () => {
     const result = removeServerFromConfig(filePath, 'mcpServers', 'wpce');
 
     expect(result).toBe(true);
-    const config = JSON.parse(readFileSync(filePath, 'utf-8'));
-    expect(config.mcpServers.wpce).toBeUndefined();
-    expect(config.mcpServers.other).toEqual({ command: 'foo' });
+    const config = JSON.parse(readFileSync(filePath, 'utf-8')) as McpConfig;
+    expect(config.mcpServers?.wpce).toBeUndefined();
+    expect(config.mcpServers?.other).toEqual({ command: 'foo' });
   });
 
   it('returns false when the server name does not exist', () => {
