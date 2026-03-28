@@ -2762,16 +2762,27 @@ describe('SessionManager', () => {
       const syncError = new WordPressApiError('Not found', 404, '');
       callbacks.onStatusChange('error', syncError);
 
-      // Start closePost — it will await the in-flight check
-      const trashedPost: WPPost = { ...fakePost, status: 'trash' };
-      assertDefined(resolveGetPost, 'resolveGetPost should be set');
-      resolveGetPost(trashedPost);
+      // Start closePost while the check is still in-flight — it must await it
+      const closePromise = session.closePost();
 
-      await session.closePost();
+      // Resolve the hanging getPost after closePost has started waiting
+      assertDefined(resolveGetPost, 'resolveGetPost should be set');
+      resolveGetPost({ ...fakePost, status: 'trash' });
+
+      await closePromise;
 
       // closePost resets postGone after the check completes
       expect(session.getState()).toBe('connected');
       expect(session.isPostGone().gone).toBe(false);
+    });
+
+    it('closePost clears health check timer on a healthy post', async () => {
+      session.postHealthCheckInterval = 5000;
+      await connectAndOpen(session);
+
+      // Post is not gone — closePost should clean up the running timer
+      await session.closePost();
+      expect(session.getState()).toBe('connected');
     });
   });
 });
