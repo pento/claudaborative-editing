@@ -59,4 +59,23 @@ jobs:
 
       - run: npm ci
       - run: npx playwright install --with-deps chromium
+
+      - name: Use latest pre-built Gutenberg for CI
+        run: |
+          LATEST_URL=$(gh api repos/WordPress/gutenberg/releases/latest --jq '.assets[] | select(.name == "gutenberg.zip") | .browser_download_url')
+          cat > .wp-env.json <<WPENV
+          {
+            "\$schema": "https://schemas.wp.org/trunk/wp-env.json",
+            "core": "WordPress/WordPress#master",
+            "phpVersion": "8.5",
+            "testsEnvironment": false,
+            "plugins": ["$LATEST_URL"],
+            "lifecycleScripts": {
+              "afterStart": "npx wp-env run cli wp option update wp_collaboration_enabled 1"
+            }
+          }
+          WPENV
+        env:
+          GH_TOKEN: ${{ github.token }}
+
       - run: npm run test:e2e
