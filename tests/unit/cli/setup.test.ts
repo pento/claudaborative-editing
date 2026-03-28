@@ -260,12 +260,18 @@ describe('setup wizard', () => {
       expect(errors.join('\n')).toContain('Authentication failed');
     });
 
-    it('exits with error when WordPress version is too old', async () => {
+    it('includes version in error when old WP lacks sync endpoint', async () => {
       fetchMock
         .mockResolvedValueOnce(
           mockResponse({ id: 1, name: 'admin', slug: 'admin', avatar_urls: {} }),
         )
-        .mockResolvedValueOnce(mockResponse({ version: '6.7' }));
+        .mockResolvedValueOnce(mockResponse({ version: '6.7' }))
+        .mockResolvedValueOnce(
+          mockResponse(
+            { code: 'rest_no_route', message: 'No route' },
+            { status: 404, statusText: 'Not Found' },
+          ),
+        );
 
       const { deps, errors } = createTestDeps(['https://example.com', 'admin', 'xxxx xxxx xxxx'], {
         detectClients: () => defaultClientList(),
@@ -273,7 +279,9 @@ describe('setup wizard', () => {
       });
 
       await expect(runSetup(deps, { manual: true })).rejects.toThrow(SetupExitError);
-      expect(errors.join('\n')).toContain('WordPress 7.0 or later is required');
+      const errorText = errors.join('\n');
+      expect(errorText).toContain('Collaborative editing is not available');
+      expect(errorText).toContain('6.7');
     });
 
     it('exits with error when sync endpoint returns 404', async () => {
@@ -295,7 +303,7 @@ describe('setup wizard', () => {
       });
 
       await expect(runSetup(deps, { manual: true })).rejects.toThrow(SetupExitError);
-      expect(errors.join('\n')).toContain('Collaborative editing is not enabled');
+      expect(errors.join('\n')).toContain('Collaborative editing is not available');
     });
 
     it('exits with error when site URL is empty', async () => {

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { writeFileSync, existsSync, readFileSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -11,7 +12,10 @@ export const WP_MCP_USER = process.env.WP_E2E_MCP_USER ?? 'claudaborative-e2e';
 export const WP_MCP_PASSWORD = process.env.WP_E2E_MCP_PASSWORD ?? 'claudaborative-e2e-pass';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
-const STATE_FILE = path.join(tmpdir(), 'claudaborative-editing-e2e-wp-env.json');
+// Include a hash of the repo root to avoid collisions between concurrent
+// e2e runs from different checkouts on the same machine.
+const repoHash = createHash('md5').update(REPO_ROOT).digest('hex').slice(0, 8);
+const STATE_FILE = path.join(tmpdir(), `claudaborative-editing-e2e-wp-env-${repoHash}.json`);
 
 function runCommand(command: string, args: string[], inheritOutput: boolean = false): string {
   return execFileSync(command, args, {

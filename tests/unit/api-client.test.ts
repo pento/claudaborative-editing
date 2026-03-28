@@ -125,55 +125,29 @@ describe('WordPressApiClient', () => {
     });
   });
 
-  describe('checkMinimumVersion', () => {
-    it('returns version string when >= 7.0', async () => {
+  describe('getWordPressVersion', () => {
+    it('returns version string', async () => {
       fetchMock.mockResolvedValue(mockResponse({ version: '7.0' }));
       const client = createClient();
-      const version = await client.checkMinimumVersion();
-      expect(version).toBe('7.0');
-    });
-
-    it('accepts higher versions', async () => {
-      fetchMock.mockResolvedValue(mockResponse({ version: '7.2.1' }));
-      const client = createClient();
-      const version = await client.checkMinimumVersion();
-      expect(version).toBe('7.2.1');
-    });
-
-    it('throws for versions below 7.0', async () => {
-      fetchMock.mockResolvedValue(mockResponse({ version: '6.9.2' }));
-      const client = createClient();
-      await expect(client.checkMinimumVersion()).rejects.toThrow(
-        /WordPress 7\.0 or later is required/,
-      );
+      expect(await client.getWordPressVersion()).toBe('7.0');
     });
 
     it('returns unknown when endpoint is unavailable', async () => {
       fetchMock.mockRejectedValue(new Error('fetch failed'));
       const client = createClient();
-      const version = await client.checkMinimumVersion();
-      expect(version).toBe('unknown');
+      expect(await client.getWordPressVersion()).toBe('unknown');
     });
 
     it('returns unknown when version field is missing', async () => {
       fetchMock.mockResolvedValue(mockResponse({}));
       const client = createClient();
-      const version = await client.checkMinimumVersion();
-      expect(version).toBe('unknown');
+      expect(await client.getWordPressVersion()).toBe('unknown');
     });
 
     it('returns unknown when version field is empty', async () => {
       fetchMock.mockResolvedValue(mockResponse({ version: '' }));
       const client = createClient();
-      const version = await client.checkMinimumVersion();
-      expect(version).toBe('unknown');
-    });
-
-    it('returns raw version when parsing fails', async () => {
-      fetchMock.mockResolvedValue(mockResponse({ version: 'alpha' }));
-      const client = createClient();
-      const version = await client.checkMinimumVersion();
-      expect(version).toBe('alpha');
+      expect(await client.getWordPressVersion()).toBe('unknown');
     });
   });
 

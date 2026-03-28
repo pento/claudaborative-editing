@@ -348,10 +348,7 @@ export class SessionManager {
     const user = await this.apiClient.validateConnection();
     this._user = user;
 
-    // Verify WordPress version meets minimum requirements
-    await this.apiClient.checkMinimumVersion();
-
-    // Validate sync endpoint is available
+    // Validate sync endpoint is available (the real gate for collaborative editing)
     await this.apiClient.validateSyncEndpoint();
 
     // Fetch block type registry from the API; fall back to hardcoded if unavailable
