@@ -9,7 +9,7 @@ import { readFile } from 'node:fs/promises';
 import { basename } from 'node:path';
 import * as Y from 'yjs';
 import { DocumentManager } from '../yjs/document-manager.js';
-import { WordPressApiClient } from '../wordpress/api-client.js';
+import { WordPressApiClient, WordPressApiError } from '../wordpress/api-client.js';
 import { SyncClient } from '../wordpress/sync-client.js';
 import {
   createSyncStep1,
@@ -279,6 +279,15 @@ export class SessionManager {
   private commentDoc: Y.Doc | null = null;
   private commentUpdateHandler: ((update: Uint8Array, origin: unknown) => void) | null = null;
 
+  /** True when the post has been deleted or trashed externally. */
+  private postGone = false;
+  /** Human-readable reason for why the post is gone. */
+  private postGoneReason: string | null = null;
+  /** Guard to prevent concurrent post-existence checks. */
+  private postGoneCheckInProgress = false;
+  /** Timer for periodic post health checks (detects trashing via REST API). */
+  private postHealthCheckTimer: ReturnType<typeof setInterval> | null = null;
+
   /** Background streaming queue — closures that call streamTargets/streamTextToYText. */
   private streamQueue: Array<() => Promise<void>> = [];
   /** Promise for the currently running queue processor, or null if idle. */
@@ -295,6 +304,13 @@ export class SessionManager {
    * Set to 0 in tests to skip sync wait.
    */
   syncWaitTimeout = 15_000;
+
+  /**
+   * Interval (ms) for periodic post health checks via REST API.
+   * Detects trashing (which bypasses the Y.Doc) even when sync keeps working.
+   * Set to 0 in tests to disable.
+   */
+  postHealthCheckInterval = 30_000;
 
   // --- Throwing getters for state-dependent fields ---
 
@@ -441,8 +457,14 @@ export class SessionManager {
       onAwareness: (awarenessState) => {
         this.collaborators = parseCollaborators(awarenessState, doc.clientID);
       },
-      onStatusChange: () => {
-        // Status is read directly from syncClient.getStatus()
+      onStatusChange: (_status, error) => {
+        if (
+          _status === 'error' &&
+          error instanceof WordPressApiError &&
+          (error.status === 403 || error.status === 404 || error.status === 410)
+        ) {
+          void this.checkPostStillExists();
+        }
       },
       onCompactionRequested: () => {
         return createCompactionUpdate(doc);
@@ -584,6 +606,16 @@ export class SessionManager {
       );
     }
 
+    // Periodic health check via REST API to detect trashing.
+    // Trashing bypasses the Y.Doc (it's a direct DB status change),
+    // so we poll getPost() to catch it.
+    if (this.postHealthCheckInterval > 0) {
+      this.postHealthCheckTimer = setInterval(
+        () => void this.checkPostStillExists(),
+        this.postHealthCheckInterval,
+      );
+    }
+
     this.state = 'editing';
   }
 
@@ -627,10 +659,18 @@ export class SessionManager {
       this.commentUpdateHandler = null;
     }
 
+    if (this.postHealthCheckTimer !== null) {
+      clearInterval(this.postHealthCheckTimer);
+      this.postHealthCheckTimer = null;
+    }
+
     this._doc = null;
     this.commentDoc = null;
     this._currentPost = null;
     this.collaborators = [];
+    this.postGone = false;
+    this.postGoneReason = null;
+    this.postGoneCheckInProgress = false;
     this.state = 'connected';
   }
 
@@ -640,7 +680,7 @@ export class SessionManager {
    * Render the current post as Claude-friendly text, including metadata.
    */
   readPost(): string {
-    this.requireState('editing');
+    this.requireEditablePost();
 
     const title = this.documentManager.getTitle(this.doc);
     const blocks = this.documentManager.getBlocks(this.doc);
@@ -674,7 +714,7 @@ export class SessionManager {
    * Read a specific block by index (dot notation).
    */
   readBlock(index: string): string {
-    this.requireState('editing');
+    this.requireEditablePost();
 
     const block = this.documentManager.getBlockByIndex(this.doc, index);
     if (!block) {
@@ -696,7 +736,7 @@ export class SessionManager {
     index: string,
     changes: { content?: string; attributes?: Record<string, unknown> },
   ): void {
-    this.requireState('editing');
+    this.requireEditablePost();
 
     // Set cursor position BEFORE the edit — pointing to existing items
     // the browser already has. Gutenberg requires a real cursor position
@@ -779,7 +819,7 @@ export class SessionManager {
     edits: Array<{ find: string; replace: string; occurrence?: number }>,
     attribute?: string,
   ): EditBlockTextResult {
-    this.requireState('editing');
+    this.requireEditablePost();
 
     const attrName = attribute ?? 'content';
 
@@ -889,7 +929,7 @@ export class SessionManager {
    * Supports recursive inner blocks.
    */
   insertBlock(position: number, block: BlockInput): void {
-    this.requireState('editing');
+    this.requireEditablePost();
 
     const blockIndex = String(position);
     const { block: fullBlock, streamTargets } = prepareBlockTree(block, blockIndex, this.registry);
@@ -908,7 +948,7 @@ export class SessionManager {
    * Remove blocks starting at index.
    */
   removeBlocks(startIndex: number, count: number): void {
-    this.requireState('editing');
+    this.requireEditablePost();
     this.doc.transact(() => {
       this.documentManager.removeBlocks(this.doc, startIndex, count);
     }, LOCAL_ORIGIN);
@@ -918,7 +958,7 @@ export class SessionManager {
    * Move a block from one position to another.
    */
   moveBlock(fromIndex: number, toIndex: number): void {
-    this.requireState('editing');
+    this.requireEditablePost();
     this.doc.transact(() => {
       this.documentManager.moveBlock(this.doc, fromIndex, toIndex);
     }, LOCAL_ORIGIN);
@@ -931,7 +971,7 @@ export class SessionManager {
    * are inserted atomically. Rich-text content is then streamed progressively.
    */
   replaceBlocks(startIndex: number, count: number, newBlocks: BlockInput[]): void {
-    this.requireState('editing');
+    this.requireEditablePost();
 
     // Prepare all blocks recursively
     const allStreamTargets: StreamTarget[] = [];
@@ -961,7 +1001,7 @@ export class SessionManager {
    * Insert a block as an inner block of an existing block.
    */
   insertInnerBlock(parentIndex: string, position: number, block: BlockInput): void {
-    this.requireState('editing');
+    this.requireEditablePost();
 
     const blockIndex = `${parentIndex}.${position}`;
     const { block: fullBlock, streamTargets } = prepareBlockTree(block, blockIndex, this.registry);
@@ -978,7 +1018,7 @@ export class SessionManager {
    * Remove inner blocks from an existing block.
    */
   removeInnerBlocks(parentIndex: string, startIndex: number, count: number): void {
-    this.requireState('editing');
+    this.requireEditablePost();
     this.doc.transact(() => {
       this.documentManager.removeInnerBlocks(this.doc, parentIndex, startIndex, count);
     }, LOCAL_ORIGIN);
@@ -990,7 +1030,7 @@ export class SessionManager {
    * Long titles are streamed progressively; short titles are applied atomically.
    */
   setTitle(title: string): void {
-    this.requireState('editing');
+    this.requireEditablePost();
 
     if (title.length < STREAM_THRESHOLD) {
       this.doc.transact(() => {
@@ -1023,7 +1063,7 @@ export class SessionManager {
    * all content is committed before marking saved.
    */
   async save(): Promise<void> {
-    this.requireState('editing');
+    this.requireEditablePost();
     await this.drainStreamQueue();
     this.doc.transact(() => {
       this.documentManager.markSaved(this.doc);
@@ -1053,7 +1093,7 @@ export class SessionManager {
    * Updates both the Y.Doc (for collaborative sync) and the REST API (for persistence).
    */
   async setPostStatus(status: string): Promise<WPPost> {
-    this.requireState('editing');
+    this.requireEditablePost();
     return this.updatePostMeta({ status });
   }
 
@@ -1062,7 +1102,7 @@ export class SessionManager {
    * Updates both the Y.Doc and the REST API.
    */
   async setExcerpt(excerpt: string): Promise<WPPost> {
-    this.requireState('editing');
+    this.requireEditablePost();
     return this.updatePostMeta({ excerpt });
   }
 
@@ -1074,7 +1114,7 @@ export class SessionManager {
   async setCategories(
     names: string[],
   ): Promise<{ post: WPPost; resolved: Array<{ name: string; id: number; created: boolean }> }> {
-    this.requireState('editing');
+    this.requireEditablePost();
     const resolved = await this.resolveTerms('categories', names);
     const ids = resolved.map((r) => r.id);
 
@@ -1090,7 +1130,7 @@ export class SessionManager {
   async setTags(
     names: string[],
   ): Promise<{ post: WPPost; resolved: Array<{ name: string; id: number; created: boolean }> }> {
-    this.requireState('editing');
+    this.requireEditablePost();
     const resolved = await this.resolveTerms('tags', names);
     const ids = resolved.map((r) => r.id);
 
@@ -1103,7 +1143,7 @@ export class SessionManager {
    * Pass 0 to remove the featured image.
    */
   async setFeaturedImage(attachmentId: number): Promise<WPPost> {
-    this.requireState('editing');
+    this.requireEditablePost();
     return this.updatePostMeta({ featured_media: attachmentId });
   }
 
@@ -1112,7 +1152,7 @@ export class SessionManager {
    * Pass an empty string to clear (WordPress will use the current date).
    */
   async setDate(date: string): Promise<WPPost> {
-    this.requireState('editing');
+    this.requireEditablePost();
     return this.updatePostMeta({ date: date || null });
   }
 
@@ -1121,7 +1161,7 @@ export class SessionManager {
    * Note: WordPress may auto-modify the slug to ensure uniqueness (appending -2, -3, etc.).
    */
   async setSlug(slug: string): Promise<WPPost> {
-    this.requireState('editing');
+    this.requireEditablePost();
     return this.updatePostMeta({ slug });
   }
 
@@ -1129,7 +1169,7 @@ export class SessionManager {
    * Set whether the post is sticky (pinned to the front page).
    */
   async setSticky(sticky: boolean): Promise<WPPost> {
-    this.requireState('editing');
+    this.requireEditablePost();
     return this.updatePostMeta({ sticky });
   }
 
@@ -1137,7 +1177,7 @@ export class SessionManager {
    * Set the post comment status ('open' or 'closed').
    */
   async setCommentStatus(commentStatus: string): Promise<WPPost> {
-    this.requireState('editing');
+    this.requireEditablePost();
     return this.updatePostMeta({ comment_status: commentStatus });
   }
 
@@ -1167,7 +1207,7 @@ export class SessionManager {
    * from noteId to the block index where the note is attached.
    */
   async listNotes(): Promise<{ notes: WPNote[]; noteBlockMap: Partial<Record<number, string>> }> {
-    this.requireState('editing');
+    this.requireEditablePost();
     if (!this.notesSupported) {
       throw new Error('Notes are not supported. This feature requires WordPress 6.9 or later.');
     }
@@ -1199,7 +1239,7 @@ export class SessionManager {
    * Creates the note via the REST API and sets `metadata.noteId` on the block.
    */
   async addNote(blockIndex: string, content: string): Promise<WPNote> {
-    this.requireState('editing');
+    this.requireEditablePost();
     if (!this.notesSupported) {
       throw new Error('Notes are not supported. This feature requires WordPress 6.9 or later.');
     }
@@ -1238,7 +1278,7 @@ export class SessionManager {
    * Reply to an existing note.
    */
   async replyToNote(parentNoteId: number, content: string): Promise<WPNote> {
-    this.requireState('editing');
+    this.requireEditablePost();
     if (!this.notesSupported) {
       throw new Error('Notes are not supported. This feature requires WordPress 6.9 or later.');
     }
@@ -1261,7 +1301,7 @@ export class SessionManager {
    * Resolve (delete) a note and remove its metadata linkage from the block.
    */
   async resolveNote(noteId: number): Promise<void> {
-    this.requireState('editing');
+    this.requireEditablePost();
     if (!this.notesSupported) {
       throw new Error('Notes are not supported. This feature requires WordPress 6.9 or later.');
     }
@@ -1312,7 +1352,7 @@ export class SessionManager {
    * Update an existing note's content.
    */
   async updateNote(noteId: number, content: string): Promise<WPNote> {
-    this.requireState('editing');
+    this.requireEditablePost();
     if (!this.notesSupported) {
       throw new Error('Notes are not supported. This feature requires WordPress 6.9 or later.');
     }
@@ -1368,7 +1408,7 @@ export class SessionManager {
   }
 
   getTitle(): string {
-    this.requireState('editing');
+    this.requireEditablePost();
     return this.documentManager.getTitle(this.doc);
   }
 
@@ -1714,6 +1754,52 @@ export class SessionManager {
         `Operation requires state ${allowed.join(' or ')}, but current state is '${this.state}'`,
       );
     }
+  }
+
+  /**
+   * Assert that we're in editing state AND the post hasn't been deleted/trashed.
+   * Use this instead of `requireState('editing')` for all operations except `closePost()`.
+   */
+  private requireEditablePost(): void {
+    this.requireState('editing');
+    if (this.postGone) {
+      throw new Error(
+        `${this.postGoneReason ?? 'This post is no longer available.'} Use wp_close_post to close it, then open another post.`,
+      );
+    }
+  }
+
+  /**
+   * Check if the currently open post still exists and is not trashed.
+   * Called asynchronously when the sync client reports a 403/404/410 error.
+   * Sets `postGone` if the post is confirmed deleted or trashed.
+   */
+  private async checkPostStillExists(): Promise<void> {
+    if (this.postGone || this.postGoneCheckInProgress || !this._apiClient || !this._currentPost) {
+      return;
+    }
+    this.postGoneCheckInProgress = true;
+    try {
+      const post = await this._apiClient.getPost(this._currentPost.id);
+      if (post.status === 'trash') {
+        this.postGone = true;
+        this.postGoneReason = 'This post has been moved to the trash.';
+      }
+    } catch (error) {
+      if (error instanceof WordPressApiError && (error.status === 404 || error.status === 410)) {
+        this.postGone = true;
+        this.postGoneReason = 'This post has been deleted.';
+      }
+    } finally {
+      this.postGoneCheckInProgress = false;
+    }
+  }
+
+  /**
+   * Returns whether the post has been detected as deleted or trashed.
+   */
+  isPostGone(): { gone: boolean; reason: string | null } {
+    return { gone: this.postGone, reason: this.postGoneReason };
   }
 
   /**

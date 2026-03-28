@@ -56,6 +56,15 @@ disconnected ──connect──→ connected ──openPost/createPost──→
 
 `wp_close_post` returns to `connected` state (can open another post). `wp_disconnect` tears down the entire connection.
 
+### Post Deletion Detection
+
+When a post is deleted or trashed externally while the MCP server has it open, the system detects this and blocks further editing operations. Two detection paths cover both scenarios:
+
+- **Permanent deletion**: The sync endpoint returns a 403/404/410 error. The sync client passes the error to `onStatusChange`, and the session manager fires an async `checkPostStillExists()` via the REST API to confirm (guards against transient errors).
+- **Trashing**: Trashing is a direct database status change that bypasses the Y.Doc, so it's not visible through sync. A periodic REST API health check (`postHealthCheckInterval`, default 30s) calls `checkPostStillExists()` which detects `status: 'trash'` on the response.
+
+Both paths set the `postGone` flag. All editing operations use `requireEditablePost()` (not `requireState('editing')`) which checks this flag and throws a descriptive error suggesting `wp_close_post`. `closePost()` is exempt — it uses `requireState('editing')` directly so users can clean up. The flag is reset in `closePost()`.
+
 ### Key Design Decisions
 
 - **Mixed V1/V2 encoding**: Gutenberg 22.8+ uses a mixed encoding approach. Sync step1/step2 use y-protocols' standard encoding (V1 internally — `syncProtocol.readSyncMessage` hardcodes `Y.encodeStateAsUpdate`/`Y.applyUpdate`). Regular updates and compactions use V2 encoding (`encodeStateAsUpdateV2`/`applyUpdateV2`, captured via `doc.on('updateV2')`). This split exists because Gutenberg switched updates/compactions to V2 (PR #76304) but still uses y-protocols for the sync handshake. Minimum compatible Gutenberg version: 22.8.

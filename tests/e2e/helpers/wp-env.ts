@@ -188,6 +188,12 @@ export async function deletePost(postId: number): Promise<void> {
   });
 }
 
+export async function trashPost(postId: number): Promise<void> {
+  await apiFetch(`/wp/v2/posts/${postId}`, {
+    method: 'DELETE',
+  });
+}
+
 export async function createAppPassword(label: string): Promise<string> {
   const result = await apiFetch<{ password: string }>(`/wp/v2/users/me/application-passwords`, {
     method: 'POST',

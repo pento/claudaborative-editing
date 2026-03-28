@@ -332,7 +332,7 @@ describe('SyncClient', () => {
 
       // First poll fails
       await vi.advanceTimersByTimeAsync(0);
-      expect(callbacks.onStatusChange).toHaveBeenCalledWith('error');
+      expect(callbacks.onStatusChange).toHaveBeenCalledWith('error', expect.any(Error));
 
       // Backoff: initial interval * 2 = 2000ms
       apiClient.sendSyncUpdate.mockClear();
@@ -425,6 +425,33 @@ describe('SyncClient', () => {
       apiClient.sendSyncUpdate.mockClear();
       await vi.advanceTimersByTimeAsync(config.pollingInterval);
       expect(apiClient.sendSyncUpdate).toHaveBeenCalledTimes(1);
+    });
+
+    it('passes the error object to onStatusChange', async () => {
+      const specificError = new Error('Specific error for testing');
+      apiClient.sendSyncUpdate
+        .mockRejectedValueOnce(specificError)
+        .mockResolvedValue(emptyRoomResponse('postType/post:1', 0));
+
+      const callbacks = createMockCallbacks();
+      syncClient.start('postType/post:1', 100, [], callbacks);
+
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(callbacks.onStatusChange).toHaveBeenCalledWith('error', specificError);
+    });
+
+    it('passes undefined for non-Error rejections', async () => {
+      apiClient.sendSyncUpdate
+        .mockRejectedValueOnce('string error')
+        .mockResolvedValue(emptyRoomResponse('postType/post:1', 0));
+
+      const callbacks = createMockCallbacks();
+      syncClient.start('postType/post:1', 100, [], callbacks);
+
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(callbacks.onStatusChange).toHaveBeenCalledWith('error', undefined);
     });
   });
 

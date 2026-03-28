@@ -128,6 +128,7 @@ export function createMockSession(
     postContent?: string;
     blockContent?: string;
     editBlockTextResult?: EditBlockTextResult;
+    postGone?: { gone: boolean; reason: string | null };
   } = {},
 ): SessionManager {
   const state = overrides.state ?? 'disconnected';
@@ -212,6 +213,7 @@ export function createMockSession(
     getCurrentPost: vi.fn().mockReturnValue(post),
     getUser: vi.fn().mockReturnValue(user),
     getTitle: vi.fn().mockReturnValue(post?.title.raw ?? 'Untitled'),
+    isPostGone: vi.fn().mockReturnValue(overrides.postGone ?? { gone: false, reason: null }),
     drainStreamQueue: vi.fn().mockResolvedValue(undefined),
   } as unknown as SessionManager;
 }
