@@ -48,9 +48,9 @@ vi.mock('../../src/wordpress/api-client.js', () => {
 });
 
 // --- Mock node:fs/promises for uploadMedia tests ---
-const mockReadFile = vi.fn<() => Promise<Buffer>>();
+const mockReadFile = vi.fn<(...args: unknown[]) => Promise<Buffer>>();
 vi.mock('node:fs/promises', () => ({
-  readFile: (...args: unknown[]) => mockReadFile(...(args as [])),
+  readFile: (...args: unknown[]) => mockReadFile(...args),
 }));
 
 // --- Mock the sync client ---
