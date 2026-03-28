@@ -29,7 +29,7 @@
     "claude"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=20.19"
   },
   "scripts": {
     "build": "tsup",

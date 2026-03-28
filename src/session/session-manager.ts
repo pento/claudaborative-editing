@@ -1212,8 +1212,16 @@ export class SessionManager {
     const existingNoteId = (block.attributes.metadata as Record<string, unknown> | undefined)
       ?.noteId;
     if (existingNoteId !== null && existingNoteId !== undefined) {
+      let noteIdStr: string;
+      if (typeof existingNoteId === 'number') {
+        noteIdStr = String(existingNoteId);
+      } else if (typeof existingNoteId === 'string') {
+        noteIdStr = existingNoteId;
+      } else {
+        noteIdStr = 'unknown';
+      }
       throw new Error(
-        `Block at index ${blockIndex} already has a note (ID: ${existingNoteId as string}). ` +
+        `Block at index ${blockIndex} already has a note (ID: ${noteIdStr}). ` +
           `Your view may be stale — call wp_read_post and wp_list_notes to refresh, ` +
           `then use wp_reply_to_note to reply to the existing note.`,
       );
