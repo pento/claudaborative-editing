@@ -9,22 +9,14 @@ npm install
 npm run build        # Build with tsup → dist/
 npm test             # Run vitest
 npm run typecheck    # TypeScript type check
-npm run lint         # ESLint + markdownlint
-npm run lint:fix     # Auto-fix lint issues
-npm run format       # Format with Prettier
-npm run format:check # Check formatting without writing
+npm run lint         # ESLint + markdownlint + Prettier check
+npm run lint:fix     # Auto-fix all lint and formatting issues
 npm run dev          # Watch mode build
 ```
 
 ## Git Hooks
 
-Pre-commit hook auto-formats (Prettier) and lints (ESLint, markdownlint) staged files.
-
-```bash
-git config core.hooksPath .githooks   # One-time setup
-```
-
-The test suite verifies this is configured (skipped in CI).
+Pre-commit hook (via husky + lint-staged) auto-formats with Prettier and lints with ESLint + markdownlint on staged files. Hooks are installed automatically by `npm install` (husky's `prepare` script).
 
 ## Architecture
 

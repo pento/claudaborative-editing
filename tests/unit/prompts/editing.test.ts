@@ -4,6 +4,7 @@ import { registerEditingPrompts } from '../../../src/prompts/editing.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { SessionManager } from '../../../src/session/session-manager.js';
 import type { RegisteredPrompt } from './helpers.js';
+import { assertDefined } from '../../test-utils.js';
 
 describe('edit', () => {
   describe('when disconnected', () => {
@@ -12,7 +13,8 @@ describe('edit', () => {
       const session = createMockSession({ state: 'disconnected' });
       registerEditingPrompts(server as unknown as McpServer, session);
 
-      const prompt = server.registeredPrompts.get('edit')!;
+      const prompt = server.registeredPrompts.get('edit');
+      assertDefined(prompt);
       const result = await prompt.handler({});
 
       expect(result.messages[0].content.text).toContain('wp_connect');
@@ -25,7 +27,8 @@ describe('edit', () => {
       const session = createMockSession({ state: 'connected' });
       registerEditingPrompts(server as unknown as McpServer, session);
 
-      const prompt = server.registeredPrompts.get('edit')!;
+      const prompt = server.registeredPrompts.get('edit');
+      assertDefined(prompt);
       const result = await prompt.handler({});
 
       expect(result.messages[0].content.text).toContain('wp_open_post');
@@ -46,7 +49,9 @@ describe('edit', () => {
         postContent,
       });
       registerEditingPrompts(server as unknown as McpServer, session);
-      prompt = server.registeredPrompts.get('edit')!;
+      const editPrompt = server.registeredPrompts.get('edit');
+      assertDefined(editPrompt);
+      prompt = editPrompt;
     }
 
     it('embeds post content and tool instructions', async () => {
@@ -81,7 +86,8 @@ describe('proofread', () => {
       const session = createMockSession({ state: 'disconnected' });
       registerEditingPrompts(server as unknown as McpServer, session);
 
-      const prompt = server.registeredPrompts.get('proofread')!;
+      const prompt = server.registeredPrompts.get('proofread');
+      assertDefined(prompt);
       const result = await prompt.handler({});
 
       expect(result.messages[0].content.text).toContain('wp_connect');
@@ -94,7 +100,8 @@ describe('proofread', () => {
       const session = createMockSession({ state: 'connected' });
       registerEditingPrompts(server as unknown as McpServer, session);
 
-      const prompt = server.registeredPrompts.get('proofread')!;
+      const prompt = server.registeredPrompts.get('proofread');
+      assertDefined(prompt);
       const result = await prompt.handler({});
 
       expect(result.messages[0].content.text).toContain('wp_open_post');
@@ -115,7 +122,9 @@ describe('proofread', () => {
         postContent,
       });
       registerEditingPrompts(server as unknown as McpServer, session);
-      prompt = server.registeredPrompts.get('proofread')!;
+      const proofreadPrompt = server.registeredPrompts.get('proofread');
+      assertDefined(proofreadPrompt);
+      prompt = proofreadPrompt;
     }
 
     it('embeds post content with proofreading instructions', async () => {

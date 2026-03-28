@@ -1,5 +1,6 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, type MockInstance, beforeEach, afterEach } from 'vitest';
 import type { WPUser } from '../../src/wordpress/types.js';
+import { assertDefined } from '../test-utils.js';
 
 // --- Mock McpServer to capture constructor args and close ---
 let capturedOptions: Record<string, unknown> | undefined;
@@ -87,18 +88,18 @@ describe('startServer()', () => {
     const { startServer } = await import('../../src/server.js');
     await startServer();
 
-    expect(capturedOptions).toBeDefined();
-    expect(capturedOptions!.instructions).toContain('Already connected');
-    expect(capturedOptions!.instructions).toContain('Do NOT call wp_connect');
+    assertDefined(capturedOptions);
+    expect(capturedOptions.instructions).toContain('Already connected');
+    expect(capturedOptions.instructions).toContain('Do NOT call wp_connect');
   });
 
   it('sets instructions for disconnected state when no env vars', async () => {
     const { startServer } = await import('../../src/server.js');
     await startServer();
 
-    expect(capturedOptions).toBeDefined();
-    expect(capturedOptions!.instructions).toContain('wp_connect');
-    expect(capturedOptions!.instructions).not.toContain('Already connected');
+    assertDefined(capturedOptions);
+    expect(capturedOptions.instructions).toContain('wp_connect');
+    expect(capturedOptions.instructions).not.toContain('Already connected');
   });
 
   it('sets disconnected instructions when auto-connect fails', async () => {
@@ -114,9 +115,9 @@ describe('startServer()', () => {
     const { startServer } = await import('../../src/server.js');
     await startServer();
 
-    expect(capturedOptions).toBeDefined();
-    expect(capturedOptions!.instructions).not.toContain('Already connected');
-    expect(capturedOptions!.instructions).toContain('wp_connect');
+    assertDefined(capturedOptions);
+    expect(capturedOptions.instructions).not.toContain('Already connected');
+    expect(capturedOptions.instructions).toContain('wp_connect');
 
     consoleSpy.mockRestore();
   });
@@ -124,9 +125,9 @@ describe('startServer()', () => {
 
 describe('graceful shutdown', () => {
   const originalEnv = { ...process.env };
-  let processOnSpy: ReturnType<typeof vi.spyOn>;
-  let stdinOnSpy: ReturnType<typeof vi.spyOn>;
-  let processExitSpy: ReturnType<typeof vi.spyOn>;
+  let processOnSpy: MockInstance;
+  let stdinOnSpy: MockInstance;
+  let processExitSpy: MockInstance;
 
   // Capture registered handlers so we can invoke them in tests
   let signalHandlers: Partial<Record<string, (() => void)[]>>;
@@ -186,7 +187,11 @@ describe('graceful shutdown', () => {
     await startServer();
 
     // Trigger the SIGTERM handler
-    signalHandlers.SIGTERM![0]();
+    const sigtermHandlers = signalHandlers.SIGTERM;
+    assertDefined(sigtermHandlers);
+    const sigtermHandler = sigtermHandlers[0];
+    assertDefined(sigtermHandler);
+    sigtermHandler();
 
     // Allow the async cleanup to complete
     await vi.waitFor(() => {
@@ -201,7 +206,11 @@ describe('graceful shutdown', () => {
     const { startServer } = await import('../../src/server.js');
     await startServer();
 
-    signalHandlers.SIGINT![0]();
+    const sigintHandlers = signalHandlers.SIGINT;
+    assertDefined(sigintHandlers);
+    const sigintHandler = sigintHandlers[0];
+    assertDefined(sigintHandler);
+    sigintHandler();
 
     await vi.waitFor(() => {
       expect(processExitSpy).toHaveBeenCalledWith(0);
@@ -215,7 +224,11 @@ describe('graceful shutdown', () => {
     const { startServer } = await import('../../src/server.js');
     await startServer();
 
-    stdinHandlers.end![0]();
+    const endHandlers = stdinHandlers.end;
+    assertDefined(endHandlers);
+    const endHandler = endHandlers[0];
+    assertDefined(endHandler);
+    endHandler();
 
     await vi.waitFor(() => {
       expect(processExitSpy).toHaveBeenCalledWith(0);
@@ -230,8 +243,16 @@ describe('graceful shutdown', () => {
     await startServer();
 
     // Trigger both SIGTERM and stdin end simultaneously
-    signalHandlers.SIGTERM![0]();
-    stdinHandlers.end![0]();
+    const sigtermHandlers2 = signalHandlers.SIGTERM;
+    assertDefined(sigtermHandlers2);
+    const sigtermHandler2 = sigtermHandlers2[0];
+    assertDefined(sigtermHandler2);
+    sigtermHandler2();
+    const endHandlers2 = stdinHandlers.end;
+    assertDefined(endHandlers2);
+    const endHandler2 = endHandlers2[0];
+    assertDefined(endHandler2);
+    endHandler2();
 
     await vi.waitFor(() => {
       expect(processExitSpy).toHaveBeenCalled();

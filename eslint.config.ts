@@ -1,15 +1,18 @@
+import { defineConfig } from 'eslint/config';
 import eslint from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import markdown from '@eslint/markdown';
+import packageJson from 'eslint-plugin-package-json';
 import eslintConfigPrettier from 'eslint-config-prettier';
 
-export default tseslint.config(
+export default defineConfig(
   // Global ignores
   {
     ignores: ['dist/**', 'coverage/**', 'node_modules/**', '.gutenberg/**'],
   },
 
-  // TypeScript files: recommended + strict-type-checked
+  // TypeScript files: recommended + strict-type-checked + WordPress esnext-inspired code quality rules
+  // Code quality rules extracted from @wordpress/eslint-plugin configs/es5.js + configs/esnext.js
   {
     files: ['**/*.ts'],
     extends: [eslint.configs.recommended, ...tseslint.configs.strictTypeChecked],
@@ -19,12 +22,6 @@ export default tseslint.config(
         tsconfigRootDir: import.meta.dirname,
       },
     },
-  },
-
-  // WordPress esnext-inspired code quality rules
-  // Extracted from @wordpress/eslint-plugin configs/es5.js + configs/esnext.js
-  {
-    files: ['src/**/*.ts', 'tests/**/*.ts'],
     rules: {
       // --- From WordPress es5 config (code quality) ---
       'array-callback-return': 'error',
@@ -72,45 +69,25 @@ export default tseslint.config(
       // Allow numbers in template literals (very common pattern: `Block ${index}`)
       '@typescript-eslint/restrict-template-expressions': ['error', { allowNumber: true }],
       '@typescript-eslint/no-non-null-assertion': 'error',
-      // MCP SDK callbacks and Yjs event handlers require async signatures but often don't await
-      '@typescript-eslint/require-await': 'off',
-      // Y.Text and other Yjs types have meaningful toString() that TypeScript doesn't know about
-      '@typescript-eslint/no-base-to-string': 'off',
-      // MCP SDK uses method references in callbacks (server.tool(), server.prompt())
+      '@typescript-eslint/require-await': 'error',
+      '@typescript-eslint/no-base-to-string': 'error',
+      '@typescript-eslint/unbound-method': 'error',
+    },
+  },
+
+  // Test files: relax unbound-method (vi.fn() mocks passed to expect() are false positives)
+  {
+    files: ['tests/**/*.ts'],
+    rules: {
       '@typescript-eslint/unbound-method': 'off',
     },
   },
 
-  // Test file relaxations
-  {
-    files: ['tests/**/*.ts'],
-    rules: {
-      '@typescript-eslint/no-non-null-assertion': 'off',
-      '@typescript-eslint/no-unsafe-assignment': 'off',
-      '@typescript-eslint/no-unsafe-member-access': 'off',
-      '@typescript-eslint/no-unsafe-call': 'off',
-      '@typescript-eslint/no-unsafe-argument': 'off',
-      '@typescript-eslint/no-unsafe-return': 'off',
-      '@typescript-eslint/no-explicit-any': 'off',
-      '@typescript-eslint/no-floating-promises': 'off',
-      '@typescript-eslint/no-misused-promises': 'off',
-      // Test mocks often have empty async methods
-      '@typescript-eslint/require-await': 'off',
-    },
-  },
+  // package.json
+  packageJson.configs.recommended,
 
   // Markdown files
-  {
-    files: ['**/*.md'],
-    plugins: { markdown },
-    language: 'markdown/gfm',
-    rules: {
-      'markdown/heading-increment': 'error',
-      'markdown/fenced-code-language': 'error',
-      'markdown/no-html': 'off',
-      'markdown/no-missing-label-refs': 'error',
-    },
-  },
+  markdown.configs.recommended,
 
   // Prettier must be last — disables all formatting-related ESLint rules
   eslintConfigPrettier,

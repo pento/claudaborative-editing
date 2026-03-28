@@ -5,7 +5,7 @@ export function registerStatusTools(server: McpServer, session: SessionManager):
   server.registerTool(
     'wp_status',
     { description: 'Show current connection state, sync status, and post info' },
-    async () => {
+    () => {
       const state = session.getState();
       const lines: string[] = [];
 
@@ -48,7 +48,7 @@ export function registerStatusTools(server: McpServer, session: SessionManager):
   server.registerTool(
     'wp_collaborators',
     { description: 'List active collaborators on the current post' },
-    async () => {
+    () => {
       try {
         const state = session.getState();
         if (state !== 'editing') {

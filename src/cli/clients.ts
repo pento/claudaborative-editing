@@ -51,7 +51,7 @@ function appDataDir(): string {
 }
 
 /** Claude Code CLI integration: register the MCP server via `claude mcp add`. */
-async function claudeCodeUseCli(credentials: WpCredentials): Promise<boolean> {
+function claudeCodeUseCli(credentials: WpCredentials): boolean {
   if (!isOnPath('claude')) {
     return false;
   }
@@ -85,7 +85,7 @@ async function claudeCodeUseCli(credentials: WpCredentials): Promise<boolean> {
 }
 
 /** Claude Code CLI integration: remove the MCP server via `claude mcp remove`. */
-async function claudeCodeRemoveCli(): Promise<boolean> {
+function claudeCodeRemoveCli(): boolean {
   try {
     execFileSync('claude', ['mcp', 'remove', '--scope', 'user', SERVER_NAME], { stdio: 'ignore' });
     return true;

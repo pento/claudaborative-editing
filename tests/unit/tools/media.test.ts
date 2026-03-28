@@ -9,6 +9,7 @@ import {
   fakePost,
   fakeMediaItem,
 } from './helpers.js';
+import { assertDefined } from '../../test-utils.js';
 
 describe('media tools', () => {
   let server: ReturnType<typeof createMockServer>;
@@ -26,7 +27,8 @@ describe('media tools', () => {
 
   describe('wp_upload_media', () => {
     it('returns formatted response with image insertion hint', async () => {
-      const tool = server.registeredTools.get('wp_upload_media')!;
+      const tool = server.registeredTools.get('wp_upload_media');
+      assertDefined(tool);
       const result = await tool.handler({
         filePath: '/path/to/photo.jpg',
       });
@@ -49,7 +51,8 @@ describe('media tools', () => {
     });
 
     it('passes optional parameters to session', async () => {
-      const tool = server.registeredTools.get('wp_upload_media')!;
+      const tool = server.registeredTools.get('wp_upload_media');
+      assertDefined(tool);
       await tool.handler({
         filePath: '/path/to/photo.jpg',
         altText: 'A scenic view',
@@ -75,7 +78,8 @@ describe('media tools', () => {
         videoMedia,
       );
 
-      const tool = server.registeredTools.get('wp_upload_media')!;
+      const tool = server.registeredTools.get('wp_upload_media');
+      assertDefined(tool);
       const result = await tool.handler({ filePath: '/path/to/clip.mp4' });
 
       const text = result.content[0].text;
@@ -96,7 +100,8 @@ describe('media tools', () => {
         audioMedia,
       );
 
-      const tool = server.registeredTools.get('wp_upload_media')!;
+      const tool = server.registeredTools.get('wp_upload_media');
+      assertDefined(tool);
       const result = await tool.handler({ filePath: '/path/to/song.mp3' });
 
       const text = result.content[0].text;
@@ -118,7 +123,8 @@ describe('media tools', () => {
         pdfMedia,
       );
 
-      const tool = server.registeredTools.get('wp_upload_media')!;
+      const tool = server.registeredTools.get('wp_upload_media');
+      assertDefined(tool);
       const result = await tool.handler({ filePath: '/path/to/doc.pdf' });
 
       const text = result.content[0].text;
@@ -128,7 +134,8 @@ describe('media tools', () => {
     });
 
     it('includes alt text in response and insertion hint', async () => {
-      const tool = server.registeredTools.get('wp_upload_media')!;
+      const tool = server.registeredTools.get('wp_upload_media');
+      assertDefined(tool);
       const result = await tool.handler({ filePath: '/path/to/photo.jpg' });
 
       const text = result.content[0].text;
@@ -142,7 +149,8 @@ describe('media tools', () => {
         new Error('File not found'),
       );
 
-      const tool = server.registeredTools.get('wp_upload_media')!;
+      const tool = server.registeredTools.get('wp_upload_media');
+      assertDefined(tool);
       const result = await tool.handler({ filePath: '/path/to/missing.jpg' });
 
       expect(result.isError).toBe(true);
@@ -155,7 +163,8 @@ describe('media tools', () => {
         new Error('Unsupported file type: .xyz'),
       );
 
-      const tool = server.registeredTools.get('wp_upload_media')!;
+      const tool = server.registeredTools.get('wp_upload_media');
+      assertDefined(tool);
       const result = await tool.handler({ filePath: '/path/to/file.xyz' });
 
       expect(result.isError).toBe(true);

@@ -1,5 +1,5 @@
 import { teardownWpEnv } from './helpers/wp-env';
 
-export default async function globalTeardown(): Promise<void> {
+export default function globalTeardown(): void {
   teardownWpEnv();
 }

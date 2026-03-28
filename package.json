@@ -4,6 +4,11 @@
   "description": "MCP server for collaborative WordPress post editing via Yjs CRDT",
   "type": "module",
   "main": "dist/index.js",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "sideEffects": false,
+  "author": "Gary Pendergast",
   "bin": {
     "claudaborative-editing": "dist/index.js"
   },
@@ -24,11 +29,15 @@
     "claude"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=20.19"
   },
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
+    "lint": "eslint --max-warnings 0 . && markdownlint-cli2 && prettier --check -u .",
+    "lint:fix": "eslint --fix --max-warnings 0 . && markdownlint-cli2 --fix && prettier --write -u .",
+    "prepare": "husky",
+    "prepublishOnly": "npm run typecheck && npm run lint && npm test && npm run build",
     "start": "node dist/index.js",
     "test": "vitest run",
     "pretest:e2e": "npm run build",
@@ -36,12 +45,15 @@
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:install": "playwright install chromium",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit",
-    "lint": "eslint --max-warnings 0 'src/**/*.ts' 'tests/**/*.ts' '**/*.md' && markdownlint-cli2 '**/*.md' '#node_modules'",
-    "lint:fix": "eslint --fix --max-warnings 0 'src/**/*.ts' 'tests/**/*.ts' '**/*.md' && markdownlint-cli2 --fix '**/*.md' '#node_modules'",
-    "format": "prettier --write 'src/**/*.ts' 'tests/**/*.ts' '*.config.*' '*.json' '.*.jsonc' '*.md'",
-    "format:check": "prettier --check 'src/**/*.ts' 'tests/**/*.ts' '*.config.*' '*.json' '.*.jsonc' '*.md'",
-    "prepublishOnly": "npm run typecheck && npm run lint && npm test && npm run build"
+    "typecheck": "tsc --noEmit"
+  },
+  "lint-staged": {
+    "*.{ts,js,md,json,jsonc}": "prettier --write",
+    "*.{ts,js}": "eslint --max-warnings 0",
+    "*.md": [
+      "eslint --max-warnings 0",
+      "markdownlint-cli2"
+    ]
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.27.1",
@@ -52,14 +64,18 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@playwright/test": "^1.58.2",
     "@eslint/js": "^10.0.1",
     "@eslint/markdown": "^7.5.1",
+    "@playwright/test": "^1.58.2",
     "@types/node": "^22.19.15",
     "@vitest/coverage-v8": "^4.1.0",
     "@wordpress/env": "^11.2.0",
     "eslint": "^10.1.0",
     "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-package-json": "^0.91.0",
+    "husky": "^9.1.7",
+    "jiti": "^2.6.1",
+    "lint-staged": "^16.4.0",
     "markdownlint-cli2": "^0.22.0",
     "prettier": "^3.8.1",
     "tsup": "^8.5.1",

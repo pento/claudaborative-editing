@@ -692,10 +692,10 @@ export class SessionManager {
    * in chunks so the browser sees progressive updates (like fast typing).
    * Non-rich-text and short changes are applied atomically.
    */
-  async updateBlock(
+  updateBlock(
     index: string,
     changes: { content?: string; attributes?: Record<string, unknown> },
-  ): Promise<void> {
+  ): void {
     this.requireState('editing');
 
     // Set cursor position BEFORE the edit — pointing to existing items
@@ -838,7 +838,7 @@ export class SessionManager {
       }
 
       // Re-read current text for each edit (previous edits shift positions)
-      const currentText = ytext.toString();
+      const currentText = ytext.toJSON();
       const pos = findNthOccurrence(currentText, edit.find, occurrence);
 
       if (pos === -1) {
@@ -877,7 +877,7 @@ export class SessionManager {
       edits: results,
       appliedCount,
       failedCount: results.length - appliedCount,
-      updatedText: ytext.toString(),
+      updatedText: ytext.toJSON(),
     };
   }
 
@@ -888,7 +888,7 @@ export class SessionManager {
    * then rich-text content is streamed in progressively.
    * Supports recursive inner blocks.
    */
-  async insertBlock(position: number, block: BlockInput): Promise<void> {
+  insertBlock(position: number, block: BlockInput): void {
     this.requireState('editing');
 
     const blockIndex = String(position);
@@ -930,7 +930,7 @@ export class SessionManager {
    * Old blocks are removed and new block structures (with empty content)
    * are inserted atomically. Rich-text content is then streamed progressively.
    */
-  async replaceBlocks(startIndex: number, count: number, newBlocks: BlockInput[]): Promise<void> {
+  replaceBlocks(startIndex: number, count: number, newBlocks: BlockInput[]): void {
     this.requireState('editing');
 
     // Prepare all blocks recursively
@@ -960,7 +960,7 @@ export class SessionManager {
   /**
    * Insert a block as an inner block of an existing block.
    */
-  async insertInnerBlock(parentIndex: string, position: number, block: BlockInput): Promise<void> {
+  insertInnerBlock(parentIndex: string, position: number, block: BlockInput): void {
     this.requireState('editing');
 
     const blockIndex = `${parentIndex}.${position}`;
@@ -989,7 +989,7 @@ export class SessionManager {
    *
    * Long titles are streamed progressively; short titles are applied atomically.
    */
-  async setTitle(title: string): Promise<void> {
+  setTitle(title: string): void {
     this.requireState('editing');
 
     if (title.length < STREAM_THRESHOLD) {
@@ -1211,9 +1211,9 @@ export class SessionManager {
 
     const existingNoteId = (block.attributes.metadata as Record<string, unknown> | undefined)
       ?.noteId;
-    if (existingNoteId !== null && existingNoteId !== undefined) {
+    if (typeof existingNoteId === 'number' || typeof existingNoteId === 'string') {
       throw new Error(
-        `Block at index ${blockIndex} already has a note (ID: ${String(existingNoteId)}). ` +
+        `Block at index ${blockIndex} already has a note (ID: ${existingNoteId}). ` +
           `Your view may be stale — call wp_read_post and wp_list_notes to refresh, ` +
           `then use wp_reply_to_note to reply to the existing note.`,
       );
@@ -1487,7 +1487,7 @@ export class SessionManager {
     newValue: string,
     blockIndex?: string,
   ): Promise<void> {
-    const oldValue = ytext.toString();
+    const oldValue = ytext.toJSON();
     const delta = computeTextDelta(oldValue, newValue);
     if (!delta) return;
 

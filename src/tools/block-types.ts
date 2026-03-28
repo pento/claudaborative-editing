@@ -55,7 +55,7 @@ export function registerBlockTypeTools(server: McpServer, session: SessionManage
           .describe('Search block types by name (e.g., "quote", "media")'),
       },
     },
-    async ({ name, search }) => {
+    ({ name, search }) => {
       try {
         const registry = session.getRegistry();
 

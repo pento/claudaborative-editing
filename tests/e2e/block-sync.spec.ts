@@ -465,9 +465,12 @@ test.describe('block sync', () => {
           };
         };
         const blockEditor = wpGlobal.wp?.data?.select('core/block-editor');
-        const blocks = blockEditor!.getBlocks();
+        if (!blockEditor) throw new Error('block editor not available');
+        const blocks = blockEditor.getBlocks();
         const blockId = blocks[0].clientId;
-        wpGlobal.wp!.data!.dispatch('core/block-editor').updateBlockAttributes(blockId, {
+        const dispatcher = wpGlobal.wp?.data?.dispatch('core/block-editor');
+        if (!dispatcher) throw new Error('block editor dispatch not available');
+        dispatcher.updateBlockAttributes(blockId, {
           content,
         });
       }, newContent);

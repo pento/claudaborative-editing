@@ -19,7 +19,7 @@ export function registerAuthoringPrompts(server: McpServer, session: SessionMana
           .describe('Target audience (e.g., "developers", "beginners", "general public")'),
       },
     },
-    async ({ topic, tone, audience }) => {
+    ({ topic, tone, audience }) => {
       const state = session.getState();
 
       if (state === 'disconnected') {
@@ -105,7 +105,7 @@ Instructions:
           .describe('Target language (e.g., "Spanish", "French", "Japanese", "zh-CN")'),
       },
     },
-    async ({ language }) => {
+    ({ language }) => {
       const state = session.getState();
 
       if (state === 'disconnected') {

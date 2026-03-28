@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { registerMetadataTools } from '../../../src/tools/metadata.js';
 import { createMockServer, createMockSession, fakeUser, fakePost } from './helpers.js';
+import { assertDefined } from '../../test-utils.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { SessionManager } from '../../../src/session/session-manager.js';
 
@@ -45,24 +46,33 @@ describe('metadata tools', () => {
 
   describe('wp_list_categories', () => {
     it('lists categories with counts', async () => {
-      const tool = server.registeredTools.get('wp_list_categories')!;
+      const tool = server.registeredTools.get('wp_list_categories');
+      assertDefined(tool);
       const result = await tool.handler({});
 
-      expect((session as any).listCategories).toHaveBeenCalledWith({ search: undefined });
+      expect(session.listCategories as ReturnType<typeof vi.fn>).toHaveBeenCalledWith({
+        search: undefined,
+      });
       expect(result.content[0].text).toContain('Uncategorized');
       expect(result.content[0].text).toContain('5 posts');
     });
 
     it('passes search filter', async () => {
-      const tool = server.registeredTools.get('wp_list_categories')!;
+      const tool = server.registeredTools.get('wp_list_categories');
+      assertDefined(tool);
       await tool.handler({ search: 'tech' });
 
-      expect((session as any).listCategories).toHaveBeenCalledWith({ search: 'tech' });
+      expect(session.listCategories as ReturnType<typeof vi.fn>).toHaveBeenCalledWith({
+        search: 'tech',
+      });
     });
 
     it('returns error on failure', async () => {
-      (session as any).listCategories.mockRejectedValue(new Error('API error'));
-      const tool = server.registeredTools.get('wp_list_categories')!;
+      (session.listCategories as ReturnType<typeof vi.fn>).mockRejectedValue(
+        new Error('API error'),
+      );
+      const tool = server.registeredTools.get('wp_list_categories');
+      assertDefined(tool);
       const result = await tool.handler({});
 
       expect(result.isError).toBe(true);
@@ -72,17 +82,19 @@ describe('metadata tools', () => {
 
   describe('wp_list_tags', () => {
     it('returns none found for empty list', async () => {
-      const tool = server.registeredTools.get('wp_list_tags')!;
+      const tool = server.registeredTools.get('wp_list_tags');
+      assertDefined(tool);
       const result = await tool.handler({});
 
       expect(result.content[0].text).toContain('None found.');
     });
 
     it('lists tags when present', async () => {
-      (session as any).listTags.mockResolvedValue([
+      (session.listTags as ReturnType<typeof vi.fn>).mockResolvedValue([
         { id: 1, name: 'tutorial', slug: 'tutorial', taxonomy: 'post_tag', count: 3 },
       ]);
-      const tool = server.registeredTools.get('wp_list_tags')!;
+      const tool = server.registeredTools.get('wp_list_tags');
+      assertDefined(tool);
       const result = await tool.handler({});
 
       expect(result.content[0].text).toContain('tutorial');
@@ -90,8 +102,9 @@ describe('metadata tools', () => {
     });
 
     it('returns error on failure', async () => {
-      (session as any).listTags.mockRejectedValue(new Error('API error'));
-      const tool = server.registeredTools.get('wp_list_tags')!;
+      (session.listTags as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('API error'));
+      const tool = server.registeredTools.get('wp_list_tags');
+      assertDefined(tool);
       const result = await tool.handler({});
 
       expect(result.isError).toBe(true);
@@ -101,7 +114,8 @@ describe('metadata tools', () => {
 
   describe('wp_set_status', () => {
     it('changes status and returns confirmation', async () => {
-      const tool = server.registeredTools.get('wp_set_status')!;
+      const tool = server.registeredTools.get('wp_set_status');
+      assertDefined(tool);
       const result = await tool.handler({ status: 'draft' });
 
       expect(session.setPostStatus).toHaveBeenCalledWith('draft');
@@ -109,7 +123,8 @@ describe('metadata tools', () => {
     });
 
     it('shows old status from current post', async () => {
-      const tool = server.registeredTools.get('wp_set_status')!;
+      const tool = server.registeredTools.get('wp_set_status');
+      assertDefined(tool);
       const result = await tool.handler({ status: 'publish' });
 
       expect(result.content[0].text).toBe('Status changed from "publish" to "publish".');
@@ -120,7 +135,8 @@ describe('metadata tools', () => {
         new Error('Insufficient permissions'),
       );
 
-      const tool = server.registeredTools.get('wp_set_status')!;
+      const tool = server.registeredTools.get('wp_set_status');
+      assertDefined(tool);
       const result = await tool.handler({ status: 'publish' });
 
       expect(result.isError).toBe(true);
@@ -136,7 +152,8 @@ describe('metadata tools', () => {
         resolved: [{ name: 'Tech', id: 1, created: false }],
       });
 
-      const tool = server.registeredTools.get('wp_set_categories')!;
+      const tool = server.registeredTools.get('wp_set_categories');
+      assertDefined(tool);
       const result = await tool.handler({ categories: ['Tech'] });
 
       expect(session.setCategories).toHaveBeenCalledWith(['Tech']);
@@ -149,7 +166,8 @@ describe('metadata tools', () => {
         resolved: [{ name: 'AI', id: 2, created: true }],
       });
 
-      const tool = server.registeredTools.get('wp_set_categories')!;
+      const tool = server.registeredTools.get('wp_set_categories');
+      assertDefined(tool);
       const result = await tool.handler({ categories: ['AI'] });
 
       expect(result.content[0].text).toBe('Categories set: AI (created).');
@@ -164,7 +182,8 @@ describe('metadata tools', () => {
         ],
       });
 
-      const tool = server.registeredTools.get('wp_set_categories')!;
+      const tool = server.registeredTools.get('wp_set_categories');
+      assertDefined(tool);
       const result = await tool.handler({ categories: ['Tech', 'AI'] });
 
       expect(result.content[0].text).toBe('Categories set: Tech, AI (created).');
@@ -175,7 +194,8 @@ describe('metadata tools', () => {
         new Error('Not editing'),
       );
 
-      const tool = server.registeredTools.get('wp_set_categories')!;
+      const tool = server.registeredTools.get('wp_set_categories');
+      assertDefined(tool);
       const result = await tool.handler({ categories: ['Tech'] });
 
       expect(result.isError).toBe(true);
@@ -194,7 +214,8 @@ describe('metadata tools', () => {
         ],
       });
 
-      const tool = server.registeredTools.get('wp_set_tags')!;
+      const tool = server.registeredTools.get('wp_set_tags');
+      assertDefined(tool);
       const result = await tool.handler({ tags: ['tutorial', 'beginner'] });
 
       expect(session.setTags).toHaveBeenCalledWith(['tutorial', 'beginner']);
@@ -202,7 +223,8 @@ describe('metadata tools', () => {
     });
 
     it('removes all tags when passed empty array', async () => {
-      const tool = server.registeredTools.get('wp_set_tags')!;
+      const tool = server.registeredTools.get('wp_set_tags');
+      assertDefined(tool);
       const result = await tool.handler({ tags: [] });
 
       expect(session.setTags).toHaveBeenCalledWith([]);
@@ -212,7 +234,8 @@ describe('metadata tools', () => {
     it('returns error on failure', async () => {
       (session.setTags as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('API error'));
 
-      const tool = server.registeredTools.get('wp_set_tags')!;
+      const tool = server.registeredTools.get('wp_set_tags');
+      assertDefined(tool);
       const result = await tool.handler({ tags: ['fail'] });
 
       expect(result.isError).toBe(true);
@@ -223,7 +246,8 @@ describe('metadata tools', () => {
 
   describe('wp_set_excerpt', () => {
     it('sets excerpt and returns confirmation', async () => {
-      const tool = server.registeredTools.get('wp_set_excerpt')!;
+      const tool = server.registeredTools.get('wp_set_excerpt');
+      assertDefined(tool);
       const result = await tool.handler({ excerpt: 'A brief summary of the post.' });
 
       expect(session.setExcerpt).toHaveBeenCalledWith('A brief summary of the post.');
@@ -231,7 +255,8 @@ describe('metadata tools', () => {
     });
 
     it('clears excerpt when passed empty string', async () => {
-      const tool = server.registeredTools.get('wp_set_excerpt')!;
+      const tool = server.registeredTools.get('wp_set_excerpt');
+      assertDefined(tool);
       const result = await tool.handler({ excerpt: '' });
 
       expect(session.setExcerpt).toHaveBeenCalledWith('');
@@ -241,7 +266,8 @@ describe('metadata tools', () => {
     it('returns error on failure', async () => {
       (session.setExcerpt as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('Not editing'));
 
-      const tool = server.registeredTools.get('wp_set_excerpt')!;
+      const tool = server.registeredTools.get('wp_set_excerpt');
+      assertDefined(tool);
       const result = await tool.handler({ excerpt: 'test' });
 
       expect(result.isError).toBe(true);
@@ -252,7 +278,8 @@ describe('metadata tools', () => {
 
   describe('wp_set_featured_image', () => {
     it('sets featured image and returns confirmation', async () => {
-      const tool = server.registeredTools.get('wp_set_featured_image')!;
+      const tool = server.registeredTools.get('wp_set_featured_image');
+      assertDefined(tool);
       const result = await tool.handler({ attachmentId: 42 });
 
       expect(session.setFeaturedImage).toHaveBeenCalledWith(42);
@@ -260,7 +287,8 @@ describe('metadata tools', () => {
     });
 
     it('removes featured image when passed 0', async () => {
-      const tool = server.registeredTools.get('wp_set_featured_image')!;
+      const tool = server.registeredTools.get('wp_set_featured_image');
+      assertDefined(tool);
       const result = await tool.handler({ attachmentId: 0 });
 
       expect(session.setFeaturedImage).toHaveBeenCalledWith(0);
@@ -272,7 +300,8 @@ describe('metadata tools', () => {
         new Error('Invalid attachment ID'),
       );
 
-      const tool = server.registeredTools.get('wp_set_featured_image')!;
+      const tool = server.registeredTools.get('wp_set_featured_image');
+      assertDefined(tool);
       const result = await tool.handler({ attachmentId: 999 });
 
       expect(result.isError).toBe(true);
@@ -288,7 +317,8 @@ describe('metadata tools', () => {
         date: '2026-04-01T09:00:00',
       });
 
-      const tool = server.registeredTools.get('wp_set_date')!;
+      const tool = server.registeredTools.get('wp_set_date');
+      assertDefined(tool);
       const result = await tool.handler({ date: '2026-04-01T09:00:00' });
 
       expect(session.setDate).toHaveBeenCalledWith('2026-04-01T09:00:00');
@@ -296,7 +326,8 @@ describe('metadata tools', () => {
     });
 
     it('resets date when passed empty string', async () => {
-      const tool = server.registeredTools.get('wp_set_date')!;
+      const tool = server.registeredTools.get('wp_set_date');
+      assertDefined(tool);
       const result = await tool.handler({ date: '' });
 
       expect(session.setDate).toHaveBeenCalledWith('');
@@ -308,7 +339,8 @@ describe('metadata tools', () => {
         new Error('Invalid date format'),
       );
 
-      const tool = server.registeredTools.get('wp_set_date')!;
+      const tool = server.registeredTools.get('wp_set_date');
+      assertDefined(tool);
       const result = await tool.handler({ date: 'not-a-date' });
 
       expect(result.isError).toBe(true);
@@ -324,7 +356,8 @@ describe('metadata tools', () => {
         slug: 'my-custom-url',
       });
 
-      const tool = server.registeredTools.get('wp_set_slug')!;
+      const tool = server.registeredTools.get('wp_set_slug');
+      assertDefined(tool);
       const result = await tool.handler({ slug: 'my-custom-url' });
 
       expect(session.setSlug).toHaveBeenCalledWith('my-custom-url');
@@ -337,7 +370,8 @@ describe('metadata tools', () => {
         slug: 'my-url-2',
       });
 
-      const tool = server.registeredTools.get('wp_set_slug')!;
+      const tool = server.registeredTools.get('wp_set_slug');
+      assertDefined(tool);
       const result = await tool.handler({ slug: 'my-url' });
 
       expect(session.setSlug).toHaveBeenCalledWith('my-url');
@@ -349,7 +383,8 @@ describe('metadata tools', () => {
     it('returns error on failure', async () => {
       (session.setSlug as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('Invalid slug'));
 
-      const tool = server.registeredTools.get('wp_set_slug')!;
+      const tool = server.registeredTools.get('wp_set_slug');
+      assertDefined(tool);
       const result = await tool.handler({ slug: '' });
 
       expect(result.isError).toBe(true);
@@ -360,7 +395,8 @@ describe('metadata tools', () => {
 
   describe('wp_set_sticky', () => {
     it('pins post to front page', async () => {
-      const tool = server.registeredTools.get('wp_set_sticky')!;
+      const tool = server.registeredTools.get('wp_set_sticky');
+      assertDefined(tool);
       const result = await tool.handler({ sticky: true });
 
       expect(session.setSticky).toHaveBeenCalledWith(true);
@@ -368,7 +404,8 @@ describe('metadata tools', () => {
     });
 
     it('unpins post', async () => {
-      const tool = server.registeredTools.get('wp_set_sticky')!;
+      const tool = server.registeredTools.get('wp_set_sticky');
+      assertDefined(tool);
       const result = await tool.handler({ sticky: false });
 
       expect(session.setSticky).toHaveBeenCalledWith(false);
@@ -378,7 +415,8 @@ describe('metadata tools', () => {
     it('returns error on failure', async () => {
       (session.setSticky as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('Not editing'));
 
-      const tool = server.registeredTools.get('wp_set_sticky')!;
+      const tool = server.registeredTools.get('wp_set_sticky');
+      assertDefined(tool);
       const result = await tool.handler({ sticky: true });
 
       expect(result.isError).toBe(true);
@@ -389,7 +427,8 @@ describe('metadata tools', () => {
 
   describe('wp_set_comment_status', () => {
     it('enables comments', async () => {
-      const tool = server.registeredTools.get('wp_set_comment_status')!;
+      const tool = server.registeredTools.get('wp_set_comment_status');
+      assertDefined(tool);
       const result = await tool.handler({ status: 'open' });
 
       expect(session.setCommentStatus).toHaveBeenCalledWith('open');
@@ -397,7 +436,8 @@ describe('metadata tools', () => {
     });
 
     it('disables comments', async () => {
-      const tool = server.registeredTools.get('wp_set_comment_status')!;
+      const tool = server.registeredTools.get('wp_set_comment_status');
+      assertDefined(tool);
       const result = await tool.handler({ status: 'closed' });
 
       expect(session.setCommentStatus).toHaveBeenCalledWith('closed');
@@ -409,7 +449,8 @@ describe('metadata tools', () => {
         new Error('Permission denied'),
       );
 
-      const tool = server.registeredTools.get('wp_set_comment_status')!;
+      const tool = server.registeredTools.get('wp_set_comment_status');
+      assertDefined(tool);
       const result = await tool.handler({ status: 'open' });
 
       expect(result.isError).toBe(true);

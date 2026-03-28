@@ -17,7 +17,7 @@ export function registerEditingPrompts(server: McpServer, session: SessionManage
           ),
       },
     },
-    async ({ editingFocus }) => {
+    ({ editingFocus }) => {
       const state = session.getState();
 
       if (state === 'disconnected') {
@@ -95,7 +95,7 @@ Work block by block. Do not try to replace the entire post at once. Preserve the
       description:
         'Proofread a WordPress post for grammar, spelling, punctuation, and style issues.',
     },
-    async () => {
+    () => {
       const state = session.getState();
 
       if (state === 'disconnected') {

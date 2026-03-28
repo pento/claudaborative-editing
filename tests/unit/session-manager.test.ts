@@ -1,6 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { SessionManager } from '../../src/session/session-manager.js';
-import type { WordPressConfig, WPNote, WPPost, WPTerm, WPUser } from '../../src/wordpress/types.js';
+import type {
+  WordPressConfig,
+  WPNote,
+  WPPost,
+  WPTerm,
+  WPUser,
+  SyncUpdate,
+} from '../../src/wordpress/types.js';
+import type { SyncCallbacks } from '../../src/wordpress/sync-client.js';
+import { assertDefined } from '../test-utils.js';
 
 // --- Mock the WordPress API client ---
 const mockValidateConnection = vi.fn<() => Promise<WPUser>>();
@@ -54,7 +63,10 @@ vi.mock('node:fs/promises', () => ({
 }));
 
 // --- Mock the sync client ---
-const mockSyncStart = vi.fn();
+const mockSyncStart =
+  vi.fn<
+    (room: string, clientId: number, initialUpdates: SyncUpdate[], callbacks: SyncCallbacks) => void
+  >();
 const mockSyncStop = vi.fn();
 const mockSyncQueueUpdate = vi.fn();
 const mockSyncFlushQueue = vi.fn();
@@ -351,7 +363,7 @@ describe('SessionManager', () => {
     it('modifies block content in doc', async () => {
       await connectAndOpen(session);
 
-      await session.updateBlock('0', { content: 'Updated paragraph' });
+      session.updateBlock('0', { content: 'Updated paragraph' });
 
       const text = session.readPost();
       expect(text).toContain('Updated paragraph');
@@ -359,7 +371,9 @@ describe('SessionManager', () => {
 
     it('throws when not editing', async () => {
       await connectSession(session);
-      await expect(session.updateBlock('0', { content: 'test' })).rejects.toThrow(/requires state/);
+      expect(() => {
+        session.updateBlock('0', { content: 'test' });
+      }).toThrow(/requires state/);
     });
 
     it('streams long content in chunks', async () => {
@@ -368,11 +382,10 @@ describe('SessionManager', () => {
 
       const longContent =
         'This is a long paragraph that should be streamed in chunks to the browser.';
-      const promise = session.updateBlock('0', { content: longContent });
+      session.updateBlock('0', { content: longContent });
 
       // Advance through all streaming delays
       await vi.runAllTimersAsync();
-      await promise;
 
       const text = session.readPost();
       expect(text).toContain(longContent);
@@ -386,7 +399,7 @@ describe('SessionManager', () => {
       await connectAndOpen(session);
       mockSyncFlushQueue.mockClear();
 
-      await session.updateBlock('0', { content: 'Short' });
+      session.updateBlock('0', { content: 'Short' });
 
       const text = session.readPost();
       expect(text).toContain('Short');
@@ -409,7 +422,7 @@ describe('SessionManager', () => {
       mockSyncFlushQueue.mockClear();
 
       const longContent = 'This is a long paragraph that will be streamed in the background.';
-      await session.insertBlock(0, { name: 'core/paragraph', content: longContent });
+      session.insertBlock(0, { name: 'core/paragraph', content: longContent });
 
       // Method returned, but content should NOT be fully in doc yet
       // (only structure + possibly first chunk are committed synchronously)
@@ -437,8 +450,8 @@ describe('SessionManager', () => {
       const content2 = 'Second paragraph with enough text to trigger streaming.';
 
       // Both return immediately
-      await session.insertBlock(0, { name: 'core/paragraph', content: content1 });
-      await session.insertBlock(1, { name: 'core/paragraph', content: content2 });
+      session.insertBlock(0, { name: 'core/paragraph', content: content1 });
+      session.insertBlock(1, { name: 'core/paragraph', content: content2 });
 
       // Drain both
       const drainPromise = session.drainStreamQueue();
@@ -457,7 +470,7 @@ describe('SessionManager', () => {
       await connectAndOpen(session);
 
       const longContent = 'Content that needs to be fully streamed before save.';
-      await session.insertBlock(0, { name: 'core/paragraph', content: longContent });
+      session.insertBlock(0, { name: 'core/paragraph', content: longContent });
 
       // save() should drain the queue first
       const savePromise = session.save();
@@ -476,7 +489,7 @@ describe('SessionManager', () => {
       await connectAndOpen(session);
 
       const longContent = 'Content that needs to finish streaming before close.';
-      await session.insertBlock(0, { name: 'core/paragraph', content: longContent });
+      session.insertBlock(0, { name: 'core/paragraph', content: longContent });
 
       // closePost() should drain the queue first
       const closePromise = session.closePost();
@@ -492,7 +505,7 @@ describe('SessionManager', () => {
       await connectAndOpen(session);
       mockSyncFlushQueue.mockClear();
 
-      await session.insertBlock(0, { name: 'core/paragraph', content: 'short' });
+      session.insertBlock(0, { name: 'core/paragraph', content: 'short' });
 
       // flushQueue should be called synchronously after atomic insert
       expect(mockSyncFlushQueue).toHaveBeenCalled();
@@ -565,7 +578,7 @@ describe('SessionManager', () => {
       await connectAndOpen(session);
 
       // Set up block with repeated text
-      await session.updateBlock('0', { content: 'the cat and the dog and the bird' });
+      session.updateBlock('0', { content: 'the cat and the dog and the bird' });
       await session.drainStreamQueue();
 
       const result = session.editBlockText('0', [{ find: 'the', replace: 'a', occurrence: 2 }]);
@@ -639,7 +652,7 @@ describe('SessionManager', () => {
     it('handles HTML-containing content', async () => {
       await connectAndOpen(session);
 
-      await session.updateBlock('0', { content: 'This is <strong>bold</strong> text' });
+      session.updateBlock('0', { content: 'This is <strong>bold</strong> text' });
       await session.drainStreamQueue();
 
       const result = session.editBlockText('0', [
@@ -680,7 +693,7 @@ describe('SessionManager', () => {
       await connectAndOpen(session);
 
       // Insert a pullquote block which has 'value' and 'citation' as rich-text attributes
-      await session.insertBlock(2, {
+      session.insertBlock(2, {
         name: 'core/pullquote',
         attributes: { value: 'A wise saying', citation: 'Someone Famous' },
       });
@@ -699,7 +712,7 @@ describe('SessionManager', () => {
       await connectAndOpen(session);
 
       // Insert a block with no content set
-      await session.insertBlock(2, {
+      session.insertBlock(2, {
         name: 'core/paragraph',
         attributes: {},
       });
@@ -752,12 +765,11 @@ describe('SessionManager', () => {
       vi.useFakeTimers();
       await connectAndOpen(session);
 
-      const promise = session.insertBlock(0, {
+      session.insertBlock(0, {
         name: 'core/paragraph',
         content: 'New first paragraph',
       });
       await vi.runAllTimersAsync();
-      await promise;
 
       const text = session.readPost();
       expect(text).toContain('New first paragraph');
@@ -768,7 +780,7 @@ describe('SessionManager', () => {
     it('inserts at the correct position', async () => {
       await connectAndOpen(session);
 
-      await session.insertBlock(1, { name: 'core/paragraph', content: 'Inserted at 1' });
+      session.insertBlock(1, { name: 'core/paragraph', content: 'Inserted at 1' });
 
       // Read block at position 1
       const blockText = session.readBlock('1');
@@ -781,9 +793,8 @@ describe('SessionManager', () => {
 
       const longContent =
         'This is a long paragraph that exceeds the streaming threshold for testing.';
-      const promise = session.insertBlock(0, { name: 'core/paragraph', content: longContent });
+      session.insertBlock(0, { name: 'core/paragraph', content: longContent });
       await vi.runAllTimersAsync();
-      await promise;
 
       // Block should exist with full content
       const block = session.readBlock('0');
@@ -801,7 +812,7 @@ describe('SessionManager', () => {
 
       // core/separator is NOT in the fallback set, but the fallback registry
       // skips the unknown block type check, so insertion should succeed.
-      await session.insertBlock(0, { name: 'core/separator' });
+      session.insertBlock(0, { name: 'core/separator' });
 
       const text = session.readPost();
       expect(text).toContain('core/separator');
@@ -822,9 +833,9 @@ describe('SessionManager', () => {
       mockGetPost.mockResolvedValue(fakePost);
       await session.openPost(42);
 
-      await expect(session.insertBlock(0, { name: 'custom/nonexistent-block' })).rejects.toThrow(
-        /Unknown block type: custom\/nonexistent-block/,
-      );
+      expect(() => {
+        session.insertBlock(0, { name: 'custom/nonexistent-block' });
+      }).toThrow(/Unknown block type: custom\/nonexistent-block/);
     });
   });
 
@@ -833,7 +844,7 @@ describe('SessionManager', () => {
       vi.useFakeTimers();
       await connectAndOpen(session);
 
-      const promise = session.insertBlock(0, {
+      session.insertBlock(0, {
         name: 'core/list',
         innerBlocks: [
           { name: 'core/list-item', content: 'First item' },
@@ -841,7 +852,6 @@ describe('SessionManager', () => {
         ],
       });
       await vi.runAllTimersAsync();
-      await promise;
 
       const text = session.readPost();
       expect(text).toContain('core/list');
@@ -858,20 +868,18 @@ describe('SessionManager', () => {
       await connectAndOpen(session);
 
       // First, insert a list with one item
-      const insertPromise = session.insertBlock(0, {
+      session.insertBlock(0, {
         name: 'core/list',
         innerBlocks: [{ name: 'core/list-item', content: 'Existing item' }],
       });
       await vi.runAllTimersAsync();
-      await insertPromise;
 
       // Now add an inner block to the list
-      const innerPromise = session.insertInnerBlock('0', 1, {
+      session.insertInnerBlock('0', 1, {
         name: 'core/list-item',
         content: 'New item',
       });
       await vi.runAllTimersAsync();
-      await innerPromise;
 
       const text = session.readPost();
       expect(text).toContain('Existing item');
@@ -887,7 +895,7 @@ describe('SessionManager', () => {
       await connectAndOpen(session);
 
       // Insert a list with three items
-      const promise = session.insertBlock(0, {
+      session.insertBlock(0, {
         name: 'core/list',
         innerBlocks: [
           { name: 'core/list-item', content: 'Keep' },
@@ -896,7 +904,6 @@ describe('SessionManager', () => {
         ],
       });
       await vi.runAllTimersAsync();
-      await promise;
 
       // Remove the middle inner block
       session.removeInnerBlocks('0', 1, 1);
@@ -941,11 +948,8 @@ describe('SessionManager', () => {
       vi.useFakeTimers();
       await connectAndOpen(session);
 
-      const promise = session.replaceBlocks(0, 1, [
-        { name: 'core/paragraph', content: 'Replacement paragraph' },
-      ]);
+      session.replaceBlocks(0, 1, [{ name: 'core/paragraph', content: 'Replacement paragraph' }]);
       await vi.runAllTimersAsync();
-      await promise;
 
       const text = session.readPost();
       expect(text).toContain('Replacement paragraph');
@@ -969,9 +973,9 @@ describe('SessionManager', () => {
       mockGetPost.mockResolvedValue(fakePost);
       await session.openPost(42);
 
-      await expect(
-        session.replaceBlocks(0, 1, [{ name: 'custom/nonexistent-block' }]),
-      ).rejects.toThrow(/Unknown block type: custom\/nonexistent-block/);
+      expect(() => {
+        session.replaceBlocks(0, 1, [{ name: 'custom/nonexistent-block' }]);
+      }).toThrow(/Unknown block type: custom\/nonexistent-block/);
     });
   });
 
@@ -979,7 +983,7 @@ describe('SessionManager', () => {
     it('updates the title in the doc', async () => {
       await connectAndOpen(session);
 
-      await session.setTitle('New Title');
+      session.setTitle('New Title');
 
       const text = session.readPost();
       expect(text).toContain('Title: "New Title"');
@@ -987,7 +991,9 @@ describe('SessionManager', () => {
 
     it('throws when not editing', async () => {
       await connectSession(session);
-      await expect(session.setTitle('test')).rejects.toThrow(/requires state/);
+      expect(() => {
+        session.setTitle('test');
+      }).toThrow(/requires state/);
     });
 
     it('streams long titles', async () => {
@@ -995,9 +1001,8 @@ describe('SessionManager', () => {
       await connectAndOpen(session);
 
       const longTitle = 'This Is A Very Long Title That Should Be Streamed';
-      const promise = session.setTitle(longTitle);
+      session.setTitle(longTitle);
       await vi.runAllTimersAsync();
-      await promise;
 
       const text = session.readPost();
       expect(text).toContain(longTitle);
@@ -1100,7 +1105,7 @@ describe('SessionManager', () => {
   });
 
   describe('getSyncStatus()', () => {
-    it('returns null when not editing', async () => {
+    it('returns null when not editing', () => {
       expect(session.getSyncStatus()).toBeNull();
     });
 
@@ -1210,16 +1215,15 @@ describe('SessionManager', () => {
       ]);
 
       try {
-        const promise = s.insertBlock(0, { name: 'core/quote', content: 'Quote text' });
+        s.insertBlock(0, { name: 'core/quote', content: 'Quote text' });
         await vi.runAllTimersAsync();
-        await promise;
 
         const text = s.readPost();
         expect(text).toContain('core/quote');
         expect(text).toContain('core/paragraph');
         expect(text).toContain('Quote text');
       } finally {
-        s.disconnect();
+        await s.disconnect();
         vi.useRealTimers();
       }
     });
@@ -1237,16 +1241,16 @@ describe('SessionManager', () => {
       ]);
 
       try {
-        await expect(s.insertBlock(0, { name: 'core/pullquote', content: 'text' })).rejects.toThrow(
-          /does not have a "content" attribute/,
-        );
+        expect(() => {
+          s.insertBlock(0, { name: 'core/pullquote', content: 'text' });
+        }).toThrow(/does not have a "content" attribute/);
 
         // Error message should mention available rich-text attributes
-        await expect(s.insertBlock(0, { name: 'core/pullquote', content: 'text' })).rejects.toThrow(
-          /value/,
-        );
+        expect(() => {
+          s.insertBlock(0, { name: 'core/pullquote', content: 'text' });
+        }).toThrow(/value/);
       } finally {
-        s.disconnect();
+        await s.disconnect();
       }
     });
 
@@ -1264,11 +1268,11 @@ describe('SessionManager', () => {
       ]);
 
       try {
-        await expect(
-          s.insertBlock(0, { name: 'core/custom-block', content: 'text' }),
-        ).rejects.toThrow(/does not have a "content" attribute/);
+        expect(() => {
+          s.insertBlock(0, { name: 'core/custom-block', content: 'text' });
+        }).toThrow(/does not have a "content" attribute/);
       } finally {
-        s.disconnect();
+        await s.disconnect();
       }
     });
 
@@ -1286,13 +1290,12 @@ describe('SessionManager', () => {
       ]);
 
       try {
-        const promise = s.insertBlock(0, {
+        s.insertBlock(0, {
           name: 'core/quote',
           content: 'Main quote',
           innerBlocks: [{ name: 'core/paragraph', content: 'Extra paragraph' }],
         });
         await vi.runAllTimersAsync();
-        await promise;
 
         const text = s.readPost();
         expect(text).toContain('Main quote');
@@ -1301,7 +1304,7 @@ describe('SessionManager', () => {
         const extraIdx = text.indexOf('Extra paragraph');
         expect(mainIdx).toBeLessThan(extraIdx);
       } finally {
-        s.disconnect();
+        await s.disconnect();
         vi.useRealTimers();
       }
     });
@@ -1322,14 +1325,13 @@ describe('SessionManager', () => {
       ]);
 
       try {
-        const promise = s.insertBlock(0, { name: 'core/quote', content: longText });
+        s.insertBlock(0, { name: 'core/quote', content: longText });
         await vi.runAllTimersAsync();
-        await promise;
 
         const text = s.readPost();
         expect(text).toContain(longText);
       } finally {
-        s.disconnect();
+        await s.disconnect();
         vi.useRealTimers();
       }
     });
@@ -1347,21 +1349,21 @@ describe('SessionManager', () => {
       ]);
 
       try {
-        await expect(
+        expect(() => {
           s.insertBlock(0, {
             name: 'core/paragraph',
             attributes: { content: 'hello', unknownAttr: true },
-          }),
-        ).rejects.toThrow(/Unknown attribute/);
+          });
+        }).toThrow(/Unknown attribute/);
 
-        await expect(
+        expect(() => {
           s.insertBlock(0, {
             name: 'core/paragraph',
             attributes: { content: 'hello', unknownAttr: true },
-          }),
-        ).rejects.toThrow(/unknownAttr/);
+          });
+        }).toThrow(/unknownAttr/);
       } finally {
-        s.disconnect();
+        await s.disconnect();
       }
     });
 
@@ -1374,21 +1376,21 @@ describe('SessionManager', () => {
       ]);
 
       try {
-        await expect(
+        expect(() => {
           s.insertBlock(0, {
             name: 'core/list',
             innerBlocks: [{ name: 'core/column' }],
-          }),
-        ).rejects.toThrow(/can only be nested inside/);
+          });
+        }).toThrow(/can only be nested inside/);
 
-        await expect(
+        expect(() => {
           s.insertBlock(0, {
             name: 'core/list',
             innerBlocks: [{ name: 'core/column' }],
-          }),
-        ).rejects.toThrow(/core\/columns/);
+          });
+        }).toThrow(/core\/columns/);
       } finally {
-        s.disconnect();
+        await s.disconnect();
       }
     });
 
@@ -1401,21 +1403,21 @@ describe('SessionManager', () => {
       ]);
 
       try {
-        await expect(
+        expect(() => {
           s.insertBlock(0, {
             name: 'core/list',
             innerBlocks: [{ name: 'core/paragraph', content: 'text' }],
-          }),
-        ).rejects.toThrow(/only allows these inner blocks/);
+          });
+        }).toThrow(/only allows these inner blocks/);
 
-        await expect(
+        expect(() => {
           s.insertBlock(0, {
             name: 'core/list',
             innerBlocks: [{ name: 'core/paragraph', content: 'text' }],
-          }),
-        ).rejects.toThrow(/core\/list-item/);
+          });
+        }).toThrow(/core\/list-item/);
       } finally {
-        s.disconnect();
+        await s.disconnect();
       }
     });
 
@@ -1427,13 +1429,15 @@ describe('SessionManager', () => {
       ]);
 
       try {
-        await expect(s.insertBlock(0, { name: 'core/column' })).rejects.toThrow(
-          /cannot be inserted at the top level/,
-        );
+        expect(() => {
+          s.insertBlock(0, { name: 'core/column' });
+        }).toThrow(/cannot be inserted at the top level/);
 
-        await expect(s.insertBlock(0, { name: 'core/column' })).rejects.toThrow(/core\/columns/);
+        expect(() => {
+          s.insertBlock(0, { name: 'core/column' });
+        }).toThrow(/core\/columns/);
       } finally {
-        s.disconnect();
+        await s.disconnect();
       }
     });
 
@@ -1452,21 +1456,19 @@ describe('SessionManager', () => {
 
       try {
         // Insert a placeholder block first
-        let promise = s.insertBlock(0, { name: 'core/paragraph', content: 'placeholder' });
+        s.insertBlock(0, { name: 'core/paragraph', content: 'placeholder' });
         await vi.runAllTimersAsync();
-        await promise;
 
         // Replace it with a quote using content
-        promise = s.replaceBlocks(0, 1, [{ name: 'core/quote', content: 'Replaced quote' }]);
+        s.replaceBlocks(0, 1, [{ name: 'core/quote', content: 'Replaced quote' }]);
         await vi.runAllTimersAsync();
-        await promise;
 
         const text = s.readPost();
         expect(text).toContain('core/quote');
         expect(text).toContain('Replaced quote');
         expect(text).not.toContain('placeholder');
       } finally {
-        s.disconnect();
+        await s.disconnect();
         vi.useRealTimers();
       }
     });
@@ -1490,7 +1492,7 @@ describe('SessionManager', () => {
       ]);
 
       try {
-        const promise = s.insertBlock(0, {
+        s.insertBlock(0, {
           name: 'core/list',
           innerBlocks: [
             { name: 'core/list-item', content: 'Item one' },
@@ -1498,14 +1500,13 @@ describe('SessionManager', () => {
           ],
         });
         await vi.runAllTimersAsync();
-        await promise;
 
         const text = s.readPost();
         expect(text).toContain('core/list');
         expect(text).toContain('Item one');
         expect(text).toContain('Item two');
       } finally {
-        s.disconnect();
+        await s.disconnect();
         vi.useRealTimers();
       }
     });
@@ -1638,17 +1639,23 @@ describe('SessionManager', () => {
         // categories and tags IDs are stored in Y.Doc but rendered output
         // shows only the fields renderPost() exposes (status, date, slug, sticky, commentStatus, excerpt).
         // We verify via the internal state rather than rendered output for array properties.
-        expect(session.getCurrentPost()!.categories).toEqual([1, 3]);
+        const postWithCats = session.getCurrentPost();
+        assertDefined(postWithCats);
+        expect(postWithCats.categories).toEqual([1, 3]);
       });
 
       it('loads tags into Y.Doc', async () => {
         await connectAndOpenWithMeta(session);
-        expect(session.getCurrentPost()!.tags).toEqual([5]);
+        const postWithTags = session.getCurrentPost();
+        assertDefined(postWithTags);
+        expect(postWithTags.tags).toEqual([5]);
       });
 
       it('loads featured_media into Y.Doc', async () => {
         await connectAndOpenWithMeta(session);
-        expect(session.getCurrentPost()!.featured_media).toBe(99);
+        const postWithMedia = session.getCurrentPost();
+        assertDefined(postWithMedia);
+        expect(postWithMedia.featured_media).toBe(99);
       });
 
       it('loads comment_status into Y.Doc', async () => {
@@ -1802,7 +1809,9 @@ describe('SessionManager', () => {
 
         expect(result).toEqual(updated);
         expect(mockUpdatePost).toHaveBeenCalledWith(42, { status: 'publish' });
-        expect(session.getCurrentPost()!.status).toBe('publish');
+        const postAfterUpdate = session.getCurrentPost();
+        assertDefined(postAfterUpdate);
+        expect(postAfterUpdate.status).toBe('publish');
         expect(mockSyncFlushQueue).toHaveBeenCalled();
       });
 
@@ -2232,7 +2241,7 @@ describe('SessionManager', () => {
 
       it('reflects title changes made via setTitle()', async () => {
         await connectAndOpen(session);
-        await session.setTitle('New Title');
+        session.setTitle('New Title');
 
         expect(session.getTitle()).toBe('New Title');
       });

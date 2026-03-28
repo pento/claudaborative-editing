@@ -80,7 +80,7 @@ export class DocumentManager {
     const documentMap = this.getDocumentMap(doc);
     const title = documentMap.get('title');
     if (title instanceof Y.Text) {
-      return title.toString();
+      return title.toJSON();
     }
     return '';
   }
@@ -312,7 +312,7 @@ export class DocumentManager {
     const documentMap = this.getDocumentMap(doc);
     const content = documentMap.get('content');
     if (content instanceof Y.Text) {
-      return content.toString();
+      return content.toJSON();
     }
     return '';
   }
@@ -341,7 +341,7 @@ export class DocumentManager {
     const documentMap = this.getDocumentMap(doc);
     const value = documentMap.get(key);
     if (value instanceof Y.Text) {
-      return value.toString();
+      return value.toJSON();
     }
     return value;
   }

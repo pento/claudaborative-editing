@@ -3,6 +3,7 @@ import * as Y from 'yjs';
 import { DocumentManager } from '#yjs/document-manager';
 import { BlockTypeRegistry } from '#yjs/block-type-registry';
 import type { Block } from '#yjs/types';
+import { assertDefined } from '../test-utils.js';
 import {
   CRDT_RECORD_MAP_KEY,
   CRDT_STATE_MAP_KEY,
@@ -274,8 +275,8 @@ describe('DocumentManager', () => {
       manager.setBlocks(doc, [makeParagraph('First'), makeParagraph('Second')]);
 
       const block = manager.getBlockByIndex(doc, '1');
-      expect(block).not.toBeNull();
-      expect(block!.attributes.content).toBe('Second');
+      assertDefined(block);
+      expect(block.attributes.content).toBe('Second');
     });
 
     it('gets a nested block by dot notation', () => {
@@ -283,9 +284,9 @@ describe('DocumentManager', () => {
       manager.setBlocks(doc, [makeList(['Alpha', 'Beta', 'Gamma'])]);
 
       const block = manager.getBlockByIndex(doc, '0.1');
-      expect(block).not.toBeNull();
-      expect(block!.name).toBe('core/list-item');
-      expect(block!.attributes.content).toBe('Beta');
+      assertDefined(block);
+      expect(block.name).toBe('core/list-item');
+      expect(block.attributes.content).toBe('Beta');
     });
 
     it('returns null for out-of-range index', () => {
@@ -450,7 +451,8 @@ describe('DocumentManager', () => {
 
       manager.updateBlock(doc, '0', { content: 'Updated' });
       const block = manager.getBlockByIndex(doc, '0');
-      expect(block!.attributes.content).toBe('Updated');
+      assertDefined(block);
+      expect(block.attributes.content).toBe('Updated');
     });
 
     it('updates block attributes', () => {
@@ -459,9 +461,10 @@ describe('DocumentManager', () => {
 
       manager.updateBlock(doc, '0', { attributes: { level: 3 } });
       const block = manager.getBlockByIndex(doc, '0');
-      expect(block!.attributes.level).toBe(3);
+      assertDefined(block);
+      expect(block.attributes.level).toBe(3);
       // content should remain unchanged
-      expect(block!.attributes.content).toBe('Title');
+      expect(block.attributes.content).toBe('Title');
     });
 
     it('updates both content and attributes at once', () => {
@@ -474,8 +477,9 @@ describe('DocumentManager', () => {
       });
 
       const block = manager.getBlockByIndex(doc, '0');
-      expect(block!.attributes.content).toBe('New Title');
-      expect(block!.attributes.level).toBe(3);
+      assertDefined(block);
+      expect(block.attributes.content).toBe('New Title');
+      expect(block.attributes.level).toBe(3);
     });
 
     it('updates a nested block via dot notation', () => {
@@ -484,7 +488,8 @@ describe('DocumentManager', () => {
 
       manager.updateBlock(doc, '0.0', { content: 'Updated First' });
       const block = manager.getBlockByIndex(doc, '0.0');
-      expect(block!.attributes.content).toBe('Updated First');
+      assertDefined(block);
+      expect(block.attributes.content).toBe('Updated First');
     });
 
     it('does nothing for an out-of-range index', () => {
@@ -533,8 +538,9 @@ describe('DocumentManager', () => {
       manager.setBlocks(doc, [makeParagraph('Hello')]);
 
       const ytext = manager.getBlockAttributeYText(doc, '0', 'content');
+      assertDefined(ytext);
       expect(ytext).toBeInstanceOf(Y.Text);
-      expect(ytext!.toString()).toBe('Hello');
+      expect(ytext.toJSON()).toBe('Hello');
     });
 
     it('returns null for non-rich-text attributes', () => {
@@ -566,8 +572,9 @@ describe('DocumentManager', () => {
       manager.setBlocks(doc, [makeList(['Item A', 'Item B'])]);
 
       const ytext = manager.getBlockAttributeYText(doc, '0.1', 'content');
+      assertDefined(ytext);
       expect(ytext).toBeInstanceOf(Y.Text);
-      expect(ytext!.toString()).toBe('Item B');
+      expect(ytext.toJSON()).toBe('Item B');
     });
 
     it('delegates correctly from getBlockContentYText', () => {
@@ -588,7 +595,8 @@ describe('DocumentManager', () => {
       manager.setBlockNoteId(doc, '0', 42);
 
       const block = manager.getBlockByIndex(doc, '0');
-      expect(block!.attributes.metadata).toEqual({ noteId: 42 });
+      assertDefined(block);
+      expect(block.attributes.metadata).toEqual({ noteId: 42 });
     });
 
     it('setBlockNoteId preserves existing metadata keys when adding noteId', () => {
@@ -604,7 +612,8 @@ describe('DocumentManager', () => {
       manager.setBlockNoteId(doc, '0', 99);
 
       const block = manager.getBlockByIndex(doc, '0');
-      expect(block!.attributes.metadata).toEqual({
+      assertDefined(block);
+      expect(block.attributes.metadata).toEqual({
         customKey: 'customValue',
         priority: 1,
         noteId: 99,
@@ -633,7 +642,8 @@ describe('DocumentManager', () => {
       manager.removeBlockNoteId(doc, '0');
 
       const block = manager.getBlockByIndex(doc, '0');
-      expect(block!.attributes.metadata).toEqual({ otherKey: 'keep' });
+      assertDefined(block);
+      expect(block.attributes.metadata).toEqual({ otherKey: 'keep' });
     });
 
     it('removeBlockNoteId removes entire metadata key when noteId was the only key', () => {
@@ -644,7 +654,8 @@ describe('DocumentManager', () => {
       manager.removeBlockNoteId(doc, '0');
 
       const block = manager.getBlockByIndex(doc, '0');
-      expect(block!.attributes.metadata).toBeUndefined();
+      assertDefined(block);
+      expect(block.attributes.metadata).toBeUndefined();
     });
 
     it('removeBlockNoteId preserves other metadata keys when removing noteId', () => {
@@ -659,7 +670,8 @@ describe('DocumentManager', () => {
       manager.removeBlockNoteId(doc, '0');
 
       const block = manager.getBlockByIndex(doc, '0');
-      expect(block!.attributes.metadata).toEqual({ author: 'claude', version: 3 });
+      assertDefined(block);
+      expect(block.attributes.metadata).toEqual({ author: 'claude', version: 3 });
     });
 
     it('removeBlockNoteId is a no-op when block has no metadata', () => {
@@ -670,7 +682,8 @@ describe('DocumentManager', () => {
       manager.removeBlockNoteId(doc, '0');
 
       const block = manager.getBlockByIndex(doc, '0');
-      expect(block!.attributes.metadata).toBeUndefined();
+      assertDefined(block);
+      expect(block.attributes.metadata).toBeUndefined();
     });
 
     it('removeBlockNoteId throws when block index is invalid', () => {

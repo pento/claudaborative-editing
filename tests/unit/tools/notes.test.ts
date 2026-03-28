@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { registerNoteTools } from '../../../src/tools/notes.js';
 import { createMockServer, createMockSession, fakeUser, fakePost } from './helpers.js';
+import { assertDefined } from '../../test-utils.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { SessionManager } from '../../../src/session/session-manager.js';
 
@@ -28,7 +29,8 @@ describe('note tools', () => {
 
   describe('wp_list_notes', () => {
     it('returns "No notes" when empty', async () => {
-      const tool = server.registeredTools.get('wp_list_notes')!;
+      const tool = server.registeredTools.get('wp_list_notes');
+      assertDefined(tool);
       const result = await tool.handler({});
 
       expect(result.content[0].text).toBe('No notes on this post.');
@@ -64,7 +66,8 @@ describe('note tools', () => {
         noteBlockMap: { 1: '0' },
       });
 
-      const tool = server.registeredTools.get('wp_list_notes')!;
+      const tool = server.registeredTools.get('wp_list_notes');
+      assertDefined(tool);
       const result = await tool.handler({});
 
       const text = result.content[0].text;
@@ -93,7 +96,8 @@ describe('note tools', () => {
         noteBlockMap: {},
       });
 
-      const tool = server.registeredTools.get('wp_list_notes')!;
+      const tool = server.registeredTools.get('wp_list_notes');
+      assertDefined(tool);
       const result = await tool.handler({});
 
       expect(result.content[0].text).toContain('(unlinked)');
@@ -104,7 +108,8 @@ describe('note tools', () => {
         new Error('Not editing'),
       );
 
-      const tool = server.registeredTools.get('wp_list_notes')!;
+      const tool = server.registeredTools.get('wp_list_notes');
+      assertDefined(tool);
       const result = await tool.handler({});
 
       expect(result.isError).toBe(true);
@@ -114,7 +119,8 @@ describe('note tools', () => {
 
   describe('wp_add_note', () => {
     it('calls session.addNote and returns confirmation', async () => {
-      const tool = server.registeredTools.get('wp_add_note')!;
+      const tool = server.registeredTools.get('wp_add_note');
+      assertDefined(tool);
       const result = await tool.handler({ blockIndex: '0', content: 'Needs review' });
 
       expect(session.addNote).toHaveBeenCalledWith('0', 'Needs review');
@@ -126,7 +132,8 @@ describe('note tools', () => {
         new Error('Block not found'),
       );
 
-      const tool = server.registeredTools.get('wp_add_note')!;
+      const tool = server.registeredTools.get('wp_add_note');
+      assertDefined(tool);
       const result = await tool.handler({ blockIndex: '99', content: 'test' });
 
       expect(result.isError).toBe(true);
@@ -136,7 +143,8 @@ describe('note tools', () => {
 
   describe('wp_reply_to_note', () => {
     it('calls session.replyToNote and returns confirmation', async () => {
-      const tool = server.registeredTools.get('wp_reply_to_note')!;
+      const tool = server.registeredTools.get('wp_reply_to_note');
+      assertDefined(tool);
       const result = await tool.handler({ noteId: 1, content: 'Good point' });
 
       expect(session.replyToNote).toHaveBeenCalledWith(1, 'Good point');
@@ -148,7 +156,8 @@ describe('note tools', () => {
         new Error('Note not found'),
       );
 
-      const tool = server.registeredTools.get('wp_reply_to_note')!;
+      const tool = server.registeredTools.get('wp_reply_to_note');
+      assertDefined(tool);
       const result = await tool.handler({ noteId: 999, content: 'test' });
 
       expect(result.isError).toBe(true);
@@ -158,7 +167,8 @@ describe('note tools', () => {
 
   describe('wp_resolve_note', () => {
     it('calls session.resolveNote and returns confirmation', async () => {
-      const tool = server.registeredTools.get('wp_resolve_note')!;
+      const tool = server.registeredTools.get('wp_resolve_note');
+      assertDefined(tool);
       const result = await tool.handler({ noteId: 1 });
 
       expect(session.resolveNote).toHaveBeenCalledWith(1);
@@ -170,7 +180,8 @@ describe('note tools', () => {
         new Error('Note not found'),
       );
 
-      const tool = server.registeredTools.get('wp_resolve_note')!;
+      const tool = server.registeredTools.get('wp_resolve_note');
+      assertDefined(tool);
       const result = await tool.handler({ noteId: 999 });
 
       expect(result.isError).toBe(true);
@@ -180,7 +191,8 @@ describe('note tools', () => {
 
   describe('wp_update_note', () => {
     it('calls session.updateNote and returns confirmation', async () => {
-      const tool = server.registeredTools.get('wp_update_note')!;
+      const tool = server.registeredTools.get('wp_update_note');
+      assertDefined(tool);
       const result = await tool.handler({ noteId: 1, content: 'Revised feedback' });
 
       expect(session.updateNote).toHaveBeenCalledWith(1, 'Revised feedback');
@@ -192,7 +204,8 @@ describe('note tools', () => {
         new Error('Note not found'),
       );
 
-      const tool = server.registeredTools.get('wp_update_note')!;
+      const tool = server.registeredTools.get('wp_update_note');
+      assertDefined(tool);
       const result = await tool.handler({ noteId: 999, content: 'test' });
 
       expect(result.isError).toBe(true);

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { registerReadTools } from '../../../src/tools/read.js';
 import { createMockServer, createMockSession, fakeUser, fakePost } from './helpers.js';
+import { assertDefined } from '../../test-utils.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { SessionManager } from '../../../src/session/session-manager.js';
 
@@ -27,7 +28,8 @@ describe('read tools', () => {
 
   describe('wp_read_post', () => {
     it('returns rendered post content', async () => {
-      const tool = server.registeredTools.get('wp_read_post')!;
+      const tool = server.registeredTools.get('wp_read_post');
+      assertDefined(tool);
       const result = await tool.handler({});
 
       expect(result.content[0].text).toContain('Title: "My Great Post"');
@@ -39,7 +41,8 @@ describe('read tools', () => {
         throw new Error("Operation requires state editing, but current state is 'connected'");
       });
 
-      const tool = server.registeredTools.get('wp_read_post')!;
+      const tool = server.registeredTools.get('wp_read_post');
+      assertDefined(tool);
       const result = await tool.handler({});
 
       expect(result.isError).toBe(true);
@@ -49,7 +52,8 @@ describe('read tools', () => {
 
   describe('wp_read_block', () => {
     it('returns specific block content', async () => {
-      const tool = server.registeredTools.get('wp_read_block')!;
+      const tool = server.registeredTools.get('wp_read_block');
+      assertDefined(tool);
       const result = await tool.handler({ index: '0' });
 
       expect(session.readBlock).toHaveBeenCalledWith('0');
@@ -62,7 +66,8 @@ describe('read tools', () => {
         '[2.1] core/list-item\n  "Nested item"',
       );
 
-      const tool = server.registeredTools.get('wp_read_block')!;
+      const tool = server.registeredTools.get('wp_read_block');
+      assertDefined(tool);
       const result = await tool.handler({ index: '2.1' });
 
       expect(session.readBlock).toHaveBeenCalledWith('2.1');
@@ -74,7 +79,8 @@ describe('read tools', () => {
         throw new Error('Block not found at index 99');
       });
 
-      const tool = server.registeredTools.get('wp_read_block')!;
+      const tool = server.registeredTools.get('wp_read_block');
+      assertDefined(tool);
       const result = await tool.handler({ index: '99' });
 
       expect(result.isError).toBe(true);

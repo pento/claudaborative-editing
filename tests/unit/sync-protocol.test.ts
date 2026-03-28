@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { assertDefined } from '../test-utils.js';
 import * as Y from 'yjs';
 import {
   createSyncStep1,
@@ -68,8 +69,8 @@ describe('processIncomingUpdate', () => {
     const step1 = createSyncStep1(docA);
     const response = processIncomingUpdate(docB, step1);
 
-    expect(response).not.toBeNull();
-    expect(response!.type).toBe(SyncUpdateType.SYNC_STEP_2);
+    assertDefined(response);
+    expect(response.type).toBe(SyncUpdateType.SYNC_STEP_2);
   });
 
   it('applies a SYNC_STEP_2 and returns null', () => {
@@ -93,14 +94,14 @@ describe('processIncomingUpdate', () => {
     const docB = new Y.Doc();
 
     // Capture an update from docB
-    let capturedUpdate: Uint8Array | null = null;
+    let capturedUpdate: Uint8Array | undefined;
     docB.on('updateV2', (update: Uint8Array) => {
       capturedUpdate = update;
     });
     docB.getMap('data').set('foo', 'bar');
 
-    expect(capturedUpdate).not.toBeNull();
-    const syncUpdate = createUpdateFromChange(capturedUpdate!);
+    assertDefined(capturedUpdate);
+    const syncUpdate = createUpdateFromChange(capturedUpdate);
 
     const response = processIncomingUpdate(docA, syncUpdate);
     expect(response).toBeNull();
@@ -126,13 +127,14 @@ describe('processIncomingUpdate', () => {
 describe('createUpdateFromChange', () => {
   it('wraps a raw update in a SyncUpdate', () => {
     const doc = new Y.Doc();
-    let capturedUpdate: Uint8Array | null = null;
+    let capturedUpdate: Uint8Array | undefined;
     doc.on('updateV2', (update: Uint8Array) => {
       capturedUpdate = update;
     });
     doc.getMap('m').set('k', 'v');
 
-    const syncUpdate = createUpdateFromChange(capturedUpdate!);
+    assertDefined(capturedUpdate);
+    const syncUpdate = createUpdateFromChange(capturedUpdate);
     expect(syncUpdate.type).toBe(SyncUpdateType.UPDATE);
     expect(typeof syncUpdate.data).toBe('string');
 

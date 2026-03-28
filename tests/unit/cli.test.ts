@@ -4,7 +4,9 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 
 const BIN = join(import.meta.dirname, '../../dist/index.js');
-const pkg = JSON.parse(readFileSync(join(import.meta.dirname, '../../package.json'), 'utf-8'));
+const pkg = JSON.parse(readFileSync(join(import.meta.dirname, '../../package.json'), 'utf-8')) as {
+  version: string;
+};
 
 function run(...args: string[]): string {
   return execFileSync('node', [BIN, ...args], {
