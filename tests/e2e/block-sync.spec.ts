@@ -1,7 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { createMcpTestClient, callToolOrThrow, getToolText } from './helpers/mcp';
 import {
-  WP_ADMIN_PASSWORD,
   WP_ADMIN_USER,
   WP_BASE_URL,
   getSharedAppPassword,
@@ -23,14 +22,6 @@ interface EditorBlock {
   name: string;
   attributes: Record<string, unknown>;
   innerBlocks?: EditorBlock[];
-}
-
-async function loginToWordPress(page: Page): Promise<void> {
-  await page.goto('/wp-login.php');
-  await page.locator('#user_login').fill(WP_ADMIN_USER);
-  await page.locator('#user_pass').fill(WP_ADMIN_PASSWORD);
-  await page.locator('#wp-submit').click();
-  await page.waitForURL(/\/wp-admin\/?/);
 }
 
 async function openEditor(page: Page, postId: number): Promise<void> {
@@ -95,7 +86,6 @@ test.describe('block sync', () => {
     const { client, close, stderr } = await createMcpTestClient();
 
     try {
-      await loginToWordPress(page);
       await openEditor(page, postId);
 
       // Verify initial content is loaded in the browser
@@ -188,7 +178,6 @@ test.describe('block sync', () => {
     const { client, close, stderr } = await createMcpTestClient();
 
     try {
-      await loginToWordPress(page);
       await openEditor(page, postId);
 
       // Verify initial heading is present
@@ -260,7 +249,6 @@ test.describe('block sync', () => {
     const { client, close, stderr } = await createMcpTestClient();
 
     try {
-      await loginToWordPress(page);
       await openEditor(page, postId);
 
       // Verify initial heading is level 2
@@ -331,7 +319,6 @@ test.describe('block sync', () => {
     const { client, close, stderr } = await createMcpTestClient();
 
     try {
-      await loginToWordPress(page);
       await openEditor(page, postId);
 
       // Verify initial two paragraphs are present
@@ -427,7 +414,6 @@ test.describe('block sync', () => {
     const { client, close, stderr } = await createMcpTestClient();
 
     try {
-      await loginToWordPress(page);
       await openEditor(page, postId);
 
       // Verify initial content in browser
@@ -516,7 +502,6 @@ test.describe('block sync', () => {
     const { client, close, stderr } = await createMcpTestClient();
 
     try {
-      await loginToWordPress(page);
       await openEditor(page, postId);
 
       await expect

@@ -23,10 +23,16 @@ export default defineConfig({
   globalTeardown: './tests/e2e/global-teardown.ts',
   projects: [
     {
+      name: 'setup',
+      testMatch: /auth\.setup\.ts/,
+    },
+    {
       name: 'chromium',
       use: {
         ...devices['Desktop Chrome'],
+        storageState: 'test-results/playwright/.auth/admin.json',
       },
+      dependencies: ['setup'],
     },
   ],
 });
