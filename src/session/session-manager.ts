@@ -283,8 +283,8 @@ export class SessionManager {
   private postGone = false;
   /** Human-readable reason for why the post is gone. */
   private postGoneReason: string | null = null;
-  /** Guard to prevent concurrent post-existence checks. */
-  private postGoneCheckInProgress = false;
+  /** In-flight post-existence check promise, used as a lock. */
+  private postGoneCheck: Promise<void> | null = null;
   /** Timer for periodic post health checks (detects trashing via REST API). */
   private postHealthCheckTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -463,7 +463,7 @@ export class SessionManager {
           error instanceof WordPressApiError &&
           (error.status === 403 || error.status === 404 || error.status === 410)
         ) {
-          void this.checkPostStillExists();
+          this.checkPostStillExists();
         }
       },
       onCompactionRequested: () => {
@@ -610,10 +610,9 @@ export class SessionManager {
     // Trashing bypasses the Y.Doc (it's a direct DB status change),
     // so we poll getPost() to catch it.
     if (this.postHealthCheckInterval > 0) {
-      this.postHealthCheckTimer = setInterval(
-        () => void this.checkPostStillExists(),
-        this.postHealthCheckInterval,
-      );
+      this.postHealthCheckTimer = setInterval(() => {
+        this.checkPostStillExists();
+      }, this.postHealthCheckInterval);
     }
 
     this.state = 'editing';
@@ -664,13 +663,19 @@ export class SessionManager {
       this.postHealthCheckTimer = null;
     }
 
+    // Wait for any in-flight post-existence check to complete before
+    // clearing state, so it doesn't mutate a subsequent session.
+    if (this.postGoneCheck) {
+      await this.postGoneCheck;
+    }
+
     this._doc = null;
     this.commentDoc = null;
     this._currentPost = null;
     this.collaborators = [];
     this.postGone = false;
     this.postGoneReason = null;
-    this.postGoneCheckInProgress = false;
+    this.postGoneCheck = null;
     this.state = 'connected';
   }
 
@@ -1771,28 +1776,35 @@ export class SessionManager {
 
   /**
    * Check if the currently open post still exists and is not trashed.
-   * Called asynchronously when the sync client reports a 403/404/410 error.
-   * Sets `postGone` if the post is confirmed deleted or trashed.
+   * Called asynchronously when the sync client reports a 403/404/410 error,
+   * or periodically by the health check timer.
+   *
+   * The in-flight promise is stored in `postGoneCheck` so that `closePost()`
+   * can await it before clearing state, preventing stale results from
+   * mutating a subsequent session.
    */
-  private async checkPostStillExists(): Promise<void> {
-    if (this.postGone || this.postGoneCheckInProgress || !this._apiClient || !this._currentPost) {
+  private checkPostStillExists(): void {
+    if (this.postGone || this.postGoneCheck || !this._apiClient || !this._currentPost) {
       return;
     }
-    this.postGoneCheckInProgress = true;
-    try {
-      const post = await this._apiClient.getPost(this._currentPost.id);
-      if (post.status === 'trash') {
-        this.postGone = true;
-        this.postGoneReason = 'This post has been moved to the trash.';
+    const apiClient = this._apiClient;
+    const postId = this._currentPost.id;
+    this.postGoneCheck = (async () => {
+      try {
+        const post = await apiClient.getPost(postId);
+        if (post.status === 'trash') {
+          this.postGone = true;
+          this.postGoneReason = 'This post has been moved to the trash.';
+        }
+      } catch (error) {
+        if (error instanceof WordPressApiError && (error.status === 404 || error.status === 410)) {
+          this.postGone = true;
+          this.postGoneReason = 'This post has been deleted.';
+        }
+      } finally {
+        this.postGoneCheck = null;
       }
-    } catch (error) {
-      if (error instanceof WordPressApiError && (error.status === 404 || error.status === 410)) {
-        this.postGone = true;
-        this.postGoneReason = 'This post has been deleted.';
-      }
-    } finally {
-      this.postGoneCheckInProgress = false;
-    }
+    })();
   }
 
   /**

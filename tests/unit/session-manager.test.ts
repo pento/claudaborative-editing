@@ -2737,5 +2737,32 @@ describe('SessionManager', () => {
       await session.closePost();
       expect(session.isPostGone().gone).toBe(false);
     });
+
+    it('closePost waits for in-flight check before clearing state', async () => {
+      await connectAndOpen(session);
+      const callbacks = getSyncCallbacks();
+
+      // Make getPost hang so the check is in-flight
+      let resolveGetPost: ((value: WPPost) => void) | undefined;
+      mockGetPost.mockReturnValueOnce(
+        new Promise<WPPost>((resolve) => {
+          resolveGetPost = resolve;
+        }),
+      );
+
+      const syncError = new WordPressApiError('Not found', 404, '');
+      callbacks.onStatusChange('error', syncError);
+
+      // Start closePost — it will await the in-flight check
+      const trashedPost: WPPost = { ...fakePost, status: 'trash' };
+      assertDefined(resolveGetPost, 'resolveGetPost should be set');
+      resolveGetPost(trashedPost);
+
+      await session.closePost();
+
+      // closePost resets postGone after the check completes
+      expect(session.getState()).toBe('connected');
+      expect(session.isPostGone().gone).toBe(false);
+    });
   });
 });
