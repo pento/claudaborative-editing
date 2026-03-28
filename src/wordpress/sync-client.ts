@@ -14,8 +14,8 @@ export interface SyncCallbacks {
   onUpdate: (update: SyncUpdate) => SyncUpdate | null;
   /** Called when awareness state changes. */
   onAwareness: (state: AwarenessState) => void;
-  /** Called when connection status changes. */
-  onStatusChange: (status: SyncStatus) => void;
+  /** Called when connection status changes. The error is provided on 'error' status. */
+  onStatusChange: (status: SyncStatus, error?: Error) => void;
   /** Called when the server requests compaction; must return a compaction update. */
   onCompactionRequested: () => SyncUpdate;
   /** Return the current local awareness state, or null if disconnected. */
@@ -52,7 +52,7 @@ export class SyncClient {
   private flushRequested: boolean = false;
 
   private rooms = new Map<string, RoomState>();
-  private onStatusChange: ((status: SyncStatus) => void) | null = null;
+  private onStatusChange: ((status: SyncStatus, error?: Error) => void) | null = null;
   private firstPollResolve: (() => void) | null = null;
 
   constructor(
@@ -272,7 +272,7 @@ export class SyncClient {
         this.firstPollResolve();
         this.firstPollResolve = null;
       }
-    } catch {
+    } catch (error) {
       // Restore un-sent updates for ALL rooms (excluding stale compaction updates)
       for (const [name, updates] of drainedQueues) {
         const state = this.rooms.get(name);
@@ -282,7 +282,7 @@ export class SyncClient {
         }
       }
 
-      this.onStatusChange?.('error');
+      this.onStatusChange?.('error', error instanceof Error ? error : undefined);
       this.currentBackoff = Math.min(this.currentBackoff * 2, this.config.maxErrorBackoff);
     }
 

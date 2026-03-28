@@ -24,14 +24,21 @@ export function registerStatusTools(server: McpServer, session: SessionManager):
 
         const post = session.getCurrentPost();
         if (state === 'editing' && post) {
-          const syncStatus = session.getSyncStatus();
-          const collaboratorCount = session.getCollaborators().length;
+          const postGoneInfo = session.isPostGone();
+          if (postGoneInfo.gone) {
+            lines.push(`WARNING: ${postGoneInfo.reason ?? 'This post is no longer available.'}`);
+            lines.push('Use wp_close_post to close it, then open another post.');
+            lines.push(`Post: (ID: ${post.id})`);
+          } else {
+            const syncStatus = session.getSyncStatus();
+            const collaboratorCount = session.getCollaborators().length;
 
-          lines.push(
-            `Sync: ${syncStatus?.isPolling ? 'polling' : 'stopped'} (${collaboratorCount + 1} collaborator${collaboratorCount + 1 !== 1 ? 's' : ''})`,
-          );
-          lines.push(`Post: "${session.getTitle()}" (ID: ${post.id}, status: ${post.status})`);
-          lines.push(`Queue: ${syncStatus?.queueSize ?? 0} pending updates`);
+            lines.push(
+              `Sync: ${syncStatus?.isPolling ? 'polling' : 'stopped'} (${collaboratorCount + 1} collaborator${collaboratorCount + 1 !== 1 ? 's' : ''})`,
+            );
+            lines.push(`Post: "${session.getTitle()}" (ID: ${post.id}, status: ${post.status})`);
+            lines.push(`Queue: ${syncStatus?.queueSize ?? 0} pending updates`);
+          }
         } else {
           lines.push('Post: none open');
           lines.push('');

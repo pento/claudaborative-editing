@@ -9,6 +9,7 @@ import type {
   SyncUpdate,
 } from '../../src/wordpress/types.js';
 import type { SyncCallbacks } from '../../src/wordpress/sync-client.js';
+import { WordPressApiError } from '../../src/wordpress/api-client.js';
 import { assertDefined } from '../test-utils.js';
 
 // --- Mock the WordPress API client ---
@@ -32,6 +33,18 @@ const mockUpdateNote = vi.fn<() => Promise<WPNote>>();
 const mockDeleteNote = vi.fn<() => Promise<void>>();
 
 vi.mock('../../src/wordpress/api-client.js', () => {
+  // eslint-disable-next-line @typescript-eslint/no-shadow -- must match the real export name
+  class WordPressApiError extends Error {
+    constructor(
+      message: string,
+      public readonly status: number,
+      public readonly body: string,
+    ) {
+      super(message);
+      this.name = 'WordPressApiError';
+    }
+  }
+
   return {
     WordPressApiClient: vi.fn().mockImplementation(function (this: Record<string, unknown>) {
       this.validateConnection = mockValidateConnection;
@@ -53,6 +66,7 @@ vi.mock('../../src/wordpress/api-client.js', () => {
       this.updateNote = mockUpdateNote;
       this.deleteNote = mockDeleteNote;
     }),
+    WordPressApiError,
   };
 });
 
@@ -160,6 +174,7 @@ describe('SessionManager', () => {
     mockCheckNotesSupport.mockResolvedValue(false);
     session = new SessionManager();
     session.syncWaitTimeout = 0; // Skip sync wait in tests
+    session.postHealthCheckInterval = 0; // Disable periodic health checks in tests
   });
 
   afterEach(async () => {
@@ -1192,6 +1207,7 @@ describe('SessionManager', () => {
     async function connectWithBlockTypes(blockTypes: unknown[]) {
       const s = new SessionManager();
       s.syncWaitTimeout = 0;
+      s.postHealthCheckInterval = 0;
       mockGetBlockTypes.mockResolvedValueOnce(blockTypes);
       mockValidateConnection.mockResolvedValue(fakeUser);
       mockValidateSyncEndpoint.mockResolvedValue(undefined);
@@ -2521,6 +2537,252 @@ describe('SessionManager', () => {
           'Notes are not supported. This feature requires WordPress 6.9 or later.',
         );
       });
+    });
+  });
+
+  describe('post-gone detection', () => {
+    function getSyncCallbacks(): SyncCallbacks {
+      const call = mockSyncStart.mock.calls[0];
+      assertDefined(call, 'syncClient.start() was not called');
+      return call[3];
+    }
+
+    it('sets postGone when sync error triggers 404 on getPost', async () => {
+      await connectAndOpen(session);
+      const callbacks = getSyncCallbacks();
+
+      // Simulate sync error with a 404 WordPressApiError
+      const syncError = new WordPressApiError('Not found', 404, '');
+      // getPost will also return 404 when checking
+      mockGetPost.mockRejectedValueOnce(new WordPressApiError('Not found', 404, ''));
+
+      callbacks.onStatusChange('error', syncError);
+
+      // checkPostStillExists is async fire-and-forget; wait for it
+      await vi.waitFor(() => {
+        expect(session.isPostGone().gone).toBe(true);
+      });
+
+      expect(session.isPostGone().reason).toBe('This post has been deleted.');
+
+      // Background work should be stopped
+      expect(mockSyncStop).toHaveBeenCalled();
+    });
+
+    it('sets postGone when getPost returns trashed post', async () => {
+      await connectAndOpen(session);
+      const callbacks = getSyncCallbacks();
+
+      const syncError = new WordPressApiError('Forbidden', 403, '');
+      const trashedPost: WPPost = { ...fakePost, status: 'trash' };
+      mockGetPost.mockResolvedValueOnce(trashedPost);
+
+      callbacks.onStatusChange('error', syncError);
+
+      await vi.waitFor(() => {
+        expect(session.isPostGone().gone).toBe(true);
+      });
+
+      expect(session.isPostGone().reason).toBe('This post has been moved to the trash.');
+
+      // Background work should be stopped
+      expect(mockSyncStop).toHaveBeenCalled();
+    });
+
+    it('does not set postGone on transient errors', async () => {
+      await connectAndOpen(session);
+      const callbacks = getSyncCallbacks();
+
+      // Network error (not a WordPressApiError) should not trigger a check
+      callbacks.onStatusChange('error', new Error('Network timeout'));
+
+      // Give it a tick to ensure nothing async fires
+      await new Promise((r) => setTimeout(r, 10));
+
+      expect(session.isPostGone().gone).toBe(false);
+    });
+
+    it('does not set postGone when getPost succeeds with active post', async () => {
+      await connectAndOpen(session);
+      const callbacks = getSyncCallbacks();
+
+      const syncError = new WordPressApiError('Forbidden', 403, '');
+      // getPost returns the post normally (transient sync error)
+      mockGetPost.mockResolvedValueOnce(fakePost);
+
+      callbacks.onStatusChange('error', syncError);
+
+      await new Promise((r) => setTimeout(r, 10));
+
+      expect(session.isPostGone().gone).toBe(false);
+    });
+
+    it('blocks editing operations when postGone is set', async () => {
+      await connectAndOpen(session);
+      const callbacks = getSyncCallbacks();
+
+      const syncError = new WordPressApiError('Not found', 404, '');
+      mockGetPost.mockRejectedValueOnce(new WordPressApiError('Not found', 404, ''));
+
+      callbacks.onStatusChange('error', syncError);
+
+      await vi.waitFor(() => {
+        expect(session.isPostGone().gone).toBe(true);
+      });
+
+      // readPost should throw
+      expect(() => session.readPost()).toThrow(/has been deleted/);
+      expect(() => session.readPost()).toThrow(/wp_close_post/);
+
+      // updateBlock should throw
+      expect(() => {
+        session.updateBlock('0', { content: 'test' });
+      }).toThrow(/has been deleted/);
+
+      // insertBlock should throw
+      expect(() => {
+        session.insertBlock(0, { name: 'core/paragraph', content: 'test' });
+      }).toThrow(/has been deleted/);
+
+      // setTitle should throw
+      expect(() => {
+        session.setTitle('test');
+      }).toThrow(/has been deleted/);
+
+      // save should throw
+      await expect(session.save()).rejects.toThrow(/has been deleted/);
+    });
+
+    it('allows closePost when postGone is set', async () => {
+      await connectAndOpen(session);
+      const callbacks = getSyncCallbacks();
+
+      const syncError = new WordPressApiError('Not found', 404, '');
+      mockGetPost.mockRejectedValueOnce(new WordPressApiError('Not found', 404, ''));
+
+      callbacks.onStatusChange('error', syncError);
+
+      await vi.waitFor(() => {
+        expect(session.isPostGone().gone).toBe(true);
+      });
+
+      // closePost should still work
+      await session.closePost();
+      expect(session.getState()).toBe('connected');
+    });
+
+    it('resets postGone after closePost', async () => {
+      await connectAndOpen(session);
+      const callbacks = getSyncCallbacks();
+
+      const syncError = new WordPressApiError('Not found', 404, '');
+      mockGetPost.mockRejectedValueOnce(new WordPressApiError('Not found', 404, ''));
+
+      callbacks.onStatusChange('error', syncError);
+
+      await vi.waitFor(() => {
+        expect(session.isPostGone().gone).toBe(true);
+      });
+
+      await session.closePost();
+
+      expect(session.isPostGone().gone).toBe(false);
+      expect(session.isPostGone().reason).toBeNull();
+    });
+
+    it('does not trigger concurrent post-existence checks', async () => {
+      await connectAndOpen(session);
+      const callbacks = getSyncCallbacks();
+
+      // Make getPost hang to simulate slow network
+      let resolveGetPost: ((value: WPPost) => void) | undefined;
+      mockGetPost.mockReturnValueOnce(
+        new Promise<WPPost>((resolve) => {
+          resolveGetPost = resolve;
+        }),
+      );
+
+      const syncError = new WordPressApiError('Not found', 404, '');
+      callbacks.onStatusChange('error', syncError);
+      // Second call while first is in progress — should be ignored
+      callbacks.onStatusChange('error', syncError);
+
+      // Only one getPost call should have been made
+      // The first call was during openPost, the second is our check
+      const getPostCallsBeforeResolve = mockGetPost.mock.calls.length;
+      expect(getPostCallsBeforeResolve).toBe(2); // 1 from openPost + 1 from check
+
+      // Resolve the pending check
+      assertDefined(resolveGetPost, 'resolveGetPost should be set');
+      resolveGetPost(fakePost);
+      await new Promise((r) => setTimeout(r, 10));
+
+      expect(session.isPostGone().gone).toBe(false);
+    });
+
+    it('periodic health check detects trashed post', async () => {
+      // Use a very short interval so the timer fires quickly
+      session.postHealthCheckInterval = 50;
+      await connectAndOpen(session);
+
+      // Return trashed post on next getPost call
+      const trashedPost: WPPost = { ...fakePost, status: 'trash' };
+      mockGetPost.mockResolvedValueOnce(trashedPost);
+
+      // Wait for the health check timer to fire
+      await vi.waitFor(
+        () => {
+          expect(session.isPostGone().gone).toBe(true);
+        },
+        { timeout: 1000 },
+      );
+
+      expect(session.isPostGone().reason).toBe('This post has been moved to the trash.');
+
+      // Background work (including the health check timer) should be stopped
+      expect(mockSyncStop).toHaveBeenCalled();
+
+      // closePost still works for cleanup
+      await session.closePost();
+      expect(session.isPostGone().gone).toBe(false);
+    });
+
+    it('closePost waits for in-flight check before clearing state', async () => {
+      await connectAndOpen(session);
+      const callbacks = getSyncCallbacks();
+
+      // Make getPost hang so the check is in-flight
+      let resolveGetPost: ((value: WPPost) => void) | undefined;
+      mockGetPost.mockReturnValueOnce(
+        new Promise<WPPost>((resolve) => {
+          resolveGetPost = resolve;
+        }),
+      );
+
+      const syncError = new WordPressApiError('Not found', 404, '');
+      callbacks.onStatusChange('error', syncError);
+
+      // Start closePost while the check is still in-flight — it must await it
+      const closePromise = session.closePost();
+
+      // Resolve the hanging getPost after closePost has started waiting
+      assertDefined(resolveGetPost, 'resolveGetPost should be set');
+      resolveGetPost({ ...fakePost, status: 'trash' });
+
+      await closePromise;
+
+      // closePost resets postGone after the check completes
+      expect(session.getState()).toBe('connected');
+      expect(session.isPostGone().gone).toBe(false);
+    });
+
+    it('closePost clears health check timer on a healthy post', async () => {
+      session.postHealthCheckInterval = 5000;
+      await connectAndOpen(session);
+
+      // Post is not gone — closePost should clean up the running timer
+      await session.closePost();
+      expect(session.getState()).toBe('connected');
     });
   });
 });
