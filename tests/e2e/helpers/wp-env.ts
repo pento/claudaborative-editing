@@ -80,6 +80,21 @@ export async function ensureWpEnvRunning(): Promise<void> {
 
   await waitForWordPress();
 
+  // Reuse an existing app password from a previous run if the state file
+  // exists (avoids accumulating passwords across repeated runs).
+  if (existsSync(STATE_FILE)) {
+    const prev = JSON.parse(readFileSync(STATE_FILE, 'utf8')) as { appPassword?: string };
+    if (prev.appPassword) {
+      sharedAppPassword = prev.appPassword;
+      writeFileSync(
+        STATE_FILE,
+        JSON.stringify({ startedBySuite: !alreadyRunning, appPassword: sharedAppPassword }),
+        'utf8',
+      );
+      return;
+    }
+  }
+
   // Create a shared app password for REST API access (wp-cli runs once
   // here in global setup, then all tests use the REST API).
   const appPassword = runWpEnv([
@@ -98,10 +113,7 @@ export async function ensureWpEnvRunning(): Promise<void> {
 
   writeFileSync(
     STATE_FILE,
-    JSON.stringify({
-      startedBySuite: !alreadyRunning,
-      appPassword,
-    }),
+    JSON.stringify({ startedBySuite: !alreadyRunning, appPassword }),
     'utf8',
   );
 }
@@ -111,11 +123,17 @@ export function teardownWpEnv(): void {
     return;
   }
 
+  // When reuse is enabled, keep the state file so the next run can
+  // reuse the app password without creating a new one.
+  if (process.env.CLAUDABORATIVE_E2E_REUSE_ENV === '1') {
+    return;
+  }
+
   const state = JSON.parse(readFileSync(STATE_FILE, 'utf8')) as {
     startedBySuite?: boolean;
   };
 
-  if (state.startedBySuite && process.env.CLAUDABORATIVE_E2E_REUSE_ENV !== '1') {
+  if (state.startedBySuite) {
     runWpEnv(['stop'], true);
   }
 
