@@ -18,7 +18,7 @@ That's it — no manual config editing required.
 
 ## Prerequisites
 
-- **WordPress 7.0+** with collaborative editing enabled (Settings → Writing)
+- **WordPress 7.0+** or **Gutenberg 22.8+** with collaborative editing enabled (Settings → Writing)
 - A WordPress user with `edit_posts` capability
 
 ## Configuration

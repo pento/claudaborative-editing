@@ -34,8 +34,8 @@
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
-    "lint": "eslint --max-warnings 0 . && markdownlint-cli2 && prettier --check -u .",
-    "lint:fix": "eslint --fix --max-warnings 0 . && markdownlint-cli2 --fix && prettier --write -u .",
+    "lint": "ESLINT_USE_FLAT_CONFIG=true eslint --max-warnings 0 . && markdownlint-cli2 && prettier --check -u .",
+    "lint:fix": "ESLINT_USE_FLAT_CONFIG=true eslint --fix --max-warnings 0 . && markdownlint-cli2 --fix && prettier --write -u .",
     "prepare": "husky",
     "prepublishOnly": "npm run typecheck && npm run lint && npm test && npm run build",
     "start": "node dist/index.js",
@@ -49,11 +49,8 @@
   },
   "lint-staged": {
     "*.{ts,js,md,json,jsonc}": "prettier --write",
-    "*.{ts,js}": "eslint --max-warnings 0",
-    "*.md": [
-      "eslint --max-warnings 0",
-      "markdownlint-cli2"
-    ]
+    "*.{ts,js}": "env ESLINT_USE_FLAT_CONFIG=true eslint --max-warnings 0",
+    "*.md": "markdownlint-cli2"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.27.1",
@@ -64,17 +61,18 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
-    "@eslint/markdown": "^7.5.1",
+    "@babel/core": "^7.29.0",
+    "@eslint/eslintrc": "^2.1.4",
+    "@eslint/js": "^8.57.1",
     "@playwright/test": "^1.58.2",
     "@types/node": "^22.19.15",
     "@vitest/coverage-v8": "^4.1.0",
     "@wordpress/env": "^11.2.0",
-    "eslint": "^10.1.0",
+    "@wordpress/eslint-plugin": "^24.4.0",
+    "eslint": "^8.57.1",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-package-json": "^0.91.0",
     "husky": "^9.1.7",
-    "jiti": "^2.6.1",
     "lint-staged": "^16.4.0",
     "markdownlint-cli2": "^0.22.0",
     "prettier": "^3.8.1",

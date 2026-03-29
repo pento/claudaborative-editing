@@ -3,11 +3,12 @@
   "core": "WordPress/WordPress#master",
   "phpVersion": "8.5",
   "testsEnvironment": false,
-  "plugins": ["WordPress/gutenberg#trunk"],
+  "port": 8889,
+  "plugins": ["https://downloads.wordpress.org/plugin/gutenberg.zip"],
   "mappings": {
     "wp-content/plugins/claudaborative-editing": "./wordpress-plugin"
   },
   "lifecycleScripts": {
-    "afterStart": "./bin/after-start.sh --build-gutenberg"
+    "afterStart": "./bin/after-start.sh --test-env"
   }
 }

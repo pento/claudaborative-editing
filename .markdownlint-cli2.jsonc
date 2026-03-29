@@ -10,5 +10,14 @@
       "siblings_only": true
     }
   },
-  "ignores": ["node_modules/", "dist/", "coverage/", ".gutenberg/", "test-results/"]
+  "ignores": [
+    "node_modules/",
+    "dist/",
+    "coverage/",
+    ".gutenberg/",
+    "test-results/",
+    "wordpress-plugin/node_modules/",
+    "wordpress-plugin/vendor/",
+    "wordpress-plugin/build/"
+  ]
 }

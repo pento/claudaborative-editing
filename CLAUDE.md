@@ -275,3 +275,37 @@ Prompt handlers check `session.getState()` at invocation time:
 ## MCP Server Usage
 
 The MCP server reconnects to WordPress automatically on restart using stored credentials/environment variables. You generally do **not** need to call `wp_connect` — check `wp_status` first. Only use `wp_connect` if the status shows disconnected and the user explicitly provides credentials.
+
+## WordPress Plugin
+
+The `wordpress-plugin/` directory contains a companion WordPress plugin that adds AI action controls to the Gutenberg editor. It has its own `@wordpress/scripts` build chain but shares linting configuration with the root project.
+
+### Plugin Build & Test
+
+```bash
+cd wordpress-plugin
+npm install
+npm run build          # Build with @wordpress/scripts → build/
+composer install
+composer phpcs         # PHP CodeSniffer (WordPress-Extra)
+```
+
+JS linting is handled by the root ESLint config (`eslint.config.mjs`) via `@wordpress/eslint-plugin` + FlatCompat. Run `npm run lint` from the repo root to lint everything (MCP TypeScript + plugin JS + Prettier + markdownlint).
+
+PHPUnit tests require wp-env (run from the repo root):
+
+```bash
+npx wp-env start
+npx wp-env run cli --env-cwd=wp-content/plugins/claudaborative-editing vendor/bin/phpunit
+```
+
+### Plugin Structure
+
+- `claudaborative-editing.php` — Plugin header, bootstrap, hook registration
+- `includes/class-command-store.php` — `wpce_command` CPT registration and meta fields
+- `src/ai-actions/` — Gutenberg editor plugin source (compiled by `@wordpress/scripts`)
+- `tests/` — PHPUnit tests (WordPress test framework)
+
+### Custom Post Type: `wpce_command`
+
+Non-public CPT for queuing commands from the WordPress editor to the MCP server. Post meta fields: `wpce_prompt`, `wpce_arguments` (JSON), `wpce_command_status`, `wpce_claimed_by`, `wpce_message`, `wpce_expires_at`. Scoped by `post_author` (requesting user) and `post_parent` (target post).

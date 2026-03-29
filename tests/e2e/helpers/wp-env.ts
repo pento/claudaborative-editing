@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const WP_BASE_URL = process.env.WP_BASE_URL ?? 'http://localhost:8888';
+export const WP_BASE_URL = process.env.WP_BASE_URL ?? 'http://localhost:8889';
 export const WP_ADMIN_USER = process.env.WP_E2E_ADMIN_USER ?? 'admin';
 export const WP_ADMIN_PASSWORD = process.env.WP_E2E_ADMIN_PASSWORD ?? 'password';
 
@@ -16,7 +16,7 @@ const repoHash = createHash('md5').update(REPO_ROOT).digest('hex').slice(0, 8);
 const STATE_FILE = path.join(tmpdir(), `claudaborative-editing-e2e-wp-env-${repoHash}.json`);
 
 function runWpEnv(args: string[], inheritOutput: boolean = false): string {
-  return execFileSync('npx', ['wp-env', ...args], {
+  return execFileSync('npx', ['wp-env', '--config', '.wp-env.test.json', ...args], {
     cwd: REPO_ROOT,
     encoding: 'utf8',
     stdio: inheritOutput ? 'inherit' : ['ignore', 'pipe', 'pipe'],

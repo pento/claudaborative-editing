@@ -1,25 +1,44 @@
-import { defineConfig } from 'eslint/config';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { FlatCompat } from '@eslint/eslintrc';
 import eslint from '@eslint/js';
 import tseslint from 'typescript-eslint';
-import markdown from '@eslint/markdown';
 import packageJson from 'eslint-plugin-package-json';
 import eslintConfigPrettier from 'eslint-config-prettier';
 
-export default defineConfig(
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const compat = new FlatCompat({ baseDirectory: __dirname });
+
+export default [
   // Global ignores
   {
-    ignores: ['dist/**', 'coverage/**', 'node_modules/**', '.gutenberg/**'],
+    ignores: [
+      'dist/**',
+      'coverage/**',
+      'node_modules/**',
+      '.gutenberg/**',
+      'wordpress-plugin/vendor/**',
+      'wordpress-plugin/node_modules/**',
+      'wordpress-plugin/build/**',
+    ],
   },
 
   // TypeScript files: recommended + strict-type-checked + WordPress esnext-inspired code quality rules
   // Code quality rules extracted from @wordpress/eslint-plugin configs/es5.js + configs/esnext.js
   {
-    files: ['**/*.ts'],
-    extends: [eslint.configs.recommended, ...tseslint.configs.strictTypeChecked],
+    files: ['src/**/*.ts', 'tests/**/*.ts', '*.config.ts'],
+    ...eslint.configs.recommended,
+  },
+  ...tseslint.configs.strictTypeChecked.map((config) => ({
+    ...config,
+    files: ['src/**/*.ts', 'tests/**/*.ts', '*.config.ts'],
+  })),
+  {
+    files: ['src/**/*.ts', 'tests/**/*.ts', '*.config.ts'],
     languageOptions: {
       parserOptions: {
         project: 'tsconfig.eslint.json',
-        tsconfigRootDir: import.meta.dirname,
+        tsconfigRootDir: __dirname,
       },
     },
     rules: {
@@ -83,12 +102,28 @@ export default defineConfig(
     },
   },
 
-  // package.json
-  packageJson.configs.recommended,
+  // WordPress plugin JS: @wordpress/eslint-plugin via FlatCompat
+  // Uses individual sub-configs rather than 'recommended' to avoid loading
+  // eslint-plugin-react (and its prop-types dep) until we have React code.
+  // Add 'plugin:@wordpress/eslint-plugin/react' and
+  // 'plugin:@wordpress/eslint-plugin/jsx-a11y' when React is introduced.
+  ...compat
+    .extends(
+      'plugin:@wordpress/eslint-plugin/esnext',
+      'plugin:@wordpress/eslint-plugin/custom',
+      'plugin:@wordpress/eslint-plugin/i18n',
+    )
+    .map((config) => ({
+      ...config,
+      files: ['wordpress-plugin/**/*.js'],
+    })),
 
-  // Markdown files
-  markdown.configs.recommended,
+  // Root package.json only (plugin has its own conventions)
+  {
+    ...packageJson.configs.recommended,
+    files: ['package.json'],
+  },
 
   // Prettier must be last — disables all formatting-related ESLint rules
   eslintConfigPrettier,
-);
+];

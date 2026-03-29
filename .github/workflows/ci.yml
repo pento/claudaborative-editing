@@ -38,7 +38,9 @@ jobs:
         uses: pento/lcov-coverage-check@v2
         with:
           lcov-file: coverage/lcov.info
-          path: src/
+          path: |
+            src/
+            wordpress-plugin/src/
           ignore-patterns: |
             **/types.ts
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -58,23 +60,58 @@ jobs:
 
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-
-      - name: Use latest pre-built Gutenberg for CI
-        run: |
-          LATEST_URL=$(gh api repos/WordPress/gutenberg/releases/latest --jq '.assets[] | select(.name == "gutenberg.zip") | .browser_download_url')
-          cat > .wp-env.json <<WPENV
-          {
-            "\$schema": "https://schemas.wp.org/trunk/wp-env.json",
-            "core": "WordPress/WordPress#master",
-            "phpVersion": "8.5",
-            "testsEnvironment": false,
-            "plugins": ["$LATEST_URL"],
-            "lifecycleScripts": {
-              "afterStart": "npx wp-env run cli wp option update wp_collaboration_enabled 1"
-            }
-          }
-          WPENV
-        env:
-          GH_TOKEN: ${{ github.token }}
-
       - run: npm run test:e2e
+
+  plugin-lint-php:
+    name: Plugin PHP Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          tools: composer
+
+      - name: Install Composer dependencies
+        run: composer install --no-interaction --prefer-dist
+        working-directory: wordpress-plugin
+
+      - name: Run PHPCS
+        run: composer phpcs
+        working-directory: wordpress-plugin
+
+  plugin-test-php:
+    name: Plugin PHP Tests
+    runs-on: ubuntu-latest
+    needs: [plugin-lint-php]
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install root npm dependencies
+        run: npm ci
+
+      - name: Install plugin npm dependencies
+        run: npm ci
+        working-directory: wordpress-plugin
+
+      - name: Build plugin
+        run: npm run build
+        working-directory: wordpress-plugin
+
+      - name: Start wp-env
+        run: npx wp-env start --config .wp-env.test.json
+
+      - name: Install Composer dependencies in container
+        run: npx wp-env --config .wp-env.test.json run cli --env-cwd=wp-content/plugins/claudaborative-editing composer install --no-interaction --prefer-dist
+
+      - name: Run PHPUnit
+        run: npx wp-env --config .wp-env.test.json run cli --env-cwd=wp-content/plugins/claudaborative-editing vendor/bin/phpunit
