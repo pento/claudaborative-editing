@@ -60,25 +60,6 @@ jobs:
 
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-
-      - name: Use latest pre-built Gutenberg for CI
-        run: |
-          LATEST_URL=$(gh api repos/WordPress/gutenberg/releases/latest --jq '.assets[] | select(.name == "gutenberg.zip") | .browser_download_url')
-          cat > .wp-env.json <<WPENV
-          {
-            "\$schema": "https://schemas.wp.org/trunk/wp-env.json",
-            "core": "WordPress/WordPress#master",
-            "phpVersion": "8.5",
-            "testsEnvironment": false,
-            "plugins": ["$LATEST_URL"],
-            "lifecycleScripts": {
-              "afterStart": "npx wp-env run cli wp option update wp_collaboration_enabled 1"
-            }
-          }
-          WPENV
-        env:
-          GH_TOKEN: ${{ github.token }}
-
       - run: npm run test:e2e
 
   plugin-lint-php:
@@ -126,22 +107,11 @@ jobs:
         run: npm run build
         working-directory: wordpress-plugin
 
-      - name: Use lightweight wp-env config for plugin tests
-        run: |
-          cat > .wp-env.override.json <<'WPENV'
-          {
-            "plugins": [],
-            "lifecycleScripts": {
-              "afterStart": ""
-            }
-          }
-          WPENV
-
       - name: Start wp-env
-        run: npx wp-env start
+        run: npx wp-env start --config .wp-env.test.json
 
       - name: Install Composer dependencies in container
-        run: npx wp-env run cli --env-cwd=wp-content/plugins/claudaborative-editing composer install --no-interaction --prefer-dist
+        run: npx wp-env --config .wp-env.test.json run cli --env-cwd=wp-content/plugins/claudaborative-editing composer install --no-interaction --prefer-dist
 
       - name: Run PHPUnit
-        run: npx wp-env run cli --env-cwd=wp-content/plugins/claudaborative-editing vendor/bin/phpunit
+        run: npx wp-env --config .wp-env.test.json run cli --env-cwd=wp-content/plugins/claudaborative-editing vendor/bin/phpunit
