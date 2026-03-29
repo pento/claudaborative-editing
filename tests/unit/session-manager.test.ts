@@ -520,6 +520,37 @@ describe('SessionManager', () => {
 			vi.useRealTimers();
 		});
 
+		it('applies short delta atomically when update changes few characters', async () => {
+			vi.useFakeTimers();
+			await connectAndOpen(session);
+
+			// Insert a block with long content (>= STREAM_THRESHOLD)
+			const original =
+				'This is a long paragraph with enough text to stream.';
+			session.insertBlock(0, {
+				name: 'core/paragraph',
+				content: original,
+			});
+			const drain1 = session.drainStreamQueue();
+			await vi.runAllTimersAsync();
+			await drain1;
+
+			// Update with a small change — only "stream" → "work" differs.
+			// The full string is >= STREAM_THRESHOLD so it's enqueued, but
+			// streamTextToYText computes a short delta insert (< 20 chars).
+			session.updateBlock('0', {
+				content: 'This is a long paragraph with enough text to work.',
+			});
+			const drain2 = session.drainStreamQueue();
+			await vi.runAllTimersAsync();
+			await drain2;
+
+			const text = session.readPost();
+			expect(text).toContain('enough text to work');
+
+			vi.useRealTimers();
+		});
+
 		it('save drains queue before marking saved', async () => {
 			vi.useFakeTimers();
 			await connectAndOpen(session);
@@ -2832,6 +2863,36 @@ describe('SessionManager', () => {
 
 				// First add a note so the metadata exists
 				await session.addNote('0', 'A note');
+				mockSyncFlushQueue.mockClear();
+
+				await session.resolveNote(10);
+
+				expect(mockDeleteNote).toHaveBeenCalledWith(10);
+				expect(mockSyncFlushQueue).toHaveBeenCalled();
+			});
+
+			it('finds and removes note metadata from nested inner block', async () => {
+				vi.useFakeTimers();
+				await connectAndOpenWithNotes(session);
+
+				// Insert a list with inner blocks
+				session.insertBlock(0, {
+					name: 'core/list',
+					innerBlocks: [
+						{ name: 'core/list-item', content: 'Item one' },
+						{ name: 'core/list-item', content: 'Item two' },
+					],
+				});
+				await vi.runAllTimersAsync();
+				vi.useRealTimers();
+
+				// Add a note to the second inner block (index "0.1")
+				mockCreateNote.mockResolvedValue(fakeNote);
+				await session.addNote('0.1', 'Note on inner block');
+
+				// Now resolve — findBlockIndexByNoteId must recurse into inner blocks
+				mockListNotes.mockResolvedValue([]);
+				mockDeleteNote.mockResolvedValue(undefined);
 				mockSyncFlushQueue.mockClear();
 
 				await session.resolveNote(10);

@@ -87,6 +87,51 @@ describe('note tools', () => {
 			expect(text).toContain('"Agreed"');
 		});
 
+		it('strips HTML when raw content is unavailable', async () => {
+			const fakeNotes = [
+				{
+					id: 1,
+					post: 42,
+					parent: 0,
+					author: 1,
+					author_name: 'Alice',
+					date: '2026-03-20',
+					content: {
+						rendered: '<p>Needs <strong>more</strong> detail</p>',
+					},
+					status: 'hold',
+					type: 'note',
+				},
+				{
+					id: 2,
+					post: 42,
+					parent: 1,
+					author: 2,
+					author_name: 'Bob',
+					date: '2026-03-21',
+					content: {
+						rendered: '<p>Agreed <em>fully</em></p>',
+					},
+					status: 'hold',
+					type: 'note',
+				},
+			];
+			(
+				session.listNotes as ReturnType<typeof import('vitest').vi.fn>
+			).mockResolvedValue({
+				notes: fakeNotes,
+				noteBlockMap: { 1: '0' },
+			});
+
+			const tool = server.registeredTools.get('wp_list_notes');
+			assertDefined(tool);
+			const result = await tool.handler({});
+
+			const text = result.content[0].text;
+			expect(text).toContain('"Needs more detail"');
+			expect(text).toContain('"Agreed fully"');
+		});
+
 		it('shows unlinked for notes without block mapping', async () => {
 			const fakeNotes = [
 				{
