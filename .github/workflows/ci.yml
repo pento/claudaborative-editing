@@ -107,11 +107,5 @@ jobs:
               run: npm run build
               working-directory: wordpress-plugin
 
-            - name: Start wp-env
-              run: npx wp-env start --config .wp-env.test.json
-
-            - name: Install Composer dependencies in container
-              run: npx wp-env --config .wp-env.test.json run cli --env-cwd=wp-content/plugins/claudaborative-editing composer install --no-interaction --prefer-dist
-
             - name: Run PHPUnit
-              run: npx wp-env --config .wp-env.test.json run cli --env-cwd=wp-content/plugins/claudaborative-editing vendor/bin/phpunit
+              run: npm run test:php

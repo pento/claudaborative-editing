@@ -16,6 +16,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 require_once __DIR__ . '/includes/class-command-store.php';
+require_once __DIR__ . '/includes/class-command-formatter.php';
+require_once __DIR__ . '/includes/class-rest-controller.php';
+require_once __DIR__ . '/includes/class-sse-handler.php';
 
 /**
  * Main plugin class.
@@ -31,6 +34,14 @@ class Claudaborative_Editing {
 	}
 
 	/**
+	 * Register REST API routes.
+	 */
+	public static function register_rest_routes() {
+		$controller = new REST_Controller();
+		$controller->register_routes();
+	}
+
+	/**
 	 * Plugin activation: register CPT before flushing rewrite rules.
 	 */
 	public static function activate() {
@@ -40,6 +51,7 @@ class Claudaborative_Editing {
 }
 
 add_action( 'init', [ 'Claudaborative_Editing', 'register' ] );
+add_action( 'rest_api_init', [ 'Claudaborative_Editing', 'register_rest_routes' ] );
 
 register_activation_hook( __FILE__, [ 'Claudaborative_Editing', 'activate' ] );
 register_deactivation_hook( __FILE__, 'flush_rewrite_rules' );

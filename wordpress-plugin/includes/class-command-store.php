@@ -29,13 +29,15 @@ class Command_Store {
 			return '{}';
 		}
 
-		$decoded = json_decode( $value, true );
+		$decoded = json_decode( $value );
 
-		if ( ! is_array( $decoded ) ) {
+		if ( ! is_object( $decoded ) && ! is_array( $decoded ) ) {
 			return '{}';
 		}
 
-		// Re-encode to normalize whitespace.
+		// Re-encode to normalize whitespace. Using json_decode without the
+		// associative flag preserves the object/array distinction, so "{}"
+		// stays as "{}" rather than becoming "[]".
 		return wp_json_encode( $decoded );
 	}
 
@@ -113,6 +115,48 @@ class Command_Store {
 					'sanitize_callback' => $args['sanitize_callback'],
 				]
 			);
+		}
+	}
+
+	/**
+	 * Transition expired pending/claimed commands to "expired" status.
+	 *
+	 * Shared by both the REST controller and SSE handler to avoid logic
+	 * duplication.
+	 *
+	 * @param int  $user_id       The user whose commands to check.
+	 * @param bool $cache_results Whether to cache query results (false for SSE loop).
+	 */
+	public static function expire_stale_commands( $user_id, $cache_results = true ) {
+		$query = new WP_Query(
+			[
+				'post_type'      => self::POST_TYPE,
+				'post_status'    => 'any',
+				'author'         => $user_id,
+				'posts_per_page' => 100,
+				'no_found_rows'  => true,
+				'fields'         => 'ids',
+				'cache_results'  => $cache_results,
+				'meta_query'     => [
+					'relation' => 'AND',
+					[
+						'key'     => 'wpce_command_status',
+						'value'   => [ 'pending', 'claimed' ],
+						'compare' => 'IN',
+					],
+					[
+						'key'     => 'wpce_expires_at',
+						'value'   => gmdate( 'Y-m-d\TH:i:s\Z' ),
+						'compare' => '<=',
+						'type'    => 'CHAR',
+					],
+				],
+			]
+		);
+
+		foreach ( $query->posts as $post_id ) {
+			update_post_meta( $post_id, 'wpce_command_status', 'expired' );
+			wp_update_post( [ 'ID' => $post_id ] );
 		}
 	}
 }
