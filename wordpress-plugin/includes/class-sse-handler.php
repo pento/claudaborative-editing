@@ -87,10 +87,17 @@ class SSE_Handler {
 				$last_heartbeat = time();
 			}
 
-			// Send heartbeat if the interval has elapsed.
+			// Send heartbeat if the interval has elapsed, and refresh
+			// the MCP last-seen transient so wp_status reports connected.
 			if ( ( time() - $last_heartbeat ) >= self::HEARTBEAT_INTERVAL ) {
 				self::send_heartbeat();
 				$last_heartbeat = time();
+
+				set_transient(
+					'wpce_mcp_last_seen_' . $user_id,
+					gmdate( 'Y-m-d\TH:i:s\Z' ),
+					REST_Controller::MCP_TIMEOUT_SECONDS * 2
+				);
 			}
 
 			// Expire stale commands at heartbeat cadence, not every poll.
