@@ -7,10 +7,12 @@
  * Use instead of the `!` non-null assertion operator.
  */
 export function assertDefined<T>(
-  value: T | null | undefined,
-  message?: string,
+	value: T | null | undefined,
+	message?: string
 ): asserts value is T {
-  if (value === null || value === undefined) {
-    throw new Error(message ?? 'Expected value to be defined, but got ' + String(value));
-  }
+	if (value === null || value === undefined) {
+		throw new Error(
+			message ?? 'Expected value to be defined, but got ' + String(value)
+		);
+	}
 }

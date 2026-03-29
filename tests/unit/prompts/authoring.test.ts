@@ -5,199 +5,219 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { assertDefined } from '../../test-utils.js';
 
 describe('draft', () => {
-  describe('when disconnected', () => {
-    it('instructs to connect first', async () => {
-      const server = createMockServer();
-      const session = createMockSession({ state: 'disconnected' });
-      registerAuthoringPrompts(server as unknown as McpServer, session);
+	describe('when disconnected', () => {
+		it('instructs to connect first', async () => {
+			const server = createMockServer();
+			const session = createMockSession({ state: 'disconnected' });
+			registerAuthoringPrompts(server as unknown as McpServer, session);
 
-      const prompt = server.registeredPrompts.get('draft');
-      assertDefined(prompt);
-      const result = await prompt.handler({ topic: 'Test topic' });
+			const prompt = server.registeredPrompts.get('draft');
+			assertDefined(prompt);
+			const result = await prompt.handler({ topic: 'Test topic' });
 
-      expect(result.messages[0].content.text).toContain('wp_connect');
-    });
-  });
+			expect(result.messages[0].content.text).toContain('wp_connect');
+		});
+	});
 
-  describe('when topic is empty', () => {
-    it('asks the user what topic they want', async () => {
-      const server = createMockServer();
-      const session = createMockSession({ state: 'connected' });
-      registerAuthoringPrompts(server as unknown as McpServer, session);
+	describe('when topic is empty', () => {
+		it('asks the user what topic they want', async () => {
+			const server = createMockServer();
+			const session = createMockSession({ state: 'connected' });
+			registerAuthoringPrompts(server as unknown as McpServer, session);
 
-      const prompt = server.registeredPrompts.get('draft');
-      assertDefined(prompt);
-      const result = await prompt.handler({ topic: '' });
+			const prompt = server.registeredPrompts.get('draft');
+			assertDefined(prompt);
+			const result = await prompt.handler({ topic: '' });
 
-      expect(result.messages[0].content.text).toContain('Ask me what topic');
-    });
-  });
+			expect(result.messages[0].content.text).toContain(
+				'Ask me what topic'
+			);
+		});
+	});
 
-  describe('when connected', () => {
-    it('includes topic in instructions', async () => {
-      const server = createMockServer();
-      const session = createMockSession({ state: 'connected' });
-      registerAuthoringPrompts(server as unknown as McpServer, session);
+	describe('when connected', () => {
+		it('includes topic in instructions', async () => {
+			const server = createMockServer();
+			const session = createMockSession({ state: 'connected' });
+			registerAuthoringPrompts(server as unknown as McpServer, session);
 
-      const prompt = server.registeredPrompts.get('draft');
-      assertDefined(prompt);
-      const result = await prompt.handler({ topic: 'AI in healthcare' });
+			const prompt = server.registeredPrompts.get('draft');
+			assertDefined(prompt);
+			const result = await prompt.handler({ topic: 'AI in healthcare' });
 
-      expect(result.messages[0].content.text).toContain('AI in healthcare');
-      expect(result.messages[0].content.text).toContain('wp_create_post');
-      expect(result.description).toContain('AI in healthcare');
-    });
+			expect(result.messages[0].content.text).toContain(
+				'AI in healthcare'
+			);
+			expect(result.messages[0].content.text).toContain('wp_create_post');
+			expect(result.description).toContain('AI in healthcare');
+		});
 
-    it('includes tone when provided', async () => {
-      const server = createMockServer();
-      const session = createMockSession({ state: 'connected' });
-      registerAuthoringPrompts(server as unknown as McpServer, session);
+		it('includes tone when provided', async () => {
+			const server = createMockServer();
+			const session = createMockSession({ state: 'connected' });
+			registerAuthoringPrompts(server as unknown as McpServer, session);
 
-      const prompt = server.registeredPrompts.get('draft');
-      assertDefined(prompt);
-      const result = await prompt.handler({ topic: 'Test', tone: 'professional' });
+			const prompt = server.registeredPrompts.get('draft');
+			assertDefined(prompt);
+			const result = await prompt.handler({
+				topic: 'Test',
+				tone: 'professional',
+			});
 
-      expect(result.messages[0].content.text).toContain('professional');
-    });
+			expect(result.messages[0].content.text).toContain('professional');
+		});
 
-    it('includes audience when provided', async () => {
-      const server = createMockServer();
-      const session = createMockSession({ state: 'connected' });
-      registerAuthoringPrompts(server as unknown as McpServer, session);
+		it('includes audience when provided', async () => {
+			const server = createMockServer();
+			const session = createMockSession({ state: 'connected' });
+			registerAuthoringPrompts(server as unknown as McpServer, session);
 
-      const prompt = server.registeredPrompts.get('draft');
-      assertDefined(prompt);
-      const result = await prompt.handler({ topic: 'Test', audience: 'developers' });
+			const prompt = server.registeredPrompts.get('draft');
+			assertDefined(prompt);
+			const result = await prompt.handler({
+				topic: 'Test',
+				audience: 'developers',
+			});
 
-      expect(result.messages[0].content.text).toContain('developers');
-    });
+			expect(result.messages[0].content.text).toContain('developers');
+		});
 
-    it('includes metadata setup instructions', async () => {
-      const server = createMockServer();
-      const session = createMockSession({ state: 'connected' });
-      registerAuthoringPrompts(server as unknown as McpServer, session);
+		it('includes metadata setup instructions', async () => {
+			const server = createMockServer();
+			const session = createMockSession({ state: 'connected' });
+			registerAuthoringPrompts(server as unknown as McpServer, session);
 
-      const prompt = server.registeredPrompts.get('draft');
-      assertDefined(prompt);
-      const result = await prompt.handler({ topic: 'Test' });
+			const prompt = server.registeredPrompts.get('draft');
+			assertDefined(prompt);
+			const result = await prompt.handler({ topic: 'Test' });
 
-      expect(result.messages[0].content.text).toContain('wp_set_categories');
-      expect(result.messages[0].content.text).toContain('wp_set_tags');
-      expect(result.messages[0].content.text).toContain('wp_set_excerpt');
-    });
-  });
+			expect(result.messages[0].content.text).toContain(
+				'wp_set_categories'
+			);
+			expect(result.messages[0].content.text).toContain('wp_set_tags');
+			expect(result.messages[0].content.text).toContain('wp_set_excerpt');
+		});
+	});
 
-  describe('when editing', () => {
-    it('instructs to close current post first', async () => {
-      const server = createMockServer();
-      const session = createMockSession({ state: 'editing', post: fakePost });
-      registerAuthoringPrompts(server as unknown as McpServer, session);
+	describe('when editing', () => {
+		it('instructs to close current post first', async () => {
+			const server = createMockServer();
+			const session = createMockSession({
+				state: 'editing',
+				post: fakePost,
+			});
+			registerAuthoringPrompts(server as unknown as McpServer, session);
 
-      const prompt = server.registeredPrompts.get('draft');
-      assertDefined(prompt);
-      const result = await prompt.handler({ topic: 'New topic' });
+			const prompt = server.registeredPrompts.get('draft');
+			assertDefined(prompt);
+			const result = await prompt.handler({ topic: 'New topic' });
 
-      expect(result.messages[0].content.text).toContain('wp_close_post');
-    });
-  });
+			expect(result.messages[0].content.text).toContain('wp_close_post');
+		});
+	});
 });
 
 describe('translate', () => {
-  describe('when language is empty', () => {
-    it('asks the user what language they want', async () => {
-      const server = createMockServer();
-      const session = createMockSession({ state: 'connected' });
-      registerAuthoringPrompts(server as unknown as McpServer, session);
+	describe('when language is empty', () => {
+		it('asks the user what language they want', async () => {
+			const server = createMockServer();
+			const session = createMockSession({ state: 'connected' });
+			registerAuthoringPrompts(server as unknown as McpServer, session);
 
-      const prompt = server.registeredPrompts.get('translate');
-      assertDefined(prompt);
-      const result = await prompt.handler({ language: '' });
+			const prompt = server.registeredPrompts.get('translate');
+			assertDefined(prompt);
+			const result = await prompt.handler({ language: '' });
 
-      expect(result.messages[0].content.text).toContain('Ask me what language');
-    });
-  });
+			expect(result.messages[0].content.text).toContain(
+				'Ask me what language'
+			);
+		});
+	});
 
-  describe('when disconnected', () => {
-    it('instructs to connect first', async () => {
-      const server = createMockServer();
-      const session = createMockSession({ state: 'disconnected' });
-      registerAuthoringPrompts(server as unknown as McpServer, session);
+	describe('when disconnected', () => {
+		it('instructs to connect first', async () => {
+			const server = createMockServer();
+			const session = createMockSession({ state: 'disconnected' });
+			registerAuthoringPrompts(server as unknown as McpServer, session);
 
-      const prompt = server.registeredPrompts.get('translate');
-      assertDefined(prompt);
-      const result = await prompt.handler({ language: 'Spanish' });
+			const prompt = server.registeredPrompts.get('translate');
+			assertDefined(prompt);
+			const result = await prompt.handler({ language: 'Spanish' });
 
-      expect(result.messages[0].content.text).toContain('wp_connect');
-    });
-  });
+			expect(result.messages[0].content.text).toContain('wp_connect');
+		});
+	});
 
-  describe('when connected', () => {
-    it('instructs to open a post first', async () => {
-      const server = createMockServer();
-      const session = createMockSession({ state: 'connected' });
-      registerAuthoringPrompts(server as unknown as McpServer, session);
+	describe('when connected', () => {
+		it('instructs to open a post first', async () => {
+			const server = createMockServer();
+			const session = createMockSession({ state: 'connected' });
+			registerAuthoringPrompts(server as unknown as McpServer, session);
 
-      const prompt = server.registeredPrompts.get('translate');
-      assertDefined(prompt);
-      const result = await prompt.handler({ language: 'French' });
+			const prompt = server.registeredPrompts.get('translate');
+			assertDefined(prompt);
+			const result = await prompt.handler({ language: 'French' });
 
-      expect(result.messages[0].content.text).toContain('wp_open_post');
-    });
-  });
+			expect(result.messages[0].content.text).toContain('wp_open_post');
+		});
+	});
 
-  describe('when editing', () => {
-    const postContent = 'Title: "My Great Post"\n\n[0] core/paragraph\n  "Hello world"';
+	describe('when editing', () => {
+		const postContent =
+			'Title: "My Great Post"\n\n[0] core/paragraph\n  "Hello world"';
 
-    it('embeds post content with translation instructions', async () => {
-      const server = createMockServer();
-      const session = createMockSession({
-        state: 'editing',
-        post: fakePost,
-        postContent,
-      });
-      registerAuthoringPrompts(server as unknown as McpServer, session);
+		it('embeds post content with translation instructions', async () => {
+			const server = createMockServer();
+			const session = createMockSession({
+				state: 'editing',
+				post: fakePost,
+				postContent,
+			});
+			registerAuthoringPrompts(server as unknown as McpServer, session);
 
-      const prompt = server.registeredPrompts.get('translate');
-      assertDefined(prompt);
-      const result = await prompt.handler({ language: 'Japanese' });
+			const prompt = server.registeredPrompts.get('translate');
+			assertDefined(prompt);
+			const result = await prompt.handler({ language: 'Japanese' });
 
-      expect(result.messages[0].content.text).toContain(postContent);
-      expect(result.messages[0].content.text).toContain('Japanese');
-      expect(result.messages[0].content.text).toContain('wp_set_title');
-      expect(result.description).toContain(fakePost.title.raw);
-      expect(result.description).toContain('Japanese');
-    });
+			expect(result.messages[0].content.text).toContain(postContent);
+			expect(result.messages[0].content.text).toContain('Japanese');
+			expect(result.messages[0].content.text).toContain('wp_set_title');
+			expect(result.description).toContain(fakePost.title.raw);
+			expect(result.description).toContain('Japanese');
+		});
 
-    it('includes excerpt translation instruction', async () => {
-      const server = createMockServer();
-      const session = createMockSession({
-        state: 'editing',
-        post: fakePost,
-        postContent,
-      });
-      registerAuthoringPrompts(server as unknown as McpServer, session);
+		it('includes excerpt translation instruction', async () => {
+			const server = createMockServer();
+			const session = createMockSession({
+				state: 'editing',
+				post: fakePost,
+				postContent,
+			});
+			registerAuthoringPrompts(server as unknown as McpServer, session);
 
-      const prompt = server.registeredPrompts.get('translate');
-      assertDefined(prompt);
-      const result = await prompt.handler({ language: 'Spanish' });
+			const prompt = server.registeredPrompts.get('translate');
+			assertDefined(prompt);
+			const result = await prompt.handler({ language: 'Spanish' });
 
-      expect(result.messages[0].content.text).toContain('wp_set_excerpt');
-    });
+			expect(result.messages[0].content.text).toContain('wp_set_excerpt');
+		});
 
-    it('instructs to preserve block structure', async () => {
-      const server = createMockServer();
-      const session = createMockSession({
-        state: 'editing',
-        post: fakePost,
-        postContent,
-      });
-      registerAuthoringPrompts(server as unknown as McpServer, session);
+		it('instructs to preserve block structure', async () => {
+			const server = createMockServer();
+			const session = createMockSession({
+				state: 'editing',
+				post: fakePost,
+				postContent,
+			});
+			registerAuthoringPrompts(server as unknown as McpServer, session);
 
-      const prompt = server.registeredPrompts.get('translate');
-      assertDefined(prompt);
-      const result = await prompt.handler({ language: 'French' });
+			const prompt = server.registeredPrompts.get('translate');
+			assertDefined(prompt);
+			const result = await prompt.handler({ language: 'French' });
 
-      expect(result.messages[0].content.text).toContain('Do NOT add, remove, or reorder blocks');
-    });
-  });
+			expect(result.messages[0].content.text).toContain(
+				'Do NOT add, remove, or reorder blocks'
+			);
+		});
+	});
 });

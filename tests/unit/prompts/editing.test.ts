@@ -7,141 +7,151 @@ import type { RegisteredPrompt } from './helpers.js';
 import { assertDefined } from '../../test-utils.js';
 
 describe('edit', () => {
-  describe('when disconnected', () => {
-    it('instructs to connect first', async () => {
-      const server = createMockServer();
-      const session = createMockSession({ state: 'disconnected' });
-      registerEditingPrompts(server as unknown as McpServer, session);
+	describe('when disconnected', () => {
+		it('instructs to connect first', async () => {
+			const server = createMockServer();
+			const session = createMockSession({ state: 'disconnected' });
+			registerEditingPrompts(server as unknown as McpServer, session);
 
-      const prompt = server.registeredPrompts.get('edit');
-      assertDefined(prompt);
-      const result = await prompt.handler({});
+			const prompt = server.registeredPrompts.get('edit');
+			assertDefined(prompt);
+			const result = await prompt.handler({});
 
-      expect(result.messages[0].content.text).toContain('wp_connect');
-    });
-  });
+			expect(result.messages[0].content.text).toContain('wp_connect');
+		});
+	});
 
-  describe('when connected', () => {
-    it('instructs to open a post first', async () => {
-      const server = createMockServer();
-      const session = createMockSession({ state: 'connected' });
-      registerEditingPrompts(server as unknown as McpServer, session);
+	describe('when connected', () => {
+		it('instructs to open a post first', async () => {
+			const server = createMockServer();
+			const session = createMockSession({ state: 'connected' });
+			registerEditingPrompts(server as unknown as McpServer, session);
 
-      const prompt = server.registeredPrompts.get('edit');
-      assertDefined(prompt);
-      const result = await prompt.handler({});
+			const prompt = server.registeredPrompts.get('edit');
+			assertDefined(prompt);
+			const result = await prompt.handler({});
 
-      expect(result.messages[0].content.text).toContain('wp_open_post');
-    });
-  });
+			expect(result.messages[0].content.text).toContain('wp_open_post');
+		});
+	});
 
-  describe('when editing', () => {
-    let server: ReturnType<typeof createMockServer>;
-    let session: SessionManager;
-    let prompt: RegisteredPrompt;
-    const postContent = 'Title: "My Great Post"\n\n[0] core/paragraph\n  "Hello world"';
+	describe('when editing', () => {
+		let server: ReturnType<typeof createMockServer>;
+		let session: SessionManager;
+		let prompt: RegisteredPrompt;
+		const postContent =
+			'Title: "My Great Post"\n\n[0] core/paragraph\n  "Hello world"';
 
-    function setup() {
-      server = createMockServer();
-      session = createMockSession({
-        state: 'editing',
-        post: fakePost,
-        postContent,
-      });
-      registerEditingPrompts(server as unknown as McpServer, session);
-      const editPrompt = server.registeredPrompts.get('edit');
-      assertDefined(editPrompt);
-      prompt = editPrompt;
-    }
+		function setup() {
+			server = createMockServer();
+			session = createMockSession({
+				state: 'editing',
+				post: fakePost,
+				postContent,
+			});
+			registerEditingPrompts(server as unknown as McpServer, session);
+			const editPrompt = server.registeredPrompts.get('edit');
+			assertDefined(editPrompt);
+			prompt = editPrompt;
+		}
 
-    it('embeds post content and tool instructions', async () => {
-      setup();
-      const result = await prompt.handler({});
+		it('embeds post content and tool instructions', async () => {
+			setup();
+			const result = await prompt.handler({});
 
-      expect(result.messages[0].content.text).toContain(postContent);
-      expect(result.messages[0].content.text).toContain('wp_update_block');
-      expect(result.description).toContain(fakePost.title.raw);
-    });
+			expect(result.messages[0].content.text).toContain(postContent);
+			expect(result.messages[0].content.text).toContain(
+				'wp_update_block'
+			);
+			expect(result.description).toContain(fakePost.title.raw);
+		});
 
-    it('includes editing focus when provided', async () => {
-      setup();
-      const result = await prompt.handler({ editingFocus: 'tone' });
+		it('includes editing focus when provided', async () => {
+			setup();
+			const result = await prompt.handler({ editingFocus: 'tone' });
 
-      expect(result.messages[0].content.text).toContain('Focus on: tone');
-    });
+			expect(result.messages[0].content.text).toContain('Focus on: tone');
+		});
 
-    it('asks the user what kind of editing when no focus provided', async () => {
-      setup();
-      const result = await prompt.handler({});
+		it('asks the user what kind of editing when no focus provided', async () => {
+			setup();
+			const result = await prompt.handler({});
 
-      expect(result.messages[0].content.text).toContain('Ask me what kind of editing');
-    });
-  });
+			expect(result.messages[0].content.text).toContain(
+				'Ask me what kind of editing'
+			);
+		});
+	});
 });
 
 describe('proofread', () => {
-  describe('when disconnected', () => {
-    it('instructs to connect first', async () => {
-      const server = createMockServer();
-      const session = createMockSession({ state: 'disconnected' });
-      registerEditingPrompts(server as unknown as McpServer, session);
+	describe('when disconnected', () => {
+		it('instructs to connect first', async () => {
+			const server = createMockServer();
+			const session = createMockSession({ state: 'disconnected' });
+			registerEditingPrompts(server as unknown as McpServer, session);
 
-      const prompt = server.registeredPrompts.get('proofread');
-      assertDefined(prompt);
-      const result = await prompt.handler({});
+			const prompt = server.registeredPrompts.get('proofread');
+			assertDefined(prompt);
+			const result = await prompt.handler({});
 
-      expect(result.messages[0].content.text).toContain('wp_connect');
-    });
-  });
+			expect(result.messages[0].content.text).toContain('wp_connect');
+		});
+	});
 
-  describe('when connected', () => {
-    it('instructs to open a post first', async () => {
-      const server = createMockServer();
-      const session = createMockSession({ state: 'connected' });
-      registerEditingPrompts(server as unknown as McpServer, session);
+	describe('when connected', () => {
+		it('instructs to open a post first', async () => {
+			const server = createMockServer();
+			const session = createMockSession({ state: 'connected' });
+			registerEditingPrompts(server as unknown as McpServer, session);
 
-      const prompt = server.registeredPrompts.get('proofread');
-      assertDefined(prompt);
-      const result = await prompt.handler({});
+			const prompt = server.registeredPrompts.get('proofread');
+			assertDefined(prompt);
+			const result = await prompt.handler({});
 
-      expect(result.messages[0].content.text).toContain('wp_open_post');
-    });
-  });
+			expect(result.messages[0].content.text).toContain('wp_open_post');
+		});
+	});
 
-  describe('when editing', () => {
-    let server: ReturnType<typeof createMockServer>;
-    let session: SessionManager;
-    let prompt: RegisteredPrompt;
-    const postContent = 'Title: "My Great Post"\n\n[0] core/paragraph\n  "Hello world"';
+	describe('when editing', () => {
+		let server: ReturnType<typeof createMockServer>;
+		let session: SessionManager;
+		let prompt: RegisteredPrompt;
+		const postContent =
+			'Title: "My Great Post"\n\n[0] core/paragraph\n  "Hello world"';
 
-    function setup() {
-      server = createMockServer();
-      session = createMockSession({
-        state: 'editing',
-        post: fakePost,
-        postContent,
-      });
-      registerEditingPrompts(server as unknown as McpServer, session);
-      const proofreadPrompt = server.registeredPrompts.get('proofread');
-      assertDefined(proofreadPrompt);
-      prompt = proofreadPrompt;
-    }
+		function setup() {
+			server = createMockServer();
+			session = createMockSession({
+				state: 'editing',
+				post: fakePost,
+				postContent,
+			});
+			registerEditingPrompts(server as unknown as McpServer, session);
+			const proofreadPrompt = server.registeredPrompts.get('proofread');
+			assertDefined(proofreadPrompt);
+			prompt = proofreadPrompt;
+		}
 
-    it('embeds post content with proofreading instructions', async () => {
-      setup();
-      const result = await prompt.handler({});
+		it('embeds post content with proofreading instructions', async () => {
+			setup();
+			const result = await prompt.handler({});
 
-      expect(result.messages[0].content.text).toContain(postContent);
-      expect(result.messages[0].content.text).toContain('grammar');
-      expect(result.description).toContain(fakePost.title.raw);
-    });
+			expect(result.messages[0].content.text).toContain(postContent);
+			expect(result.messages[0].content.text).toContain('grammar');
+			expect(result.description).toContain(fakePost.title.raw);
+		});
 
-    it('instructs not to change meaning or structure', async () => {
-      setup();
-      const result = await prompt.handler({});
+		it('instructs not to change meaning or structure', async () => {
+			setup();
+			const result = await prompt.handler({});
 
-      expect(result.messages[0].content.text).toContain('Do NOT change the meaning');
-      expect(result.messages[0].content.text).toContain('Do NOT add or remove blocks');
-    });
-  });
+			expect(result.messages[0].content.text).toContain(
+				'Do NOT change the meaning'
+			);
+			expect(result.messages[0].content.text).toContain(
+				'Do NOT add or remove blocks'
+			);
+		});
+	});
 });

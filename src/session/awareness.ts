@@ -14,21 +14,21 @@ import type { WPUser } from '../wordpress/types.js';
  * This state is sent with each sync request.
  */
 export function buildAwarenessState(user: WPUser): AwarenessLocalState {
-  return {
-    collaboratorInfo: {
-      id: user.id,
-      name: `${user.name ?? user.slug} (Claude)`,
-      slug: user.slug,
-      avatar_urls: user.avatar_urls ?? {},
-      browserType: 'Claude Code MCP',
-      enteredAt: Date.now(),
-    },
-    // editorState with selection is required for Gutenberg to recognise us
-    // as an active editor and process our CRDT updates in the live session.
-    editorState: {
-      selection: { type: 'none' },
-    },
-  };
+	return {
+		collaboratorInfo: {
+			id: user.id,
+			name: `${user.name ?? user.slug} (Claude)`,
+			slug: user.slug,
+			avatar_urls: user.avatar_urls ?? {},
+			browserType: 'Claude Code MCP',
+			enteredAt: Date.now(),
+		},
+		// editorState with selection is required for Gutenberg to recognise us
+		// as an active editor and process our CRDT updates in the live session.
+		editorState: {
+			selection: { type: 'none' },
+		},
+	};
 }
 
 /**
@@ -36,24 +36,25 @@ export function buildAwarenessState(user: WPUser): AwarenessLocalState {
  * Excludes our own client ID and null (disconnected) states.
  */
 export function parseCollaborators(
-  awarenessState: AwarenessState,
-  ownClientId: number,
+	awarenessState: AwarenessState,
+	ownClientId: number
 ): CollaboratorInfo[] {
-  const collaborators: CollaboratorInfo[] = [];
+	const collaborators: CollaboratorInfo[] = [];
 
-  for (const [clientIdStr, state] of Object.entries(awarenessState)) {
-    const clientId = Number(clientIdStr);
-    if (clientId === ownClientId) {
-      continue;
-    }
-    if (state === null) {
-      continue;
-    }
-    const info = (state as { collaboratorInfo?: CollaboratorInfo }).collaboratorInfo;
-    if (info) {
-      collaborators.push(info);
-    }
-  }
+	for (const [clientIdStr, state] of Object.entries(awarenessState)) {
+		const clientId = Number(clientIdStr);
+		if (clientId === ownClientId) {
+			continue;
+		}
+		if (state === null) {
+			continue;
+		}
+		const info = (state as { collaboratorInfo?: CollaboratorInfo })
+			.collaboratorInfo;
+		if (info) {
+			collaborators.push(info);
+		}
+	}
 
-  return collaborators;
+	return collaborators;
 }

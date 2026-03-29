@@ -22,40 +22,42 @@ export type YBlockAttributes = Y.Map<unknown>;
 
 /** A plain-object block for reading/writing (not Yjs types). */
 export interface Block {
-  name: string;
-  clientId: string;
-  attributes: Record<string, unknown>;
-  innerBlocks: Block[];
-  isValid?: boolean;
-  originalContent?: string;
+	name: string;
+	clientId: string;
+	attributes: Record<string, unknown>;
+	innerBlocks: Block[];
+	isValid?: boolean;
+	originalContent?: string;
 }
 
 // --- Collaborator awareness ---
 
 export interface CollaboratorInfo {
-  id: number;
-  name: string;
-  slug: string;
-  avatar_urls: Record<string, string>;
-  browserType: string;
-  enteredAt: number;
+	id: number;
+	name: string;
+	slug: string;
+	avatar_urls: Record<string, string>;
+	browserType: string;
+	enteredAt: number;
 }
 
 export interface AwarenessCursorPosition {
-  relativePosition: {
-    type: { client: number; clock: number };
-    tname: null;
-    item: null;
-    assoc: number;
-  };
-  absoluteOffset: number;
+	relativePosition: {
+		type: { client: number; clock: number };
+		tname: null;
+		item: null;
+		assoc: number;
+	};
+	absoluteOffset: number;
 }
 
 export interface AwarenessEditorState {
-  selection: { type: 'none' } | { type: 'cursor'; cursorPosition: AwarenessCursorPosition };
+	selection:
+		| { type: 'none' }
+		| { type: 'cursor'; cursorPosition: AwarenessCursorPosition };
 }
 
 export interface AwarenessLocalState {
-  collaboratorInfo: CollaboratorInfo;
-  editorState?: AwarenessEditorState;
+	collaboratorInfo: CollaboratorInfo;
+	editorState?: AwarenessEditorState;
 }

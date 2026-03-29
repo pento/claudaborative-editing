@@ -6,7 +6,14 @@
  * VS Code, Cursor, etc.).
  */
 
-import { readFileSync, writeFileSync, mkdirSync, renameSync, unlinkSync, existsSync } from 'fs';
+import {
+	readFileSync,
+	writeFileSync,
+	mkdirSync,
+	renameSync,
+	unlinkSync,
+	existsSync,
+} from 'fs';
 import { dirname } from 'path';
 import type { WpCredentials } from './types.js';
 
@@ -16,15 +23,19 @@ import type { WpCredentials } from './types.js';
  * Re-throws all other errors.
  */
 export function readJsonConfig(filePath: string): Record<string, unknown> {
-  try {
-    const content = readFileSync(filePath, 'utf-8');
-    return JSON.parse(content) as Record<string, unknown>;
-  } catch (err: unknown) {
-    if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'ENOENT') {
-      return {};
-    }
-    throw err;
-  }
+	try {
+		const content = readFileSync(filePath, 'utf-8');
+		return JSON.parse(content) as Record<string, unknown>;
+	} catch (err: unknown) {
+		if (
+			err instanceof Error &&
+			'code' in err &&
+			(err as NodeJS.ErrnoException).code === 'ENOENT'
+		) {
+			return {};
+		}
+		throw err;
+	}
 }
 
 /**
@@ -33,19 +44,19 @@ export function readJsonConfig(filePath: string): Record<string, unknown> {
  * Defaults to 2 spaces if unable to detect.
  */
 export function detectIndent(content: string): string {
-  const lines = content.split('\n');
-  for (const line of lines) {
-    // Find the first line that starts with whitespace (indented)
-    const match = /^(\s+)\S/.exec(line);
-    if (match) {
-      const whitespace = match[1];
-      if (whitespace.includes('\t')) {
-        return '\t';
-      }
-      return whitespace;
-    }
-  }
-  return '  ';
+	const lines = content.split('\n');
+	for (const line of lines) {
+		// Find the first line that starts with whitespace (indented)
+		const match = /^(\s+)\S/.exec(line);
+		if (match) {
+			const whitespace = match[1];
+			if (whitespace.includes('\t')) {
+				return '\t';
+			}
+			return whitespace;
+		}
+	}
+	return '  ';
 }
 
 /**
@@ -57,56 +68,56 @@ export function detectIndent(content: string): string {
  * falling back to 2 spaces.
  */
 export function writeJsonConfig(
-  filePath: string,
-  config: Record<string, unknown>,
-  indent?: string,
+	filePath: string,
+	config: Record<string, unknown>,
+	indent?: string
 ): void {
-  const dir = dirname(filePath);
-  if (!existsSync(dir)) {
-    mkdirSync(dir, { recursive: true });
-  }
+	const dir = dirname(filePath);
+	if (!existsSync(dir)) {
+		mkdirSync(dir, { recursive: true });
+	}
 
-  let resolvedIndent = indent;
-  if (resolvedIndent === undefined) {
-    try {
-      const existing = readFileSync(filePath, 'utf-8');
-      resolvedIndent = detectIndent(existing);
-    } catch {
-      resolvedIndent = '  ';
-    }
-  }
+	let resolvedIndent = indent;
+	if (resolvedIndent === undefined) {
+		try {
+			const existing = readFileSync(filePath, 'utf-8');
+			resolvedIndent = detectIndent(existing);
+		} catch {
+			resolvedIndent = '  ';
+		}
+	}
 
-  const json = JSON.stringify(config, null, resolvedIndent) + '\n';
-  const tmpPath = `${filePath}.tmp`;
+	const json = JSON.stringify(config, null, resolvedIndent) + '\n';
+	const tmpPath = `${filePath}.tmp`;
 
-  try {
-    writeFileSync(tmpPath, json, 'utf-8');
-    try {
-      renameSync(tmpPath, filePath);
-    } catch (err: unknown) {
-      // On Windows, renameSync fails when destination exists. Fall back to unlink + rename.
-      if (
-        err instanceof Error &&
-        'code' in err &&
-        (err as NodeJS.ErrnoException).code === 'EPERM'
-      ) {
-        unlinkSync(filePath);
-        renameSync(tmpPath, filePath);
-      } else {
-        throw err;
-      }
-    }
-  } finally {
-    // Clean up tmp file if it still exists (e.g., rename failed).
-    // Credentials are written to tmp, so we must not leave it behind.
-    try {
-      if (existsSync(tmpPath)) {
-        unlinkSync(tmpPath);
-      }
-    } catch {
-      // Best-effort cleanup
-    }
-  }
+	try {
+		writeFileSync(tmpPath, json, 'utf-8');
+		try {
+			renameSync(tmpPath, filePath);
+		} catch (err: unknown) {
+			// On Windows, renameSync fails when destination exists. Fall back to unlink + rename.
+			if (
+				err instanceof Error &&
+				'code' in err &&
+				(err as NodeJS.ErrnoException).code === 'EPERM'
+			) {
+				unlinkSync(filePath);
+				renameSync(tmpPath, filePath);
+			} else {
+				throw err;
+			}
+		}
+	} finally {
+		// Clean up tmp file if it still exists (e.g., rename failed).
+		// Credentials are written to tmp, so we must not leave it behind.
+		try {
+			if (existsSync(tmpPath)) {
+				unlinkSync(tmpPath);
+			}
+		} catch {
+			// Best-effort cleanup
+		}
+	}
 }
 
 /**
@@ -117,25 +128,25 @@ export function writeJsonConfig(
  * writes back preserving existing indentation.
  */
 export function addServerToConfig(
-  configPath: string,
-  configKey: string,
-  serverName: string,
-  serverEntry: Record<string, unknown>,
+	configPath: string,
+	configKey: string,
+	serverName: string,
+	serverEntry: Record<string, unknown>
 ): void {
-  const config = readJsonConfig(configPath);
+	const config = readJsonConfig(configPath);
 
-  if (
-    typeof config[configKey] !== 'object' ||
-    config[configKey] === null ||
-    Array.isArray(config[configKey])
-  ) {
-    config[configKey] = {};
-  }
+	if (
+		typeof config[configKey] !== 'object' ||
+		config[configKey] === null ||
+		Array.isArray(config[configKey])
+	) {
+		config[configKey] = {};
+	}
 
-  const servers = config[configKey] as Record<string, unknown>;
-  servers[serverName] = serverEntry;
+	const servers = config[configKey] as Record<string, unknown>;
+	servers[serverName] = serverEntry;
 
-  writeJsonConfig(configPath, config);
+	writeJsonConfig(configPath, config);
 }
 
 /**
@@ -144,57 +155,67 @@ export function addServerToConfig(
  * Returns true if the entry was found and removed, false otherwise.
  */
 export function removeServerFromConfig(
-  configPath: string,
-  configKey: string,
-  serverName: string,
+	configPath: string,
+	configKey: string,
+	serverName: string
 ): boolean {
-  const config = readJsonConfig(configPath);
+	const config = readJsonConfig(configPath);
 
-  const servers = config[configKey];
-  if (typeof servers !== 'object' || servers === null || Array.isArray(servers)) {
-    return false;
-  }
+	const servers = config[configKey];
+	if (
+		typeof servers !== 'object' ||
+		servers === null ||
+		Array.isArray(servers)
+	) {
+		return false;
+	}
 
-  const serversObj = servers as Record<string, unknown>;
-  if (!(serverName in serversObj)) {
-    return false;
-  }
+	const serversObj = servers as Record<string, unknown>;
+	if (!(serverName in serversObj)) {
+		return false;
+	}
 
-  // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
-  delete serversObj[serverName];
-  writeJsonConfig(configPath, config);
-  return true;
+	// eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+	delete serversObj[serverName];
+	writeJsonConfig(configPath, config);
+	return true;
 }
 
 /**
  * Check if an MCP server entry exists in a config file.
  */
 export function hasServerInConfig(
-  configPath: string,
-  configKey: string,
-  serverName: string,
+	configPath: string,
+	configKey: string,
+	serverName: string
 ): boolean {
-  const config = readJsonConfig(configPath);
+	const config = readJsonConfig(configPath);
 
-  const servers = config[configKey];
-  if (typeof servers !== 'object' || servers === null || Array.isArray(servers)) {
-    return false;
-  }
+	const servers = config[configKey];
+	if (
+		typeof servers !== 'object' ||
+		servers === null ||
+		Array.isArray(servers)
+	) {
+		return false;
+	}
 
-  return serverName in (servers as Record<string, unknown>);
+	return serverName in (servers as Record<string, unknown>);
 }
 
 /**
  * Build the standard MCP server config entry from WordPress credentials.
  */
-export function buildServerEntry(credentials: WpCredentials): Record<string, unknown> {
-  return {
-    command: 'npx',
-    args: ['claudaborative-editing'],
-    env: {
-      WP_SITE_URL: credentials.siteUrl,
-      WP_USERNAME: credentials.username,
-      WP_APP_PASSWORD: credentials.appPassword,
-    },
-  };
+export function buildServerEntry(
+	credentials: WpCredentials
+): Record<string, unknown> {
+	return {
+		command: 'npx',
+		args: ['claudaborative-editing'],
+		env: {
+			WP_SITE_URL: credentials.siteUrl,
+			WP_USERNAME: credentials.username,
+			WP_APP_PASSWORD: credentials.appPassword,
+		},
+	};
 }

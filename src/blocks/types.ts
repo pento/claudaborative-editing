@@ -10,11 +10,11 @@
  * This is the raw parser output before we normalise it.
  */
 export interface RawParsedBlock {
-  blockName: string | null;
-  attrs: Record<string, unknown> | null;
-  innerBlocks: RawParsedBlock[];
-  innerHTML: string;
-  innerContent: (string | null)[];
+	blockName: string | null;
+	attrs: Record<string, unknown> | null;
+	innerBlocks: RawParsedBlock[];
+	innerHTML: string;
+	innerContent: (string | null)[];
 }
 
 /**
@@ -22,8 +22,8 @@ export interface RawParsedBlock {
  * Null block names (freeform HTML) are converted to 'core/freeform'.
  */
 export interface ParsedBlock {
-  name: string;
-  attributes: Record<string, unknown>;
-  innerBlocks: ParsedBlock[];
-  originalContent: string;
+	name: string;
+	attributes: Record<string, unknown>;
+	innerBlocks: ParsedBlock[];
+	originalContent: string;
 }
