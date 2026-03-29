@@ -117,4 +117,46 @@ class Command_Store {
 			);
 		}
 	}
+
+	/**
+	 * Transition expired pending/claimed commands to "expired" status.
+	 *
+	 * Shared by both the REST controller and SSE handler to avoid logic
+	 * duplication.
+	 *
+	 * @param int  $user_id       The user whose commands to check.
+	 * @param bool $cache_results Whether to cache query results (false for SSE loop).
+	 */
+	public static function expire_stale_commands( $user_id, $cache_results = true ) {
+		$query = new WP_Query(
+			[
+				'post_type'      => self::POST_TYPE,
+				'post_status'    => 'any',
+				'author'         => $user_id,
+				'posts_per_page' => 100,
+				'no_found_rows'  => true,
+				'fields'         => 'ids',
+				'cache_results'  => $cache_results,
+				'meta_query'     => [
+					'relation' => 'AND',
+					[
+						'key'     => 'wpce_command_status',
+						'value'   => [ 'pending', 'claimed' ],
+						'compare' => 'IN',
+					],
+					[
+						'key'     => 'wpce_expires_at',
+						'value'   => gmdate( 'Y-m-d\TH:i:s\Z' ),
+						'compare' => '<=',
+						'type'    => 'CHAR',
+					],
+				],
+			]
+		);
+
+		foreach ( $query->posts as $post_id ) {
+			update_post_meta( $post_id, 'wpce_command_status', 'expired' );
+			wp_update_post( [ 'ID' => $post_id ] );
+		}
+	}
 }

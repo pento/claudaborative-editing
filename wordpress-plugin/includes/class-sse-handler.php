@@ -102,7 +102,7 @@ class SSE_Handler {
 
 			// Expire stale commands at heartbeat cadence, not every poll.
 			if ( ( time() - $last_expiry ) >= self::HEARTBEAT_INTERVAL ) {
-				self::expire_stale_commands( $user_id );
+				Command_Store::expire_stale_commands( $user_id, false );
 				$last_expiry = time();
 			}
 
@@ -173,46 +173,6 @@ class SSE_Handler {
 		}
 
 		return $result;
-	}
-
-	/**
-	 * Transition expired pending/claimed commands to "expired" status.
-	 *
-	 * @param int $user_id The user whose commands to check.
-	 */
-	private static function expire_stale_commands( $user_id ) {
-		$query = new WP_Query(
-			[
-				'post_type'      => Command_Store::POST_TYPE,
-				'post_status'    => 'any',
-				'author'         => $user_id,
-				'posts_per_page' => 100,
-				'no_found_rows'  => true,
-				'fields'         => 'ids',
-				'cache_results'  => false,
-				'meta_query'     => [
-					'relation' => 'AND',
-					[
-						'key'     => 'wpce_command_status',
-						'value'   => [ 'pending', 'claimed' ],
-						'compare' => 'IN',
-					],
-					[
-						'key'     => 'wpce_expires_at',
-						'value'   => gmdate( 'Y-m-d\TH:i:s\Z' ),
-						'compare' => '<=',
-						'type'    => 'CHAR',
-					],
-				],
-			]
-		);
-
-		foreach ( $query->posts as $post_id ) {
-			update_post_meta( $post_id, 'wpce_command_status', 'expired' );
-			// Touch the post so post_modified_gmt updates, making the
-			// transition discoverable via the `since` filter.
-			wp_update_post( [ 'ID' => $post_id ] );
-		}
 	}
 
 	/**

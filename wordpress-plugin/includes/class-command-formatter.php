@@ -53,7 +53,7 @@ class Command_Formatter {
 			'status'     => get_post_meta( $post->ID, 'wpce_command_status', true ),
 			'user_id'    => (int) $post->post_author,
 			'claimed_by' => $claimed_by ? (int) $claimed_by : null,
-			'message'    => $message ? $message : null,
+			'message'    => '' !== $message ? $message : null,
 			'created_at' => self::format_date( $post->post_date_gmt ),
 			'updated_at' => self::format_date( $post->post_modified_gmt ),
 			'expires_at' => get_post_meta( $post->ID, 'wpce_expires_at', true ),

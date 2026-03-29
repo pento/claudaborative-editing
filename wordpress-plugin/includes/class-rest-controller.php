@@ -111,8 +111,8 @@ class REST_Controller extends WP_REST_Controller {
 			]
 		);
 
-		// Register /commands/stream BEFORE /commands/{id} so "stream" is not
-		// captured by the numeric ID pattern.
+		// The /commands/{id} route only matches digits via [\d]+, so "stream"
+		// never conflicts.
 		register_rest_route(
 			self::API_NAMESPACE,
 			'/commands/stream',
@@ -286,7 +286,7 @@ class REST_Controller extends WP_REST_Controller {
 			return $command_id;
 		}
 
-		$expires_at = gmdate( 'Y-m-d\TH:i:s\Z', time() + self::EXPIRY_MINUTES * 60 );
+		$expires_at = gmdate( 'Y-m-d\TH:i:s\Z', time() + self::EXPIRY_MINUTES * MINUTE_IN_SECONDS );
 
 		update_post_meta( $command_id, 'wpce_prompt', $prompt );
 		update_post_meta( $command_id, 'wpce_arguments', wp_json_encode( $arguments ) );
@@ -308,13 +308,14 @@ class REST_Controller extends WP_REST_Controller {
 		$user_id = get_current_user_id();
 
 		// Lazily expire stale commands before returning results.
-		$this->expire_stale_commands( $user_id );
+		Command_Store::expire_stale_commands( $user_id );
 
 		$args = [
 			'post_type'      => Command_Store::POST_TYPE,
 			'post_status'    => 'any',
 			'author'         => $user_id,
 			'posts_per_page' => 100,
+			'no_found_rows'  => true,
 			'orderby'        => 'date',
 			'order'          => 'DESC',
 		];
@@ -526,45 +527,6 @@ class REST_Controller extends WP_REST_Controller {
 				'mcp_last_seen_at' => $last_seen_at ? $last_seen_at : null,
 			]
 		);
-	}
-
-	/**
-	 * Transition expired pending/claimed commands to "expired" status.
-	 *
-	 * @param int $user_id The user whose commands to check.
-	 */
-	private function expire_stale_commands( $user_id ) {
-		$query = new WP_Query(
-			[
-				'post_type'      => Command_Store::POST_TYPE,
-				'post_status'    => 'any',
-				'author'         => $user_id,
-				'posts_per_page' => 100,
-				'no_found_rows'  => true,
-				'fields'         => 'ids',
-				'meta_query'     => [
-					'relation' => 'AND',
-					[
-						'key'     => 'wpce_command_status',
-						'value'   => [ 'pending', 'claimed' ],
-						'compare' => 'IN',
-					],
-					[
-						'key'     => 'wpce_expires_at',
-						'value'   => gmdate( 'Y-m-d\TH:i:s\Z' ),
-						'compare' => '<=',
-						'type'    => 'CHAR',
-					],
-				],
-			]
-		);
-
-		foreach ( $query->posts as $post_id ) {
-			update_post_meta( $post_id, 'wpce_command_status', 'expired' );
-			// Touch the post so post_modified_gmt updates, making the
-			// transition discoverable via the `since` filter.
-			wp_update_post( [ 'ID' => $post_id ] );
-		}
 	}
 
 	/**
