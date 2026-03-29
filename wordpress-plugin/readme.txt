@@ -2,7 +2,7 @@
 Contributors: pento
 Donate link: https://github.com/sponsors/pento
 Tags: ai, collaborative-editing, gutenberg, claude
-Requires at least: 7.0
+Requires at least: 6.9
 Tested up to: 7.0
 Stable tag: 0.1.0
 Requires PHP: 7.4
@@ -25,7 +25,7 @@ No. The plugin provides the browser-side UI, but all AI processing happens throu
 
 = What version of WordPress is required? =
 
-WordPress 7.0 or later, which includes the collaborative editing infrastructure this plugin depends on.
+WordPress 7.0 or later for a standalone block editor experience, or Gutenberg 22.8+ if using the block editor plugin. Collaborative editing must be enabled in WordPress settings.
 
 == Development ==
 
@@ -33,7 +33,7 @@ The source code is available on GitHub:
 
 [Claudaborative Editing on GitHub](https://github.com/pento/claudaborative-editing)
 
-The plugin uses [@wordpress/scripts](https://developer.wordpress.org/block-editor/reference-guides/packages/packages-scripts/) for building. Source files are in the `src/` directory. See the repository README for build instructions.
+Source files are in the `wordpress-plugin/src/` directory. See the repository `README.md` for build instructions.
 
 == Changelog ==
 
