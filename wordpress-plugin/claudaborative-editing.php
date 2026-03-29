@@ -27,6 +27,8 @@ class Claudaborative_Editing {
 
 	/**
 	 * Register hooks.
+	 *
+	 * @return void
 	 */
 	public static function register() {
 		Command_Store::register_post_type();
@@ -35,6 +37,8 @@ class Claudaborative_Editing {
 
 	/**
 	 * Register REST API routes.
+	 *
+	 * @return void
 	 */
 	public static function register_rest_routes() {
 		$controller = new REST_Controller();
@@ -43,6 +47,8 @@ class Claudaborative_Editing {
 
 	/**
 	 * Plugin activation: register CPT before flushing rewrite rules.
+	 *
+	 * @return void
 	 */
 	public static function activate() {
 		self::register();

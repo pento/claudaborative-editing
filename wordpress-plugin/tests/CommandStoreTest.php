@@ -62,6 +62,7 @@ class CommandStoreTest extends WP_UnitTestCase {
 	 * The wpce_command_status meta should default to 'pending'.
 	 */
 	public function test_command_status_defaults_to_pending() {
+		/** @var int $post_id */
 		$post_id = self::factory()->post->create( [ 'post_type' => Command_Store::POST_TYPE ] );
 
 		$this->assertSame( 'pending', get_post_meta( $post_id, 'wpce_command_status', true ) );
@@ -71,6 +72,7 @@ class CommandStoreTest extends WP_UnitTestCase {
 	 * The wpce_arguments meta should default to an empty JSON object.
 	 */
 	public function test_arguments_defaults_to_empty_json() {
+		/** @var int $post_id */
 		$post_id = self::factory()->post->create( [ 'post_type' => Command_Store::POST_TYPE ] );
 
 		$this->assertSame( '{}', get_post_meta( $post_id, 'wpce_arguments', true ) );

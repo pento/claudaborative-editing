@@ -1,0 +1,19 @@
+includes:
+    - vendor/szepeviktor/phpstan-wordpress/extension.neon
+
+parameters:
+    level: 7
+    paths:
+        - claudaborative-editing.php
+        - includes/
+        - tests/
+    scanFiles:
+        - vendor/php-stubs/wordpress-tests-stubs/wordpress-tests-stubs.php
+    # test_* methods are always void — skip return type annotations for them,
+    # but still require return types on helpers, data providers, and lifecycle methods.
+    ignoreErrors:
+        - identifier: missingType.return
+          message: '#::test_#'
+          paths:
+              - tests/
+    tmpDir: .phpstan-cache

@@ -83,6 +83,10 @@ jobs:
               run: composer phpcs
               working-directory: wordpress-plugin
 
+            - name: Run PHPStan
+              run: composer phpstan
+              working-directory: wordpress-plugin
+
     plugin-test-php:
         name: Plugin PHP Tests
         runs-on: ubuntu-latest

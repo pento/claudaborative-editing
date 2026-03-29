@@ -21,7 +21,7 @@ class Command_Store {
 	 * Sanitize a JSON string. Returns the input if valid JSON, or an empty
 	 * JSON object if parsing fails.
 	 *
-	 * @param string $value The value to sanitize.
+	 * @param mixed $value The value to sanitize.
 	 * @return string Sanitized JSON string.
 	 */
 	public static function sanitize_json( $value ) {
@@ -38,11 +38,15 @@ class Command_Store {
 		// Re-encode to normalize whitespace. Using json_decode without the
 		// associative flag preserves the object/array distinction, so "{}"
 		// stays as "{}" rather than becoming "[]".
-		return wp_json_encode( $decoded );
+		$encoded = wp_json_encode( $decoded );
+
+		return false !== $encoded ? $encoded : '{}';
 	}
 
 	/**
 	 * Register the wpce_command custom post type.
+	 *
+	 * @return void
 	 */
 	public static function register_post_type() {
 		register_post_type(
@@ -68,6 +72,8 @@ class Command_Store {
 
 	/**
 	 * Register post meta fields for the wpce_command post type.
+	 *
+	 * @return void
 	 */
 	public static function register_meta() {
 		$meta_fields = [
@@ -126,6 +132,7 @@ class Command_Store {
 	 *
 	 * @param int  $user_id       The user whose commands to check.
 	 * @param bool $cache_results Whether to cache query results (false for SSE loop).
+	 * @return void
 	 */
 	public static function expire_stale_commands( $user_id, $cache_results = true ) {
 		$query = new WP_Query(
@@ -154,7 +161,9 @@ class Command_Store {
 			]
 		);
 
-		foreach ( $query->posts as $post_id ) {
+		/** @var int[] $post_ids */
+		$post_ids = $query->posts;
+		foreach ( $post_ids as $post_id ) {
 			update_post_meta( $post_id, 'wpce_command_status', 'expired' );
 			wp_update_post( [ 'ID' => $post_id ] );
 		}

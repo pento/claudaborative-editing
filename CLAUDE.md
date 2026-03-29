@@ -288,6 +288,7 @@ npm install
 npm run build          # Build with @wordpress/scripts → build/
 composer install
 composer phpcs         # PHP CodeSniffer (WordPress-Extra)
+composer phpstan       # PHPStan static analysis (level 7)
 ```
 
 JS linting is handled by the root ESLint config (`eslint.config.mjs`) via `@wordpress/eslint-plugin` + FlatCompat. Run `npm run lint` from the repo root to lint everything (MCP TypeScript + plugin JS + Prettier + markdownlint).

@@ -52,7 +52,11 @@
 	"lint-staged": {
 		"*.{ts,js,md,json,jsonc}": "prettier --write",
 		"*.{ts,js}": "env ESLINT_USE_FLAT_CONFIG=true eslint --max-warnings 0",
-		"*.md": "markdownlint-cli2"
+		"*.md": "markdownlint-cli2",
+		"wordpress-plugin/**/*.php": [
+			"bash -c 'cd wordpress-plugin && (vendor/bin/phpcbf --no-cache || test $? -eq 1)'",
+			"bash -c 'cd wordpress-plugin && vendor/bin/phpstan analyse --no-progress --memory-limit=512M'"
+		]
 	},
 	"dependencies": {
 		"@modelcontextprotocol/sdk": "^1.27.1",
