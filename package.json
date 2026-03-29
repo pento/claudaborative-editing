@@ -48,9 +48,9 @@
     "typecheck": "tsc --noEmit"
   },
   "lint-staged": {
-    "*.{ts,js,md,json,jsonc}": "prettier --write",
-    "*.{ts,js}": "eslint --max-warnings 0",
-    "*.md": [
+    "!(wordpress-plugin/**)*.{ts,js,md,json,jsonc}": "prettier --write",
+    "!(wordpress-plugin/**)*.{ts,js}": "eslint --max-warnings 0",
+    "!(wordpress-plugin/**)*.md": [
       "eslint --max-warnings 0",
       "markdownlint-cli2"
     ]

@@ -8,7 +8,7 @@ import eslintConfigPrettier from 'eslint-config-prettier';
 export default defineConfig(
   // Global ignores
   {
-    ignores: ['dist/**', 'coverage/**', 'node_modules/**', '.gutenberg/**'],
+    ignores: ['dist/**', 'coverage/**', 'node_modules/**', '.gutenberg/**', 'wordpress-plugin/**'],
   },
 
   // TypeScript files: recommended + strict-type-checked + WordPress esnext-inspired code quality rules

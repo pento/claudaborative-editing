@@ -5,3 +5,7 @@ coverage/
 .gutenberg/
 test-results/
 .DS_Store
+wordpress-plugin/build/
+wordpress-plugin/node_modules/
+wordpress-plugin/vendor/
+wordpress-plugin/.phpcs-cache

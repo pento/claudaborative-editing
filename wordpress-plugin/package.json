@@ -1,0 +1,22 @@
+{
+	"name": "claudaborative-editing-plugin",
+	"version": "0.1.0",
+	"description": "WordPress plugin that adds AI action controls to the Gutenberg editor.",
+	"private": true,
+	"devDependencies": {
+		"@wordpress/scripts": "^31.6.0",
+		"npm-run-all": "^4.1.5"
+	},
+	"scripts": {
+		"build": "wp-scripts build --webpack-src-dir=src",
+		"start": "wp-scripts start --webpack-src-dir=src",
+		"lint": "npm-run-all --parallel lint:*",
+		"lint:fix": "npm-run-all --parallel lint:*:fix",
+		"lint:js": "wp-scripts lint-js src/",
+		"lint:js:fix": "wp-scripts lint-js src/ --fix",
+		"lint:css": "wp-scripts lint-style 'src/**/*.css'",
+		"lint:css:fix": "wp-scripts lint-style 'src/**/*.css' --fix",
+		"lint:php": "composer phpcs",
+		"lint:php:fix": "composer phpcbf"
+	}
+}

@@ -5,3 +5,4 @@ package-lock.json
 .gutenberg/
 test-results/
 .claude/
+wordpress-plugin/

@@ -1,0 +1,55 @@
+<?xml version="1.0"?>
+<ruleset name="Claudaborative Editing">
+	<description>Coding standards for the Claudaborative Editing plugin.</description>
+
+	<!-- Scan these files -->
+	<file>.</file>
+
+	<!-- Exclude paths -->
+	<exclude-pattern>/build/*</exclude-pattern>
+	<exclude-pattern>/node_modules/*</exclude-pattern>
+	<exclude-pattern>/src/*</exclude-pattern>
+	<exclude-pattern>/vendor/*</exclude-pattern>
+
+	<!-- Use WordPress-Extra (Core + security sniffs, skips pedantic docs) -->
+	<rule ref="WordPress-Extra">
+		<!-- Allow short array syntax -->
+		<exclude name="Universal.Arrays.DisallowShortArraySyntax" />
+	</rule>
+
+	<!-- Check for PHP cross-version compatibility -->
+	<config name="testVersion" value="7.4-" />
+	<rule ref="PHPCompatibilityWP" />
+
+	<!-- WordPress minimum version -->
+	<config name="minimum_wp_version" value="7.0" />
+
+	<!-- Check for correct text domain -->
+	<rule ref="WordPress.WP.I18n">
+		<properties>
+			<property name="text_domain" type="array">
+				<element value="claudaborative-editing" />
+			</property>
+		</properties>
+	</rule>
+
+	<!-- Main plugin file matches the plugin slug, not the class name -->
+	<rule ref="WordPress.Files.FileName.InvalidClassFileName">
+		<exclude-pattern>claudaborative-editing.php</exclude-pattern>
+	</rule>
+
+	<!-- Disable inline phpcs:ignore annotations — all suppressions must go through this config -->
+	<arg name="ignore-annotations" />
+
+	<!-- Test bootstrap echoes before WordPress is loaded, so esc_html() is unavailable -->
+	<rule ref="WordPress.Security.EscapeOutput.OutputNotEscaped">
+		<exclude-pattern>tests/bootstrap.php</exclude-pattern>
+	</rule>
+
+	<!-- Use colors and show sniff names -->
+	<arg name="colors" />
+	<arg value="sp" />
+
+	<!-- Use caching -->
+	<arg name="cache" value=".phpcs-cache" />
+</ruleset>

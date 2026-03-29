@@ -3,7 +3,7 @@
   "core": "WordPress/WordPress#master",
   "phpVersion": "8.5",
   "testsEnvironment": false,
-  "plugins": ["WordPress/gutenberg#trunk"],
+  "plugins": ["WordPress/gutenberg#trunk", "./wordpress-plugin"],
   "lifecycleScripts": {
     "afterStart": "./bin/after-start.sh"
   }
