@@ -38,7 +38,9 @@ class Command_Store {
 		// Re-encode to normalize whitespace. Using json_decode without the
 		// associative flag preserves the object/array distinction, so "{}"
 		// stays as "{}" rather than becoming "[]".
-		return (string) wp_json_encode( $decoded );
+		$encoded = wp_json_encode( $decoded );
+
+		return false !== $encoded ? $encoded : '{}';
 	}
 
 	/**
