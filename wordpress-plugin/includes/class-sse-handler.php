@@ -82,12 +82,12 @@ class SSE_Handler {
 			$commands = self::query_pending_commands( $user_id, $last_seen_id );
 
 			foreach ( $commands as $command_post ) {
-				$data = wp_json_encode( Command_Formatter::format( $command_post ) );
+				$last_seen_id = $command_post->ID;
+				$data         = wp_json_encode( Command_Formatter::format( $command_post ) );
 				if ( false === $data ) {
 					continue;
 				}
 				self::send_event( 'command', $data, (string) $command_post->ID );
-				$last_seen_id   = $command_post->ID;
 				$last_heartbeat = time();
 			}
 
