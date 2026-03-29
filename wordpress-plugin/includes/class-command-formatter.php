@@ -35,11 +35,21 @@ class Command_Formatter {
 		$message    = get_post_meta( $post->ID, 'wpce_message', true );
 		$arguments  = get_post_meta( $post->ID, 'wpce_arguments', true );
 
+		$decoded_args = json_decode( $arguments ? $arguments : '{}' );
+
+		// Arguments is always an object per the API schema. WordPress REST
+		// sanitization converts objects to arrays in PHP, so "[]" can end up
+		// stored for empty objects. Cast to ensure the response is always an
+		// object.
+		if ( ! is_object( $decoded_args ) ) {
+			$decoded_args = (object) $decoded_args;
+		}
+
 		return [
 			'id'         => $post->ID,
 			'post_id'    => (int) $post->post_parent,
 			'prompt'     => get_post_meta( $post->ID, 'wpce_prompt', true ),
-			'arguments'  => json_decode( $arguments ? $arguments : '{}' ),
+			'arguments'  => $decoded_args,
 			'status'     => get_post_meta( $post->ID, 'wpce_command_status', true ),
 			'user_id'    => (int) $post->post_author,
 			'claimed_by' => $claimed_by ? (int) $claimed_by : null,
