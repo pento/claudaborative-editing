@@ -108,6 +108,7 @@ class REST_Controller extends WP_REST_Controller {
 						'since'   => [
 							'required'          => false,
 							'type'              => 'string',
+							'validate_callback' => [ $this, 'validate_since_param' ],
 							'sanitize_callback' => 'sanitize_text_field',
 						],
 					],
@@ -235,6 +236,30 @@ class REST_Controller extends WP_REST_Controller {
 				'rest_forbidden',
 				__( 'You can only cancel your own commands.', 'claudaborative-editing' ),
 				[ 'status' => 403 ]
+			);
+		}
+
+		return true;
+	}
+
+	/**
+	 * Validate the "since" query parameter is a parseable date.
+	 *
+	 * @param string          $value   The parameter value.
+	 * @param WP_REST_Request $request The request object.
+	 * @param string          $param   The parameter name.
+	 * @return true|WP_Error True if valid, WP_Error otherwise.
+	 */
+	public function validate_since_param( $value, $request, $param ) {
+		if ( false === rest_parse_date( $value ) ) {
+			return new WP_Error(
+				'rest_invalid_param',
+				sprintf(
+					/* translators: %s: parameter name */
+					__( '%s is not a valid date.', 'claudaborative-editing' ),
+					$param
+				),
+				[ 'status' => 400 ]
 			);
 		}
 
@@ -374,9 +399,10 @@ class REST_Controller extends WP_REST_Controller {
 		$current_status = get_post_meta( $command->ID, 'wpce_command_status', true );
 		$new_status     = $request->get_param( 'status' );
 
-		// Check if the command has expired.
-		if ( $this->is_expired( $command->ID ) && 'pending' === $current_status ) {
+		// Check if the command has expired (both pending and claimed are expirable).
+		if ( $this->is_expired( $command->ID ) && in_array( $current_status, [ 'pending', 'claimed' ], true ) ) {
 			update_post_meta( $command->ID, 'wpce_command_status', 'expired' );
+			wp_update_post( [ 'ID' => $command->ID ] );
 
 			return new WP_Error(
 				'rest_command_expired',
@@ -399,21 +425,38 @@ class REST_Controller extends WP_REST_Controller {
 			);
 		}
 
-		// Optimistic locking for the claim transition: re-read the status and
-		// reject if it has changed since the initial read.
+		// Atomic conditional update for the claim transition: only update the
+		// status if it is still "pending" at the database level. This prevents
+		// two concurrent requests from both reading "pending" and both writing
+		// "claimed".
 		if ( 'claimed' === $new_status ) {
-			$fresh_status = get_post_meta( $command->ID, 'wpce_command_status', true );
+			global $wpdb;
 
-			if ( 'pending' !== $fresh_status ) {
+			$updated_rows = $wpdb->update(
+				$wpdb->postmeta,
+				[ 'meta_value' => 'claimed' ],
+				[
+					'post_id'    => $command->ID,
+					'meta_key'   => 'wpce_command_status',
+					'meta_value' => 'pending',
+				],
+				[ '%s' ],
+				[ '%d', '%s', '%s' ]
+			);
+
+			if ( ! $updated_rows ) {
 				return new WP_Error(
 					'rest_conflict',
 					__( 'This command has already been claimed.', 'claudaborative-editing' ),
 					[ 'status' => 409 ]
 				);
 			}
-		}
 
-		update_post_meta( $command->ID, 'wpce_command_status', $new_status );
+			// Clear the cached meta so subsequent reads reflect the DB state.
+			wp_cache_delete( $command->ID, 'post_meta' );
+		} else {
+			update_post_meta( $command->ID, 'wpce_command_status', $new_status );
+		}
 
 		$message = $request->get_param( 'message' );
 		if ( null !== $message ) {
@@ -515,6 +558,9 @@ class REST_Controller extends WP_REST_Controller {
 		foreach ( $query->posts as $post ) {
 			if ( $this->is_expired( $post->ID ) ) {
 				update_post_meta( $post->ID, 'wpce_command_status', 'expired' );
+				// Touch the post so post_modified_gmt updates, making the
+				// transition discoverable via the `since` filter.
+				wp_update_post( [ 'ID' => $post->ID ] );
 			}
 		}
 	}

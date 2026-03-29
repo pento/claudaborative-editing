@@ -61,6 +61,7 @@ class SSE_Handler {
 		$last_seen_id   = $last_event_id ? (int) $last_event_id : 0;
 		$start_time     = time();
 		$last_heartbeat = time();
+		$last_expiry    = 0;
 
 		// Send an initial heartbeat so the client knows the connection is alive.
 		self::send_heartbeat();
@@ -90,6 +91,12 @@ class SSE_Handler {
 			if ( ( time() - $last_heartbeat ) >= self::HEARTBEAT_INTERVAL ) {
 				self::send_heartbeat();
 				$last_heartbeat = time();
+			}
+
+			// Expire stale commands at heartbeat cadence, not every poll.
+			if ( ( time() - $last_expiry ) >= self::HEARTBEAT_INTERVAL ) {
+				self::expire_stale_commands( $user_id );
+				$last_expiry = time();
 			}
 
 			sleep( self::POLL_INTERVAL );
@@ -149,10 +156,6 @@ class SSE_Handler {
 		if ( $filter_callback ) {
 			remove_filter( 'posts_where', $filter_callback );
 		}
-
-		// Transition any expired pending commands found nearby so they don't
-		// linger in the database as perpetually "pending".
-		self::expire_stale_commands( $user_id );
 
 		return $result;
 	}

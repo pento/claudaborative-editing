@@ -47,7 +47,7 @@
 	</rule>
 
 	<!-- SSE handler outputs JSON via echo — escaping would break the data format -->
-	<rule ref="WordPress.Security.EscapeOutput">
+	<rule ref="WordPress.Security.EscapeOutput.OutputNotEscaped">
 		<exclude-pattern>includes/class-sse-handler.php</exclude-pattern>
 	</rule>
 

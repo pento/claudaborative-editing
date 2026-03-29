@@ -97,7 +97,7 @@ class RestControllerTest extends WP_UnitTestCase {
 			'prompt'     => 'review',
 			'arguments'  => '{}',
 			'status'     => 'pending',
-			'expires_at' => gmdate( 'Y-m-d\TH:i:s\Z', time() + 600 ),
+			'expires_at' => gmdate( 'Y-m-d\TH:i:s\Z', time() + REST_Controller::EXPIRY_MINUTES * MINUTE_IN_SECONDS ),
 		];
 
 		$opts = array_merge( $defaults, $overrides );
@@ -748,18 +748,55 @@ class RestControllerTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The SSE query should transition expired commands to "expired" status.
+	 * Updating an expired claimed command should return 409 and expire it.
 	 */
-	public function test_sse_query_transitions_expired_to_expired_status() {
-		$expired_id = $this->create_command_directly(
+	public function test_update_expired_claimed_command() {
+		$command_id = $this->create_command_directly(
+			[
+				'status'     => 'claimed',
+				'expires_at' => gmdate( 'Y-m-d\TH:i:s\Z', time() - 60 ),
+			]
+		);
+
+		$request = new WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
+		$request->set_body_params( [ 'status' => 'running' ] );
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 409, $response->get_status() );
+		$this->assertSame(
+			'expired',
+			get_post_meta( $command_id, 'wpce_command_status', true )
+		);
+	}
+
+	/**
+	 * The list endpoint should expire stale commands and update post_modified_gmt.
+	 */
+	public function test_list_commands_expiry_updates_modified_date() {
+		$command_id = $this->create_command_directly(
 			[ 'expires_at' => gmdate( 'Y-m-d\TH:i:s\Z', time() - 60 ) ]
 		);
 
-		SSE_Handler::query_pending_commands( self::$editor_id, 0 );
+		$original_modified = get_post( $command_id )->post_modified_gmt;
 
-		$this->assertSame(
-			'expired',
-			get_post_meta( $expired_id, 'wpce_command_status', true )
-		);
+		// Allow 1-second gap so post_modified_gmt can change.
+		sleep( 1 );
+
+		$request = new WP_REST_Request( 'GET', '/wpce/v1/commands' );
+		rest_get_server()->dispatch( $request );
+
+		$updated_modified = get_post( $command_id )->post_modified_gmt;
+		$this->assertNotSame( $original_modified, $updated_modified );
+	}
+
+	/**
+	 * The since param should reject invalid date strings.
+	 */
+	public function test_list_commands_invalid_since_returns_400() {
+		$request = new WP_REST_Request( 'GET', '/wpce/v1/commands' );
+		$request->set_param( 'since', 'not-a-date' );
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 400, $response->get_status() );
 	}
 }

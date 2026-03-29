@@ -326,7 +326,7 @@ REST endpoints for the command queue between the browser and the MCP server. All
 | `DELETE` | `/wpce/v1/commands/{id}`   | Browser cancels a command (author only)                   |
 | `GET`    | `/wpce/v1/status`          | Plugin version, protocol version, MCP connection state    |
 
-**Command status lifecycle**: `pending` → `claimed` → `running` → `completed` | `failed`. Also: `pending` → `cancelled` (user cancels), `pending` | `claimed` → `expired` (timeout). Claim uses optimistic locking (409 on conflict). Expired commands are transitioned lazily on query.
+**Command status lifecycle**: `pending` → `claimed` → `running` → `completed` or `failed`. Also: `pending` → `cancelled` (user cancels), `pending` or `claimed` → `expired` (timeout). Claim uses atomic conditional update (409 on conflict). Expired commands are transitioned lazily on query.
 
 **SSE stream**: Polls the database every 2s for pending commands, sends `event: command` with JSON data, heartbeat every 30s. Supports `Last-Event-ID` for reconnection. Exits after ~5 minutes (client reconnects via EventSource retry).
 
