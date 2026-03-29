@@ -31,7 +31,7 @@ class Command_Store {
 
 		$decoded = json_decode( $value, true );
 
-		if ( null === $decoded && JSON_ERROR_NONE !== json_last_error() ) {
+		if ( ! is_array( $decoded ) ) {
 			return '{}';
 		}
 

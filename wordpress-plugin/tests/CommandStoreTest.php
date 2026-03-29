@@ -94,6 +94,16 @@ class CommandStoreTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The wpce_arguments sanitize callback should reject scalar JSON values.
+	 */
+	public function test_sanitize_json_rejects_scalars() {
+		$this->assertSame( '{}', Command_Store::sanitize_json( '"a string"' ) );
+		$this->assertSame( '{}', Command_Store::sanitize_json( '42' ) );
+		$this->assertSame( '{}', Command_Store::sanitize_json( 'null' ) );
+		$this->assertSame( '{}', Command_Store::sanitize_json( 'true' ) );
+	}
+
+	/**
 	 * The wpce_arguments sanitize callback should handle non-string input.
 	 */
 	public function test_sanitize_json_handles_non_string() {
