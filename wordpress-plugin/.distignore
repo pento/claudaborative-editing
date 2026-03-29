@@ -10,11 +10,13 @@
 .gitignore
 .wp-env.json
 .phpcs-cache
+.phpstan-cache
 .prettierrc
 composer.json
 composer.lock
 package.json
 package-lock.json
 phpcs.xml.dist
+phpstan.neon.dist
 phpunit.xml.dist
 README.md

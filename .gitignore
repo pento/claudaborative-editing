@@ -9,4 +9,5 @@ wordpress-plugin/build/
 wordpress-plugin/node_modules/
 wordpress-plugin/vendor/
 wordpress-plugin/.phpcs-cache
+wordpress-plugin/.phpstan-cache
 wordpress-plugin/.phpunit.result.cache

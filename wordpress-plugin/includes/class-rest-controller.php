@@ -54,6 +54,8 @@ class REST_Controller extends WP_REST_Controller {
 
 	/**
 	 * Register REST API routes.
+	 *
+	 * @return void
 	 */
 	public function register_routes() {
 		register_rest_route(
@@ -346,8 +348,10 @@ class REST_Controller extends WP_REST_Controller {
 			];
 		}
 
-		$query    = new WP_Query( $args );
-		$commands = array_map( [ 'Command_Formatter', 'format' ], $query->posts );
+		$query = new WP_Query( $args );
+		/** @var WP_Post[] $posts */
+		$posts    = $query->posts;
+		$commands = array_map( [ 'Command_Formatter', 'format' ], $posts );
 
 		return rest_ensure_response( $commands );
 	}
@@ -356,6 +360,7 @@ class REST_Controller extends WP_REST_Controller {
 	 * GET /wpce/v1/commands/stream — SSE stream of pending commands.
 	 *
 	 * @param WP_REST_Request $request The request object.
+	 * @return void
 	 */
 	public function stream_commands( $request ) {
 		$user_id       = get_current_user_id();
@@ -564,6 +569,7 @@ class REST_Controller extends WP_REST_Controller {
 	 * Record the current time as the MCP's last seen timestamp for a user.
 	 *
 	 * @param int $user_id The user ID.
+	 * @return void
 	 */
 	private function update_mcp_last_seen( $user_id ) {
 		set_transient(

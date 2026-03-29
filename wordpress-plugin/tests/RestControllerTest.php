@@ -40,17 +40,29 @@ class RestControllerTest extends WP_UnitTestCase {
 	 * Create shared fixtures once for all tests in this class.
 	 *
 	 * @param WP_UnitTest_Factory $factory The factory instance.
+	 * @return void
 	 */
 	public static function wpSetUpBeforeClass( WP_UnitTest_Factory $factory ) {
-		self::$editor_id      = $factory->user->create( [ 'role' => 'editor' ] );
-		self::$editor2_id     = $factory->user->create( [ 'role' => 'editor' ] );
-		self::$subscriber_id  = $factory->user->create( [ 'role' => 'subscriber' ] );
-		self::$target_post_id = $factory->post->create(
+		/** @var int $editor_id */
+		$editor_id       = $factory->user->create( [ 'role' => 'editor' ] );
+		self::$editor_id = $editor_id;
+
+		/** @var int $editor2_id */
+		$editor2_id       = $factory->user->create( [ 'role' => 'editor' ] );
+		self::$editor2_id = $editor2_id;
+
+		/** @var int $subscriber_id */
+		$subscriber_id       = $factory->user->create( [ 'role' => 'subscriber' ] );
+		self::$subscriber_id = $subscriber_id;
+
+		/** @var int $target_post_id */
+		$target_post_id       = $factory->post->create(
 			[
 				'post_author' => self::$editor_id,
 				'post_status' => 'draft',
 			]
 		);
+		self::$target_post_id = $target_post_id;
 	}
 
 	/**
@@ -69,7 +81,7 @@ class RestControllerTest extends WP_UnitTestCase {
 	/**
 	 * Create a command via the REST API and return the response.
 	 *
-	 * @param array $params Override default command parameters.
+	 * @param array<string, mixed> $params Override default command parameters.
 	 * @return WP_REST_Response The response.
 	 */
 	private function create_command( $params = [] ) {
@@ -87,7 +99,7 @@ class RestControllerTest extends WP_UnitTestCase {
 	/**
 	 * Create a command post directly in the database and return its ID.
 	 *
-	 * @param array $overrides Override defaults for the command.
+	 * @param array<string, mixed> $overrides Override defaults for the command.
 	 * @return int The command post ID.
 	 */
 	private function create_command_directly( $overrides = [] ) {
@@ -102,6 +114,7 @@ class RestControllerTest extends WP_UnitTestCase {
 
 		$opts = array_merge( $defaults, $overrides );
 
+		/** @var int $command_id */
 		$command_id = self::factory()->post->create(
 			[
 				'post_type'   => Command_Store::POST_TYPE,

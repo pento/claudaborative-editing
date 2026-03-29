@@ -32,6 +32,7 @@ class SSE_Handler {
 	 *
 	 * @param int    $user_id       The authenticated user's ID.
 	 * @param string $last_event_id The Last-Event-ID header value, or empty string.
+	 * @return void
 	 */
 	public static function handle( $user_id, $last_event_id ) {
 		// Keep the script running even if the client disconnects, so we can
@@ -46,7 +47,7 @@ class SSE_Handler {
 		}
 
 		// Enable implicit flushing so every echo is sent immediately.
-		ob_implicit_flush( 1 );
+		ob_implicit_flush( true );
 
 		header( 'Content-Type: text/event-stream' );
 		header( 'Cache-Control: no-cache' );
@@ -81,7 +82,7 @@ class SSE_Handler {
 			$commands = self::query_pending_commands( $user_id, $last_seen_id );
 
 			foreach ( $commands as $command_post ) {
-				$data = wp_json_encode( Command_Formatter::format( $command_post ) );
+				$data = (string) wp_json_encode( Command_Formatter::format( $command_post ) );
 				self::send_event( 'command', $data, (string) $command_post->ID );
 				$last_seen_id   = $command_post->ID;
 				$last_heartbeat = time();
@@ -165,7 +166,8 @@ class SSE_Handler {
 			add_filter( 'posts_where', $filter_callback, 10, 2 );
 		}
 
-		$query  = new WP_Query( $args );
+		$query = new WP_Query( $args );
+		/** @var WP_Post[] $result */
 		$result = $query->posts;
 
 		if ( $filter_callback ) {
@@ -181,6 +183,7 @@ class SSE_Handler {
 	 * @param string $event The event type.
 	 * @param string $data  The event data (JSON string).
 	 * @param string $id    The event ID (optional).
+	 * @return void
 	 */
 	private static function send_event( $event, $data, $id = '' ) {
 		if ( $id ) {
@@ -193,6 +196,8 @@ class SSE_Handler {
 
 	/**
 	 * Send a heartbeat event.
+	 *
+	 * @return void
 	 */
 	private static function send_heartbeat() {
 		echo "event: heartbeat\ndata: {}\n\n";

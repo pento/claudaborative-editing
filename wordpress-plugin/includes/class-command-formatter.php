@@ -67,6 +67,7 @@ class Command_Formatter {
 	 * @return string ISO 8601 date string.
 	 */
 	private static function format_date( $mysql_date ) {
-		return gmdate( 'Y-m-d\TH:i:s\Z', strtotime( $mysql_date ) );
+		$timestamp = strtotime( $mysql_date );
+		return gmdate( 'Y-m-d\TH:i:s\Z', false !== $timestamp ? $timestamp : 0 );
 	}
 }
