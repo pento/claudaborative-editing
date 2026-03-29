@@ -25,7 +25,7 @@ No. The plugin provides the browser-side UI, but all AI processing happens throu
 
 = What version of WordPress is required? =
 
-WordPress 7.0 or later for a standalone block editor experience, or Gutenberg 22.8+ if using the block editor plugin. Collaborative editing must be enabled in WordPress settings.
+WordPress 7.0 or later for a standalone block editor experience, or WordPress 6.9 and Gutenberg 22.8+ if using the block editor plugin. Collaborative editing must be enabled in WordPress settings.
 
 == Development ==
 
