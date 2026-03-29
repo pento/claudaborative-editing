@@ -29,13 +29,15 @@ class Command_Store {
 			return '{}';
 		}
 
-		$decoded = json_decode( $value, true );
+		$decoded = json_decode( $value );
 
-		if ( ! is_array( $decoded ) ) {
+		if ( ! is_object( $decoded ) && ! is_array( $decoded ) ) {
 			return '{}';
 		}
 
-		// Re-encode to normalize whitespace.
+		// Re-encode to normalize whitespace. Using json_decode without the
+		// associative flag preserves the object/array distinction, so "{}"
+		// stays as "{}" rather than becoming "[]".
 		return wp_json_encode( $decoded );
 	}
 

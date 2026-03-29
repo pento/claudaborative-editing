@@ -142,12 +142,19 @@ class SSE_Handler {
 		];
 
 		if ( $last_seen_id > 0 ) {
-			$filter_callback = function ( $where ) use ( $last_seen_id ) {
+			// Tag this query so the filter only applies to it, not to any
+			// nested queries that may run during WP_Query execution.
+			$args['wpce_last_seen_id'] = $last_seen_id;
+
+			$filter_callback = function ( $where, $query ) use ( $last_seen_id ) {
+				if ( empty( $query->query_vars['wpce_last_seen_id'] ) ) {
+					return $where;
+				}
 				global $wpdb;
 				$where .= $wpdb->prepare( " AND {$wpdb->posts}.ID > %d", $last_seen_id );
 				return $where;
 			};
-			add_filter( 'posts_where', $filter_callback );
+			add_filter( 'posts_where', $filter_callback, 10, 2 );
 		}
 
 		$query  = new WP_Query( $args );

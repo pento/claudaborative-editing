@@ -139,9 +139,21 @@ class RestControllerTest extends WP_UnitTestCase {
 		$this->assertSame( self::$editor_id, $data['user_id'] );
 		$this->assertNull( $data['claimed_by'] );
 		$this->assertNull( $data['message'] );
+		$this->assertIsObject( $data['arguments'] );
 		$this->assertArrayHasKey( 'created_at', $data );
 		$this->assertArrayHasKey( 'updated_at', $data );
 		$this->assertArrayHasKey( 'expires_at', $data );
+	}
+
+	/**
+	 * The default arguments should be an empty object, not an array.
+	 */
+	public function test_create_command_default_arguments_is_object() {
+		$response = $this->create_command();
+		$data     = $response->get_data();
+
+		$this->assertIsObject( $data['arguments'] );
+		$this->assertEquals( new stdClass(), $data['arguments'] );
 	}
 
 	/**
@@ -773,14 +785,26 @@ class RestControllerTest extends WP_UnitTestCase {
 	 * The list endpoint should expire stale commands and update post_modified_gmt.
 	 */
 	public function test_list_commands_expiry_updates_modified_date() {
+		global $wpdb;
+
 		$command_id = $this->create_command_directly(
 			[ 'expires_at' => gmdate( 'Y-m-d\TH:i:s\Z', time() - 60 ) ]
 		);
 
-		$original_modified = get_post( $command_id )->post_modified_gmt;
-
-		// Allow 1-second gap so post_modified_gmt can change.
-		sleep( 1 );
+		// Set a known old modified time so we can deterministically detect
+		// an update without relying on sleep().
+		$original_modified = '2000-01-01 00:00:00';
+		$wpdb->update(
+			$wpdb->posts,
+			[
+				'post_modified'     => $original_modified,
+				'post_modified_gmt' => $original_modified,
+			],
+			[ 'ID' => $command_id ],
+			[ '%s', '%s' ],
+			[ '%d' ]
+		);
+		clean_post_cache( $command_id );
 
 		$request = new WP_REST_Request( 'GET', '/wpce/v1/commands' );
 		rest_get_server()->dispatch( $request );
