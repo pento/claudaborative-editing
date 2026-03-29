@@ -38,7 +38,9 @@ jobs:
         uses: pento/lcov-coverage-check@v2
         with:
           lcov-file: coverage/lcov.info
-          path: src/
+          path: |
+            src/
+            wordpress-plugin/src/
           ignore-patterns: |
             **/types.ts
           github-token: ${{ secrets.GITHUB_TOKEN }}
