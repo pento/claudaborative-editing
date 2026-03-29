@@ -51,6 +51,5 @@ JavaScript linting is handled by the root project's ESLint config. Run `npm run 
 From the repository root:
 
 ```bash
-npx wp-env start
-npx wp-env run cli --env-cwd=wp-content/plugins/claudaborative-editing vendor/bin/phpunit
+npm run test:php     # PHPUnit tests
 ```

@@ -295,8 +295,7 @@ JS linting is handled by the root ESLint config (`eslint.config.mjs`) via `@word
 PHPUnit tests require wp-env (run from the repo root):
 
 ```bash
-npx wp-env start
-npx wp-env run cli --env-cwd=wp-content/plugins/claudaborative-editing vendor/bin/phpunit
+npm run test:php
 ```
 
 ### Plugin Structure
