@@ -21,6 +21,7 @@ class CommandStoreTest extends WP_UnitTestCase {
 	public function test_post_type_is_not_public() {
 		$post_type = get_post_type_object( Command_Store::POST_TYPE );
 
+		$this->assertInstanceOf( WP_Post_Type::class, $post_type );
 		$this->assertFalse( $post_type->public );
 		$this->assertFalse( $post_type->publicly_queryable );
 		$this->assertFalse( $post_type->show_ui );
@@ -53,6 +54,7 @@ class CommandStoreTest extends WP_UnitTestCase {
 	public function test_command_status_defaults_to_pending() {
 		$registered = get_registered_meta_keys( 'post', Command_Store::POST_TYPE );
 
+		$this->assertArrayHasKey( 'wpce_command_status', $registered );
 		$this->assertSame( 'pending', $registered['wpce_command_status']['default'] );
 	}
 
@@ -62,6 +64,31 @@ class CommandStoreTest extends WP_UnitTestCase {
 	public function test_arguments_defaults_to_empty_json() {
 		$registered = get_registered_meta_keys( 'post', Command_Store::POST_TYPE );
 
+		$this->assertArrayHasKey( 'wpce_arguments', $registered );
 		$this->assertSame( '{}', $registered['wpce_arguments']['default'] );
+	}
+
+	/**
+	 * The wpce_arguments sanitize callback should accept valid JSON.
+	 */
+	public function test_sanitize_json_accepts_valid_json() {
+		$this->assertSame(
+			'{"key":"value"}',
+			Command_Store::sanitize_json( '{"key": "value"}' )
+		);
+	}
+
+	/**
+	 * The wpce_arguments sanitize callback should reject invalid JSON.
+	 */
+	public function test_sanitize_json_rejects_invalid_json() {
+		$this->assertSame( '{}', Command_Store::sanitize_json( 'not json' ) );
+	}
+
+	/**
+	 * The wpce_arguments sanitize callback should handle non-string input.
+	 */
+	public function test_sanitize_json_handles_non_string() {
+		$this->assertSame( '{}', Command_Store::sanitize_json( 42 ) );
 	}
 }

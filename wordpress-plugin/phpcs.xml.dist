@@ -22,7 +22,7 @@
 	<rule ref="PHPCompatibilityWP" />
 
 	<!-- WordPress minimum version -->
-	<config name="minimum_wp_version" value="7.0" />
+	<config name="minimum_wp_version" value="6.9" />
 
 	<!-- Check for correct text domain -->
 	<rule ref="WordPress.WP.I18n">

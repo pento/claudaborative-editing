@@ -126,11 +126,20 @@ jobs:
         run: npm run build
         working-directory: wordpress-plugin
 
+      - name: Use lightweight wp-env config for plugin tests
+        run: |
+          cat > .wp-env.override.json <<WPENV
+          {
+            "plugins": ["./wordpress-plugin"],
+            "testsEnvironment": false
+          }
+          WPENV
+
       - name: Start wp-env
         run: npx wp-env start
 
       - name: Install Composer dependencies in container
-        run: npx wp-env run cli --env-cwd=wp-content/plugins/claudaborative-editing composer install --no-interaction --prefer-dist
+        run: npx wp-env run cli --env-cwd=wp-content/plugins/wordpress-plugin composer install --no-interaction --prefer-dist
 
       - name: Run PHPUnit
-        run: npx wp-env run cli --env-cwd=wp-content/plugins/claudaborative-editing vendor/bin/phpunit
+        run: npx wp-env run cli --env-cwd=wp-content/plugins/wordpress-plugin vendor/bin/phpunit

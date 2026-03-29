@@ -296,7 +296,7 @@ PHPUnit tests require wp-env (run from the repo root):
 
 ```bash
 npx wp-env start
-npx wp-env run cli --env-cwd=wp-content/plugins/claudaborative-editing vendor/bin/phpunit
+npx wp-env run cli --env-cwd=wp-content/plugins/wordpress-plugin vendor/bin/phpunit
 ```
 
 ### Plugin Structure

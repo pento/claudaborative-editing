@@ -18,6 +18,28 @@ class Command_Store {
 	const POST_TYPE = 'wpce_command';
 
 	/**
+	 * Sanitize a JSON string. Returns the input if valid JSON, or an empty
+	 * JSON object if parsing fails.
+	 *
+	 * @param string $value The value to sanitize.
+	 * @return string Sanitized JSON string.
+	 */
+	public static function sanitize_json( $value ) {
+		if ( ! is_string( $value ) ) {
+			return '{}';
+		}
+
+		$decoded = json_decode( $value, true );
+
+		if ( null === $decoded && JSON_ERROR_NONE !== json_last_error() ) {
+			return '{}';
+		}
+
+		// Re-encode to normalize whitespace.
+		return wp_json_encode( $decoded );
+	}
+
+	/**
 	 * Register the wpce_command custom post type.
 	 */
 	public static function register_post_type() {
@@ -48,28 +70,34 @@ class Command_Store {
 	public static function register_meta() {
 		$meta_fields = [
 			'wpce_prompt'         => [
-				'type'    => 'string',
-				'default' => '',
+				'type'              => 'string',
+				'default'           => '',
+				'sanitize_callback' => 'sanitize_text_field',
 			],
 			'wpce_arguments'      => [
-				'type'    => 'string',
-				'default' => '{}',
+				'type'              => 'string',
+				'default'           => '{}',
+				'sanitize_callback' => [ __CLASS__, 'sanitize_json' ],
 			],
 			'wpce_command_status' => [
-				'type'    => 'string',
-				'default' => 'pending',
+				'type'              => 'string',
+				'default'           => 'pending',
+				'sanitize_callback' => 'sanitize_text_field',
 			],
 			'wpce_claimed_by'     => [
-				'type'    => 'string',
-				'default' => '',
+				'type'              => 'string',
+				'default'           => '',
+				'sanitize_callback' => 'sanitize_text_field',
 			],
 			'wpce_message'        => [
-				'type'    => 'string',
-				'default' => '',
+				'type'              => 'string',
+				'default'           => '',
+				'sanitize_callback' => 'sanitize_textarea_field',
 			],
 			'wpce_expires_at'     => [
-				'type'    => 'string',
-				'default' => '',
+				'type'              => 'string',
+				'default'           => '',
+				'sanitize_callback' => 'sanitize_text_field',
 			],
 		];
 
@@ -82,7 +110,7 @@ class Command_Store {
 					'single'            => true,
 					'default'           => $args['default'],
 					'show_in_rest'      => false,
-					'sanitize_callback' => 'sanitize_text_field',
+					'sanitize_callback' => $args['sanitize_callback'],
 				]
 			);
 		}

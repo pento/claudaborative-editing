@@ -6,7 +6,7 @@
  * Author: pento
  * Author URI: https://pento.net
  * License: GPL-2.0-or-later
- * Requires at least: 7.0
+ * Requires at least: 6.9
  * Requires PHP: 7.4
  * Text Domain: claudaborative-editing
  */
@@ -29,9 +29,17 @@ class Claudaborative_Editing {
 		Command_Store::register_post_type();
 		Command_Store::register_meta();
 	}
+
+	/**
+	 * Plugin activation: register CPT before flushing rewrite rules.
+	 */
+	public static function activate() {
+		self::register();
+		flush_rewrite_rules();
+	}
 }
 
 add_action( 'init', [ 'Claudaborative_Editing', 'register' ] );
 
-register_activation_hook( __FILE__, 'flush_rewrite_rules' );
+register_activation_hook( __FILE__, [ 'Claudaborative_Editing', 'activate' ] );
 register_deactivation_hook( __FILE__, 'flush_rewrite_rules' );
