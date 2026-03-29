@@ -103,10 +103,6 @@ jobs:
               run: npm ci
               working-directory: wordpress-plugin
 
-            - name: Install Composer dependencies
-              run: composer install --no-interaction --prefer-dist
-              working-directory: wordpress-plugin
-
             - name: Build plugin
               run: npm run build
               working-directory: wordpress-plugin
