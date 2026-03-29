@@ -9,6 +9,15 @@
 class CommandStoreTest extends WP_UnitTestCase {
 
 	/**
+	 * Re-register meta before each test, since the WP test framework
+	 * tears down registered meta between tests.
+	 */
+	public function set_up() {
+		parent::set_up();
+		Command_Store::register_meta();
+	}
+
+	/**
 	 * The wpce_command post type should be registered.
 	 */
 	public function test_post_type_is_registered() {
@@ -41,10 +50,11 @@ class CommandStoreTest extends WP_UnitTestCase {
 			'wpce_expires_at',
 		];
 
-		$registered = get_registered_meta_keys( 'post', Command_Store::POST_TYPE );
-
 		foreach ( $expected_keys as $key ) {
-			$this->assertArrayHasKey( $key, $registered, "Meta key '{$key}' should be registered." );
+			$this->assertTrue(
+				registered_meta_key_exists( 'post', $key, Command_Store::POST_TYPE ),
+				"Meta key '{$key}' should be registered."
+			);
 		}
 	}
 
@@ -52,20 +62,18 @@ class CommandStoreTest extends WP_UnitTestCase {
 	 * The wpce_command_status meta should default to 'pending'.
 	 */
 	public function test_command_status_defaults_to_pending() {
-		$registered = get_registered_meta_keys( 'post', Command_Store::POST_TYPE );
+		$post_id = self::factory()->post->create( [ 'post_type' => Command_Store::POST_TYPE ] );
 
-		$this->assertArrayHasKey( 'wpce_command_status', $registered );
-		$this->assertSame( 'pending', $registered['wpce_command_status']['default'] );
+		$this->assertSame( 'pending', get_post_meta( $post_id, 'wpce_command_status', true ) );
 	}
 
 	/**
 	 * The wpce_arguments meta should default to an empty JSON object.
 	 */
 	public function test_arguments_defaults_to_empty_json() {
-		$registered = get_registered_meta_keys( 'post', Command_Store::POST_TYPE );
+		$post_id = self::factory()->post->create( [ 'post_type' => Command_Store::POST_TYPE ] );
 
-		$this->assertArrayHasKey( 'wpce_arguments', $registered );
-		$this->assertSame( '{}', $registered['wpce_arguments']['default'] );
+		$this->assertSame( '{}', get_post_meta( $post_id, 'wpce_arguments', true ) );
 	}
 
 	/**
