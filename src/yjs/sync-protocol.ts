@@ -21,14 +21,14 @@ import { type SyncUpdate, SyncUpdateType } from '../wordpress/types.js';
  * State vectors are encoding-format-agnostic (identical for V1 and V2).
  */
 export function createSyncStep1(doc: Y.Doc): SyncUpdate {
-  const encoder = encoding.createEncoder();
-  syncProtocol.writeSyncStep1(encoder, doc);
-  const data = encoding.toUint8Array(encoder);
+	const encoder = encoding.createEncoder();
+	syncProtocol.writeSyncStep1(encoder, doc);
+	const data = encoding.toUint8Array(encoder);
 
-  return {
-    type: SyncUpdateType.SYNC_STEP_1,
-    data: uint8ArrayToBase64(data),
-  };
+	return {
+		type: SyncUpdateType.SYNC_STEP_1,
+		data: uint8ArrayToBase64(data),
+	};
 }
 
 /**
@@ -42,20 +42,20 @@ export function createSyncStep1(doc: Y.Doc): SyncUpdate {
  * (and thus V1) for step2 processing.
  */
 export function createSyncStep2(doc: Y.Doc, step1Data: Uint8Array): SyncUpdate {
-  const decoder = decoding.createDecoder(step1Data);
-  const encoder = encoding.createEncoder();
+	const decoder = decoding.createDecoder(step1Data);
+	const encoder = encoding.createEncoder();
 
-  // readSyncMessage reads the message type byte and the state vector,
-  // then writes the appropriate response (step2) into the encoder.
-  // Internally uses V1 encoding (Y.encodeStateAsUpdate), matching Gutenberg.
-  syncProtocol.readSyncMessage(decoder, encoder, doc, 'sync');
+	// readSyncMessage reads the message type byte and the state vector,
+	// then writes the appropriate response (step2) into the encoder.
+	// Internally uses V1 encoding (Y.encodeStateAsUpdate), matching Gutenberg.
+	syncProtocol.readSyncMessage(decoder, encoder, doc, 'sync');
 
-  const data = encoding.toUint8Array(encoder);
+	const data = encoding.toUint8Array(encoder);
 
-  return {
-    type: SyncUpdateType.SYNC_STEP_2,
-    data: uint8ArrayToBase64(data),
-  };
+	return {
+		type: SyncUpdateType.SYNC_STEP_2,
+		data: uint8ArrayToBase64(data),
+	};
 }
 
 /**
@@ -68,36 +68,39 @@ export function createSyncStep2(doc: Y.Doc, step1Data: Uint8Array): SyncUpdate {
  * Returns a response SyncUpdate if one is needed (e.g., step2 reply),
  * or null if no response is required.
  */
-export function processIncomingUpdate(doc: Y.Doc, update: SyncUpdate): SyncUpdate | null {
-  const rawData = base64ToUint8Array(update.data);
+export function processIncomingUpdate(
+	doc: Y.Doc,
+	update: SyncUpdate
+): SyncUpdate | null {
+	const rawData = base64ToUint8Array(update.data);
 
-  switch (update.type) {
-    case SyncUpdateType.SYNC_STEP_1: {
-      // Respond with step2
-      return createSyncStep2(doc, rawData);
-    }
+	switch (update.type) {
+		case SyncUpdateType.SYNC_STEP_1: {
+			// Respond with step2
+			return createSyncStep2(doc, rawData);
+		}
 
-    case SyncUpdateType.SYNC_STEP_2: {
-      // Apply step2 via y-protocols (V1 internally).
-      // Gutenberg creates step2 using syncProtocol.readSyncMessage which
-      // encodes with Y.encodeStateAsUpdate (V1), so we must also use
-      // readSyncMessage to decode it (which calls Y.applyUpdate, V1).
-      const decoder = decoding.createDecoder(rawData);
-      const encoder = encoding.createEncoder();
-      syncProtocol.readSyncMessage(decoder, encoder, doc, 'sync');
-      return null;
-    }
+		case SyncUpdateType.SYNC_STEP_2: {
+			// Apply step2 via y-protocols (V1 internally).
+			// Gutenberg creates step2 using syncProtocol.readSyncMessage which
+			// encodes with Y.encodeStateAsUpdate (V1), so we must also use
+			// readSyncMessage to decode it (which calls Y.applyUpdate, V1).
+			const decoder = decoding.createDecoder(rawData);
+			const encoder = encoding.createEncoder();
+			syncProtocol.readSyncMessage(decoder, encoder, doc, 'sync');
+			return null;
+		}
 
-    case SyncUpdateType.UPDATE:
-    case SyncUpdateType.COMPACTION: {
-      // Apply V2 update directly (Gutenberg 22.8+ uses V2 encoding)
-      Y.applyUpdateV2(doc, rawData, 'remote');
-      return null;
-    }
+		case SyncUpdateType.UPDATE:
+		case SyncUpdateType.COMPACTION: {
+			// Apply V2 update directly (Gutenberg 22.8+ uses V2 encoding)
+			Y.applyUpdateV2(doc, rawData, 'remote');
+			return null;
+		}
 
-    default:
-      return null;
-  }
+		default:
+			return null;
+	}
 }
 
 /**
@@ -105,33 +108,33 @@ export function processIncomingUpdate(doc: Y.Doc, update: SyncUpdate): SyncUpdat
  * The raw bytes come from the doc's 'updateV2' event (V2 encoded).
  */
 export function createUpdateFromChange(update: Uint8Array): SyncUpdate {
-  return {
-    type: SyncUpdateType.UPDATE,
-    data: uint8ArrayToBase64(update),
-  };
+	return {
+		type: SyncUpdateType.UPDATE,
+		data: uint8ArrayToBase64(update),
+	};
 }
 
 /**
  * Create a compaction update containing the full document state (V2 encoded).
  */
 export function createCompactionUpdate(doc: Y.Doc): SyncUpdate {
-  const data = Y.encodeStateAsUpdateV2(doc);
-  return {
-    type: SyncUpdateType.COMPACTION,
-    data: uint8ArrayToBase64(data),
-  };
+	const data = Y.encodeStateAsUpdateV2(doc);
+	return {
+		type: SyncUpdateType.COMPACTION,
+		data: uint8ArrayToBase64(data),
+	};
 }
 
 /**
  * Encode a Uint8Array to a base64 string.
  */
 export function uint8ArrayToBase64(data: Uint8Array): string {
-  return Buffer.from(data).toString('base64');
+	return Buffer.from(data).toString('base64');
 }
 
 /**
  * Decode a base64 string to a Uint8Array.
  */
 export function base64ToUint8Array(base64: string): Uint8Array {
-  return new Uint8Array(Buffer.from(base64, 'base64'));
+	return new Uint8Array(Buffer.from(base64, 'base64'));
 }

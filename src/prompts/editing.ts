@@ -2,68 +2,71 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { SessionManager } from '../session/session-manager.js';
 
-export function registerEditingPrompts(server: McpServer, session: SessionManager): void {
-  server.registerPrompt(
-    'edit',
-    {
-      description:
-        'Edit a WordPress post. Optionally specify an editing focus (tone, structure, expand, condense, rewrite, etc.).',
-      argsSchema: {
-        editingFocus: z
-          .string()
-          .optional()
-          .describe(
-            'Type of editing: "tone", "structure", "expand", "condense", "rewrite", or a custom focus',
-          ),
-      },
-    },
-    ({ editingFocus }) => {
-      const state = session.getState();
+export function registerEditingPrompts(
+	server: McpServer,
+	session: SessionManager
+): void {
+	server.registerPrompt(
+		'edit',
+		{
+			description:
+				'Edit a WordPress post. Optionally specify an editing focus (tone, structure, expand, condense, rewrite, etc.).',
+			argsSchema: {
+				editingFocus: z
+					.string()
+					.optional()
+					.describe(
+						'Type of editing: "tone", "structure", "expand", "condense", "rewrite", or a custom focus'
+					),
+			},
+		},
+		({ editingFocus }) => {
+			const state = session.getState();
 
-      if (state === 'disconnected') {
-        return {
-          description: 'Edit a WordPress post',
-          messages: [
-            {
-              role: 'user' as const,
-              content: {
-                type: 'text' as const,
-                text: 'I want to edit a WordPress post. Please connect to WordPress first using wp_connect, then open a post with wp_open_post.',
-              },
-            },
-          ],
-        };
-      }
+			if (state === 'disconnected') {
+				return {
+					description: 'Edit a WordPress post',
+					messages: [
+						{
+							role: 'user' as const,
+							content: {
+								type: 'text' as const,
+								text: 'I want to edit a WordPress post. Please connect to WordPress first using wp_connect, then open a post with wp_open_post.',
+							},
+						},
+					],
+				};
+			}
 
-      if (state === 'connected') {
-        return {
-          description: 'Edit a WordPress post',
-          messages: [
-            {
-              role: 'user' as const,
-              content: {
-                type: 'text' as const,
-                text: "I want to edit a WordPress post. Please open a post with wp_open_post first, then I'll tell you what changes to make.",
-              },
-            },
-          ],
-        };
-      }
+			if (state === 'connected') {
+				return {
+					description: 'Edit a WordPress post',
+					messages: [
+						{
+							role: 'user' as const,
+							content: {
+								type: 'text' as const,
+								text: "I want to edit a WordPress post. Please open a post with wp_open_post first, then I'll tell you what changes to make.",
+							},
+						},
+					],
+				};
+			}
 
-      // state === 'editing'
-      const postContent = session.readPost();
-      const focusInstruction = editingFocus
-        ? `Focus on: ${editingFocus}`
-        : "Ask me what kind of editing I'd like (e.g., tone, structure, expand, condense, rewrite).";
+			// state === 'editing'
+			const postContent = session.readPost();
+			const focusInstruction = editingFocus
+				? `Focus on: ${editingFocus}`
+				: "Ask me what kind of editing I'd like (e.g., tone, structure, expand, condense, rewrite).";
 
-      return {
-        description: `Edit "${session.getTitle()}"`,
-        messages: [
-          {
-            role: 'user' as const,
-            content: {
-              type: 'text' as const,
-              text: `Edit the following WordPress post. ${focusInstruction}
+			return {
+				description: `Edit "${session.getTitle()}"`,
+				messages: [
+					{
+						role: 'user' as const,
+						content: {
+							type: 'text' as const,
+							text: `Edit the following WordPress post. ${focusInstruction}
 
 Here is the current post content:
 
@@ -82,63 +85,63 @@ Available tools:
 - wp_read_post — re-read the post after making changes
 
 Work block by block. Do not try to replace the entire post at once. Preserve the overall structure unless restructuring was requested. After completing edits, use wp_save to save the post.`,
-            },
-          },
-        ],
-      };
-    },
-  );
+						},
+					},
+				],
+			};
+		}
+	);
 
-  server.registerPrompt(
-    'proofread',
-    {
-      description:
-        'Proofread a WordPress post for grammar, spelling, punctuation, and style issues.',
-    },
-    () => {
-      const state = session.getState();
+	server.registerPrompt(
+		'proofread',
+		{
+			description:
+				'Proofread a WordPress post for grammar, spelling, punctuation, and style issues.',
+		},
+		() => {
+			const state = session.getState();
 
-      if (state === 'disconnected') {
-        return {
-          description: 'Proofread a WordPress post',
-          messages: [
-            {
-              role: 'user' as const,
-              content: {
-                type: 'text' as const,
-                text: 'I want to proofread a WordPress post. Please connect to WordPress first using wp_connect, then open a post with wp_open_post.',
-              },
-            },
-          ],
-        };
-      }
+			if (state === 'disconnected') {
+				return {
+					description: 'Proofread a WordPress post',
+					messages: [
+						{
+							role: 'user' as const,
+							content: {
+								type: 'text' as const,
+								text: 'I want to proofread a WordPress post. Please connect to WordPress first using wp_connect, then open a post with wp_open_post.',
+							},
+						},
+					],
+				};
+			}
 
-      if (state === 'connected') {
-        return {
-          description: 'Proofread a WordPress post',
-          messages: [
-            {
-              role: 'user' as const,
-              content: {
-                type: 'text' as const,
-                text: 'I want to proofread a WordPress post. Please open a post with wp_open_post first.',
-              },
-            },
-          ],
-        };
-      }
+			if (state === 'connected') {
+				return {
+					description: 'Proofread a WordPress post',
+					messages: [
+						{
+							role: 'user' as const,
+							content: {
+								type: 'text' as const,
+								text: 'I want to proofread a WordPress post. Please open a post with wp_open_post first.',
+							},
+						},
+					],
+				};
+			}
 
-      // state === 'editing'
-      const postContent = session.readPost();
+			// state === 'editing'
+			const postContent = session.readPost();
 
-      return {
-        description: `Proofread "${session.getTitle()}"`,
-        messages: [
-          {
-            role: 'user' as const,
-            content: {
-              type: 'text' as const,
-              text: `Proofread the following WordPress post. Fix any grammar, spelling, punctuation, and style issues directly.
+			return {
+				description: `Proofread "${session.getTitle()}"`,
+				messages: [
+					{
+						role: 'user' as const,
+						content: {
+							type: 'text' as const,
+							text: `Proofread the following WordPress post. Fix any grammar, spelling, punctuation, and style issues directly.
 
 Here is the current post content:
 
@@ -156,10 +159,10 @@ Instructions:
 - Do NOT change the title unless it has a clear error.
 - Work through every block systematically — do not skip any.
 - After completing all fixes, use wp_save to save the post.`,
-            },
-          },
-        ],
-      };
-    },
-  );
+						},
+					},
+				],
+			};
+		}
+	);
 }

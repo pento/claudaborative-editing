@@ -15,38 +15,47 @@ import type { Block } from '../yjs/types.js';
  * - For common blocks, extract text content from innerHTML into attributes
  */
 export function parseBlocks(html: string): ParsedBlock[] {
-  const raw = wpParse(html) as RawParsedBlock[];
-  return raw
-    .filter((block) => block.blockName !== null || block.innerHTML.trim() !== '')
-    .map(normaliseParsedBlock);
+	const raw = wpParse(html) as RawParsedBlock[];
+	return raw
+		.filter(
+			(block) => block.blockName !== null || block.innerHTML.trim() !== ''
+		)
+		.map(normaliseParsedBlock);
 }
 
 /**
  * Convert a ParsedBlock to a Block (adding clientId, mapping innerBlocks).
  */
 export function parsedBlockToBlock(parsed: ParsedBlock): Block {
-  return {
-    name: parsed.name,
-    clientId: crypto.randomUUID(),
-    attributes: { ...parsed.attributes },
-    innerBlocks: parsed.innerBlocks.map(parsedBlockToBlock),
-    originalContent: parsed.originalContent,
-  };
+	return {
+		name: parsed.name,
+		clientId: crypto.randomUUID(),
+		attributes: { ...parsed.attributes },
+		innerBlocks: parsed.innerBlocks.map(parsedBlockToBlock),
+		originalContent: parsed.originalContent,
+	};
 }
 
 function normaliseParsedBlock(raw: RawParsedBlock): ParsedBlock {
-  const blockName = raw.blockName ?? 'core/freeform';
-  const commentAttrs = raw.attrs ?? {};
-  const extractedAttrs = extractAttributesFromHTML(blockName, raw.innerHTML, commentAttrs);
+	const blockName = raw.blockName ?? 'core/freeform';
+	const commentAttrs = raw.attrs ?? {};
+	const extractedAttrs = extractAttributesFromHTML(
+		blockName,
+		raw.innerHTML,
+		commentAttrs
+	);
 
-  return {
-    name: blockName,
-    attributes: { ...commentAttrs, ...extractedAttrs },
-    innerBlocks: raw.innerBlocks
-      .filter((block) => block.blockName !== null || block.innerHTML.trim() !== '')
-      .map(normaliseParsedBlock),
-    originalContent: raw.innerHTML,
-  };
+	return {
+		name: blockName,
+		attributes: { ...commentAttrs, ...extractedAttrs },
+		innerBlocks: raw.innerBlocks
+			.filter(
+				(block) =>
+					block.blockName !== null || block.innerHTML.trim() !== ''
+			)
+			.map(normaliseParsedBlock),
+		originalContent: raw.innerHTML,
+	};
 }
 
 /**
@@ -58,65 +67,65 @@ function normaliseParsedBlock(raw: RawParsedBlock): ParsedBlock {
  * For core/button: extract text from <a> tag -> attributes.text
  */
 function extractAttributesFromHTML(
-  blockName: string,
-  innerHTML: string,
-  attrs: Record<string, unknown>,
+	blockName: string,
+	innerHTML: string,
+	attrs: Record<string, unknown>
 ): Record<string, unknown> {
-  const extracted: Record<string, unknown> = {};
+	const extracted: Record<string, unknown> = {};
 
-  switch (blockName) {
-    case 'core/paragraph': {
-      const match = innerHTML.match(/<p[^>]*>([\s\S]*?)<\/p>/);
-      if (match) {
-        extracted.content = match[1].trim();
-      }
-      break;
-    }
-    case 'core/heading': {
-      const match = innerHTML.match(/<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/);
-      if (match) {
-        extracted.content = match[1].trim();
-      }
-      // Preserve the level from comment attrs if present
-      if (attrs.level !== undefined) {
-        extracted.level = attrs.level;
-      }
-      break;
-    }
-    case 'core/list-item': {
-      const match = innerHTML.match(/<li[^>]*>([\s\S]*?)<\/li>/);
-      if (match) {
-        extracted.content = match[1].trim();
-      }
-      break;
-    }
-    case 'core/image': {
-      const imgMatch = innerHTML.match(/<img[^>]*>/);
-      if (imgMatch) {
-        const srcMatch = imgMatch[0].match(/src="([^"]*)"/);
-        if (srcMatch) {
-          extracted.url = srcMatch[1];
-        }
-        const altMatch = imgMatch[0].match(/alt="([^"]*)"/);
-        if (altMatch) {
-          extracted.alt = altMatch[1];
-        }
-      }
-      break;
-    }
-    case 'core/button': {
-      const match = innerHTML.match(/<a[^>]*>([\s\S]*?)<\/a>/);
-      if (match) {
-        extracted.text = match[1].trim();
-      }
-      // Also extract the href as url
-      const hrefMatch = innerHTML.match(/<a[^>]*href="([^"]*)"[^>]*>/);
-      if (hrefMatch) {
-        extracted.url = hrefMatch[1];
-      }
-      break;
-    }
-  }
+	switch (blockName) {
+		case 'core/paragraph': {
+			const match = innerHTML.match(/<p[^>]*>([\s\S]*?)<\/p>/);
+			if (match) {
+				extracted.content = match[1].trim();
+			}
+			break;
+		}
+		case 'core/heading': {
+			const match = innerHTML.match(/<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/);
+			if (match) {
+				extracted.content = match[1].trim();
+			}
+			// Preserve the level from comment attrs if present
+			if (attrs.level !== undefined) {
+				extracted.level = attrs.level;
+			}
+			break;
+		}
+		case 'core/list-item': {
+			const match = innerHTML.match(/<li[^>]*>([\s\S]*?)<\/li>/);
+			if (match) {
+				extracted.content = match[1].trim();
+			}
+			break;
+		}
+		case 'core/image': {
+			const imgMatch = innerHTML.match(/<img[^>]*>/);
+			if (imgMatch) {
+				const srcMatch = imgMatch[0].match(/src="([^"]*)"/);
+				if (srcMatch) {
+					extracted.url = srcMatch[1];
+				}
+				const altMatch = imgMatch[0].match(/alt="([^"]*)"/);
+				if (altMatch) {
+					extracted.alt = altMatch[1];
+				}
+			}
+			break;
+		}
+		case 'core/button': {
+			const match = innerHTML.match(/<a[^>]*>([\s\S]*?)<\/a>/);
+			if (match) {
+				extracted.text = match[1].trim();
+			}
+			// Also extract the href as url
+			const hrefMatch = innerHTML.match(/<a[^>]*href="([^"]*)"[^>]*>/);
+			if (hrefMatch) {
+				extracted.url = hrefMatch[1];
+			}
+			break;
+		}
+	}
 
-  return extracted;
+	return extracted;
 }

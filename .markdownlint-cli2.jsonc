@@ -1,23 +1,23 @@
 {
-  "globs": ["**/*.md"],
-  // Disable rules that conflict with Prettier
-  "config": {
-    "extends": "markdownlint/style/prettier",
-    // Line length handled by Prettier
-    "MD013": false,
-    // Allow duplicate headings in different sections (e.g., "Architecture", "Tools" under different features)
-    "MD024": {
-      "siblings_only": true
-    }
-  },
-  "ignores": [
-    "node_modules/",
-    "dist/",
-    "coverage/",
-    ".gutenberg/",
-    "test-results/",
-    "wordpress-plugin/node_modules/",
-    "wordpress-plugin/vendor/",
-    "wordpress-plugin/build/"
-  ]
+	"globs": ["**/*.md"],
+	// Disable rules that conflict with Prettier
+	"config": {
+		"extends": "markdownlint/style/prettier",
+		// Line length handled by Prettier
+		"MD013": false,
+		// Allow duplicate headings in different sections (e.g., "Architecture", "Tools" under different features)
+		"MD024": {
+			"siblings_only": true
+		}
+	},
+	"ignores": [
+		"node_modules/",
+		"dist/",
+		"coverage/",
+		".gutenberg/",
+		"test-results/",
+		"wordpress-plugin/node_modules/",
+		"wordpress-plugin/vendor/",
+		"wordpress-plugin/build/"
+	]
 }

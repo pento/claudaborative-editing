@@ -28,24 +28,24 @@ export const APP_NAME = 'Claudaborative Editing';
 export const APP_ID = 'b7e3f1a2-8d4c-4e6f-9a1b-2c3d4e5f6a7b';
 
 export interface AuthFlowOptions {
-  /** Override browser opener for testing. */
-  openBrowser?: (url: string) => Promise<void>;
+	/** Override browser opener for testing. */
+	openBrowser?: (url: string) => Promise<void>;
 }
 
 export interface AuthResult {
-  /** Credentials received via callback, or null on abort/rejection. */
-  credentials: WpCredentials | null;
-  /** Whether the user explicitly rejected the authorisation. */
-  rejected: boolean;
+	/** Credentials received via callback, or null on abort/rejection. */
+	credentials: WpCredentials | null;
+	/** Whether the user explicitly rejected the authorisation. */
+	rejected: boolean;
 }
 
 export interface AuthFlowHandle {
-  /** The authorisation URL (with callback params) for display to the user. */
-  authUrl: string;
-  /** Resolves when credentials are received, user rejects, or flow is aborted. */
-  result: Promise<AuthResult>;
-  /** Abort the flow — resolves the result promise with credentials: null. */
-  abort: () => void;
+	/** The authorisation URL (with callback params) for display to the user. */
+	authUrl: string;
+	/** Resolves when credentials are received, user rejects, or flow is aborted. */
+	result: Promise<AuthResult>;
+	/** Abort the flow — resolves the result promise with credentials: null. */
+	abort: () => void;
 }
 
 const SUCCESS_HTML = `<!DOCTYPE html>
@@ -72,11 +72,11 @@ h1{color:#dc2626;}</style></head><body>
  * credentials directly on the page for the user to copy.
  */
 export function buildManualAuthUrl(siteUrl: string): string {
-  const params = new URLSearchParams({
-    app_name: APP_NAME,
-    app_id: APP_ID,
-  });
-  return `${siteUrl}/wp-admin/authorize-application.php?${params.toString()}`;
+	const params = new URLSearchParams({
+		app_name: APP_NAME,
+		app_id: APP_ID,
+	});
+	return `${siteUrl}/wp-admin/authorize-application.php?${params.toString()}`;
 }
 
 /**
@@ -88,106 +88,113 @@ export function buildManualAuthUrl(siteUrl: string): string {
  * down the server if the user opts out.
  */
 export async function startAuthFlow(
-  siteUrl: string,
-  options?: AuthFlowOptions,
+	siteUrl: string,
+	options?: AuthFlowOptions
 ): Promise<AuthFlowHandle> {
-  const openFn = options?.openBrowser ?? openBrowserDefault;
+	const openFn = options?.openBrowser ?? openBrowserDefault;
 
-  // Per-flow state token to verify callbacks originated from our auth URL.
-  const state = randomBytes(16).toString('hex');
+	// Per-flow state token to verify callbacks originated from our auth URL.
+	const state = randomBytes(16).toString('hex');
 
-  return new Promise<AuthFlowHandle>((resolveHandle, rejectHandle) => {
-    let settled = false;
-    let resolveResult!: (value: AuthResult) => void;
+	return new Promise<AuthFlowHandle>((resolveHandle, rejectHandle) => {
+		let settled = false;
+		let resolveResult!: (value: AuthResult) => void;
 
-    const resultPromise = new Promise<AuthResult>((resolve) => {
-      resolveResult = resolve;
-    });
+		const resultPromise = new Promise<AuthResult>((resolve) => {
+			resolveResult = resolve;
+		});
 
-    function settle(result: AuthResult): void {
-      if (settled) return;
-      settled = true;
-      server.close();
-      server.closeAllConnections();
-      resolveResult(result);
-    }
+		function settle(result: AuthResult): void {
+			if (settled) return;
+			settled = true;
+			server.close();
+			server.closeAllConnections();
+			resolveResult(result);
+		}
 
-    const server: Server = createServer((req, res) => {
-      const url = new URL(req.url ?? '/', `http://${req.headers.host}`);
+		const server: Server = createServer((req, res) => {
+			const url = new URL(req.url ?? '/', `http://${req.headers.host}`);
 
-      if (url.pathname !== '/callback') {
-        res.writeHead(404, { 'Content-Type': 'text/plain' });
-        res.end('Not Found');
-        return;
-      }
+			if (url.pathname !== '/callback') {
+				res.writeHead(404, { 'Content-Type': 'text/plain' });
+				res.end('Not Found');
+				return;
+			}
 
-      // Verify the state token to prevent spoofed callbacks from local processes.
-      if (url.searchParams.get('state') !== state) {
-        res.writeHead(403, { 'Content-Type': 'text/plain' });
-        res.end('Invalid state');
-        return;
-      }
+			// Verify the state token to prevent spoofed callbacks from local processes.
+			if (url.searchParams.get('state') !== state) {
+				res.writeHead(403, { 'Content-Type': 'text/plain' });
+				res.end('Invalid state');
+				return;
+			}
 
-      if (url.searchParams.has('rejected')) {
-        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-        res.end(REJECTED_HTML);
-        settle({ credentials: null, rejected: true });
-        return;
-      }
+			if (url.searchParams.has('rejected')) {
+				res.writeHead(200, {
+					'Content-Type': 'text/html; charset=utf-8',
+				});
+				res.end(REJECTED_HTML);
+				settle({ credentials: null, rejected: true });
+				return;
+			}
 
-      const userLogin = url.searchParams.get('user_login');
-      const password = url.searchParams.get('password');
+			const userLogin = url.searchParams.get('user_login');
+			const password = url.searchParams.get('password');
 
-      if (!userLogin || !password) {
-        res.writeHead(400, { 'Content-Type': 'text/plain' });
-        res.end('Missing credentials');
-        return;
-      }
+			if (!userLogin || !password) {
+				res.writeHead(400, { 'Content-Type': 'text/plain' });
+				res.end('Missing credentials');
+				return;
+			}
 
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      res.end(SUCCESS_HTML);
-      settle({
-        credentials: { siteUrl, username: userLogin, appPassword: password },
-        rejected: false,
-      });
-    });
+			res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+			res.end(SUCCESS_HTML);
+			settle({
+				credentials: {
+					siteUrl,
+					username: userLogin,
+					appPassword: password,
+				},
+				rejected: false,
+			});
+		});
 
-    server.on('error', (err) => {
-      // Server failed to start (e.g., permission denied), or post-listen error.
-      // Reject the handle promise (no-op if already resolved) and settle the
-      // result promise so callers awaiting handle.result aren't left hanging.
-      rejectHandle(err);
-      settle({ credentials: null, rejected: false });
-    });
+		server.on('error', (err) => {
+			// Server failed to start (e.g., permission denied), or post-listen error.
+			// Reject the handle promise (no-op if already resolved) and settle the
+			// result promise so callers awaiting handle.result aren't left hanging.
+			rejectHandle(err);
+			settle({ credentials: null, rejected: false });
+		});
 
-    server.listen(0, '127.0.0.1', () => {
-      const addr = server.address();
-      const port = typeof addr === 'object' && addr !== null ? addr.port : 0;
+		server.listen(0, '127.0.0.1', () => {
+			const addr = server.address();
+			const port =
+				typeof addr === 'object' && addr !== null ? addr.port : 0;
 
-      const callbackBase = `http://127.0.0.1:${port}/callback?state=${state}`;
+			const callbackBase = `http://127.0.0.1:${port}/callback?state=${state}`;
 
-      const params = new URLSearchParams({
-        app_name: APP_NAME,
-        app_id: APP_ID,
-        success_url: callbackBase,
-        reject_url: `${callbackBase}&rejected=true`,
-      });
+			const params = new URLSearchParams({
+				app_name: APP_NAME,
+				app_id: APP_ID,
+				success_url: callbackBase,
+				reject_url: `${callbackBase}&rejected=true`,
+			});
 
-      const authUrl = `${siteUrl}/wp-admin/authorize-application.php?${params.toString()}`;
+			const authUrl = `${siteUrl}/wp-admin/authorize-application.php?${params.toString()}`;
 
-      openFn(authUrl).catch(() => {
-        // Browser open failure is non-fatal — the user can visit the URL manually.
-      });
+			openFn(authUrl).catch(() => {
+				// Browser open failure is non-fatal — the user can visit the URL manually.
+			});
 
-      resolveHandle({
-        authUrl,
-        result: resultPromise,
-        abort: () => {
-          settle({ credentials: null, rejected: false });
-        },
-      });
-    });
-  });
+			resolveHandle({
+				authUrl,
+				result: resultPromise,
+				abort: () => {
+					settle({ credentials: null, rejected: false });
+				},
+			});
+		});
+	});
 }
 
 /**
@@ -197,28 +204,28 @@ export async function startAuthFlow(
  * to open — the user can always visit the URL manually.
  */
 export function openBrowserDefault(url: string): Promise<void> {
-  return new Promise((resolve) => {
-    const platform = process.platform;
-    let command: string;
-    let args: string[];
+	return new Promise((resolve) => {
+		const platform = process.platform;
+		let command: string;
+		let args: string[];
 
-    if (platform === 'darwin') {
-      command = 'open';
-      args = [url];
-    } else if (platform === 'win32') {
-      command = 'explorer';
-      args = [url];
-    } else {
-      command = 'xdg-open';
-      args = [url];
-    }
+		if (platform === 'darwin') {
+			command = 'open';
+			args = [url];
+		} else if (platform === 'win32') {
+			command = 'explorer';
+			args = [url];
+		} else {
+			command = 'xdg-open';
+			args = [url];
+		}
 
-    execFile(command, args, (error) => {
-      // Intentionally swallowed — the user can manually visit the URL.
-      if (error) {
-        // Silence: browser open failure is non-fatal.
-      }
-      resolve();
-    });
-  });
+		execFile(command, args, (error) => {
+			// Intentionally swallowed — the user can manually visit the URL.
+			if (error) {
+				// Silence: browser open failure is non-fatal.
+			}
+			resolve();
+		});
+	});
 }
