@@ -18,11 +18,6 @@ class REST_Controller extends WP_REST_Controller {
 	const API_NAMESPACE = 'wpce/v1';
 
 	/**
-	 * Plugin version reported by the status endpoint.
-	 */
-	const PLUGIN_VERSION = '0.1.0';
-
-	/**
 	 * Protocol version for MCP ↔ plugin compatibility checks.
 	 */
 	const PROTOCOL_VERSION = 1;
@@ -525,7 +520,7 @@ class REST_Controller extends WP_REST_Controller {
 
 		return rest_ensure_response(
 			[
-				'version'          => self::PLUGIN_VERSION,
+				'version'          => self::get_plugin_version(),
 				'protocol_version' => self::PROTOCOL_VERSION,
 				'mcp_connected'    => $connected,
 				'mcp_last_seen_at' => $last_seen_at ? $last_seen_at : null,
@@ -545,23 +540,30 @@ class REST_Controller extends WP_REST_Controller {
 				'post_status'    => 'any',
 				'author'         => $user_id,
 				'posts_per_page' => 100,
+				'no_found_rows'  => true,
+				'fields'         => 'ids',
 				'meta_query'     => [
+					'relation' => 'AND',
 					[
 						'key'     => 'wpce_command_status',
 						'value'   => [ 'pending', 'claimed' ],
 						'compare' => 'IN',
 					],
+					[
+						'key'     => 'wpce_expires_at',
+						'value'   => gmdate( 'Y-m-d\TH:i:s\Z' ),
+						'compare' => '<=',
+						'type'    => 'CHAR',
+					],
 				],
 			]
 		);
 
-		foreach ( $query->posts as $post ) {
-			if ( $this->is_expired( $post->ID ) ) {
-				update_post_meta( $post->ID, 'wpce_command_status', 'expired' );
-				// Touch the post so post_modified_gmt updates, making the
-				// transition discoverable via the `since` filter.
-				wp_update_post( [ 'ID' => $post->ID ] );
-			}
+		foreach ( $query->posts as $post_id ) {
+			update_post_meta( $post_id, 'wpce_command_status', 'expired' );
+			// Touch the post so post_modified_gmt updates, making the
+			// transition discoverable via the `since` filter.
+			wp_update_post( [ 'ID' => $post_id ] );
 		}
 	}
 
@@ -617,5 +619,20 @@ class REST_Controller extends WP_REST_Controller {
 	 */
 	private function get_mcp_last_seen( $user_id ) {
 		return get_transient( 'wpce_mcp_last_seen_' . $user_id );
+	}
+
+	/**
+	 * Get the plugin version from the main plugin file header.
+	 *
+	 * @return string Plugin version string.
+	 */
+	private static function get_plugin_version() {
+		if ( ! function_exists( 'get_plugin_data' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		}
+
+		$plugin_data = get_plugin_data( dirname( __DIR__ ) . '/claudaborative-editing.php', false, false );
+
+		return $plugin_data['Version'];
 	}
 }

@@ -126,6 +126,7 @@ class SSE_Handler {
 			'orderby'        => 'ID',
 			'order'          => 'ASC',
 			'cache_results'  => false,
+			'no_found_rows'  => true,
 			'meta_query'     => [
 				'relation' => 'AND',
 				[
@@ -179,6 +180,8 @@ class SSE_Handler {
 				'post_status'    => 'any',
 				'author'         => $user_id,
 				'posts_per_page' => 100,
+				'no_found_rows'  => true,
+				'fields'         => 'ids',
 				'cache_results'  => false,
 				'meta_query'     => [
 					'relation' => 'AND',
@@ -197,8 +200,11 @@ class SSE_Handler {
 			]
 		);
 
-		foreach ( $query->posts as $post ) {
-			update_post_meta( $post->ID, 'wpce_command_status', 'expired' );
+		foreach ( $query->posts as $post_id ) {
+			update_post_meta( $post_id, 'wpce_command_status', 'expired' );
+			// Touch the post so post_modified_gmt updates, making the
+			// transition discoverable via the `since` filter.
+			wp_update_post( [ 'ID' => $post_id ] );
 		}
 	}
 
