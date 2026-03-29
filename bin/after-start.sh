@@ -9,4 +9,5 @@ npm install
 npm run build
 
 cd - > /dev/null
+npx wp-env run cli wp plugin activate gutenberg claudaborative-editing
 npx wp-env run cli wp option update wp_collaboration_enabled 1
