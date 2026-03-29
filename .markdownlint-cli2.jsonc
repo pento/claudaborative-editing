@@ -16,6 +16,8 @@
     "coverage/",
     ".gutenberg/",
     "test-results/",
-    "wordpress-plugin/"
+    "wordpress-plugin/node_modules/",
+    "wordpress-plugin/vendor/",
+    "wordpress-plugin/build/"
   ]
 }

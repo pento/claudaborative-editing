@@ -278,7 +278,7 @@ The MCP server reconnects to WordPress automatically on restart using stored cre
 
 ## WordPress Plugin
 
-The `wordpress-plugin/` directory contains a companion WordPress plugin that adds AI action controls to the Gutenberg editor. It is a separate project with its own build tooling.
+The `wordpress-plugin/` directory contains a companion WordPress plugin that adds AI action controls to the Gutenberg editor. It has its own `@wordpress/scripts` build chain but shares linting configuration with the root project.
 
 ### Plugin Build & Test
 
@@ -286,11 +286,11 @@ The `wordpress-plugin/` directory contains a companion WordPress plugin that add
 cd wordpress-plugin
 npm install
 npm run build          # Build with @wordpress/scripts → build/
-npm run lint           # ESLint + PHPCS
-npm run lint:fix       # Auto-fix
 composer install
 composer phpcs         # PHP CodeSniffer (WordPress-Extra)
 ```
+
+JS linting is handled by the root ESLint config (`eslint.config.mjs`) via `@wordpress/eslint-plugin` + FlatCompat. Run `npm run lint` from the repo root to lint everything (MCP TypeScript + plugin JS + Prettier + markdownlint).
 
 PHPUnit tests require wp-env (run from the repo root):
 
