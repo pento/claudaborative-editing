@@ -303,9 +303,33 @@ npx wp-env run cli --env-cwd=wp-content/plugins/claudaborative-editing vendor/bi
 
 - `claudaborative-editing.php` — Plugin header, bootstrap, hook registration
 - `includes/class-command-store.php` — `wpce_command` CPT registration and meta fields
+- `includes/class-command-formatter.php` — Converts `wpce_command` posts to REST API response shape
+- `includes/class-rest-controller.php` — `WP_REST_Controller` subclass for `wpce/v1` endpoints
+- `includes/class-sse-handler.php` — SSE streaming logic for real-time command delivery
 - `src/ai-actions/` — Gutenberg editor plugin source (compiled by `@wordpress/scripts`)
 - `tests/` — PHPUnit tests (WordPress test framework)
 
 ### Custom Post Type: `wpce_command`
 
 Non-public CPT for queuing commands from the WordPress editor to the MCP server. Post meta fields: `wpce_prompt`, `wpce_arguments` (JSON), `wpce_command_status`, `wpce_claimed_by`, `wpce_message`, `wpce_expires_at`. Scoped by `post_author` (requesting user) and `post_parent` (target post).
+
+### Command REST API (namespace: `wpce/v1`)
+
+REST endpoints for the command queue between the browser and the MCP server. All endpoints require `edit_posts` capability and are user-scoped (commands filtered by `post_author`).
+
+| Method   | Endpoint                   | Purpose                                                   |
+| -------- | -------------------------- | --------------------------------------------------------- |
+| `POST`   | `/wpce/v1/commands`        | Browser queues a command (requires `edit_post` on target) |
+| `GET`    | `/wpce/v1/commands`        | List commands (filter by `post_id`, `status`, `since`)    |
+| `GET`    | `/wpce/v1/commands/stream` | SSE stream of pending commands for the MCP server         |
+| `PATCH`  | `/wpce/v1/commands/{id}`   | MCP updates command status                                |
+| `DELETE` | `/wpce/v1/commands/{id}`   | Browser cancels a command (author only)                   |
+| `GET`    | `/wpce/v1/status`          | Plugin version, protocol version, MCP connection state    |
+
+**Command status lifecycle**: `pending` → `claimed` → `running` → `completed` | `failed`. Also: `pending` → `cancelled` (user cancels), `pending` | `claimed` → `expired` (timeout). Claim uses optimistic locking (409 on conflict). Expired commands are transitioned lazily on query.
+
+**SSE stream**: Polls the database every 2s for pending commands, sends `event: command` with JSON data, heartbeat every 30s. Supports `Last-Event-ID` for reconnection. Exits after ~5 minutes (client reconnects via EventSource retry).
+
+**MCP connection tracking**: User-scoped transient (`wpce_mcp_last_seen_{user_id}`), updated on command claim and SSE stream activity. Status endpoint reports `mcp_connected` (true if last seen < 30s ago).
+
+**Prompt validation**: Commands accept only: `proofread`, `review`, `respond-to-notes`, `edit`, `translate`.
