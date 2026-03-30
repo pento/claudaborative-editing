@@ -1,1 +1,1 @@
-module.exports = jest.fn();
+export default jest.fn();

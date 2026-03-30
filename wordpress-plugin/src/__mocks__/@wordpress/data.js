@@ -4,4 +4,4 @@ const createReduxStore = jest.fn((name, config) => ({
 }));
 const register = jest.fn();
 
-module.exports = { createReduxStore, register };
+export default { createReduxStore, register };
