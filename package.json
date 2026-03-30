@@ -46,6 +46,7 @@
 		"test:e2e:install": "playwright install chromium",
 		"pretest:php": "npx wp-env --config .wp-env.test.json start",
 		"test:php": "npx wp-env --config .wp-env.test.json run cli --env-cwd=wp-content/plugins/claudaborative-editing vendor/bin/phpunit",
+		"test:php:coverage": "npx wp-env --config .wp-env.test.json run cli --xdebug=coverage --env-cwd=wp-content/plugins/claudaborative-editing vendor/bin/phpunit --coverage-clover coverage/clover.xml",
 		"test:watch": "vitest",
 		"typecheck": "tsc --noEmit"
 	},

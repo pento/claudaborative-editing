@@ -112,11 +112,7 @@ jobs:
               working-directory: wordpress-plugin
 
             - name: Run PHPUnit with coverage
-              run: >-
-                  npx wp-env --config .wp-env.test.json run cli
-                  --xdebug=coverage
-                  --env-cwd=wp-content/plugins/claudaborative-editing
-                  vendor/bin/phpunit --coverage-clover coverage/clover.xml
+              run: npm run test:php:coverage
 
             - name: Convert Clover XML to LCOV
               uses: andstor/clover2lcov-action@v1
