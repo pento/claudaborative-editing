@@ -156,11 +156,17 @@ jobs:
               run: npm run test:coverage
               working-directory: wordpress-plugin
 
+            - name: Rewrite source paths in LCOV
+              run: >-
+                  sed -i
+                  's|SF:src/|SF:wordpress-plugin/src/|g'
+                  wordpress-plugin/coverage/js/lcov.info
+
             - name: Check JS coverage
               uses: pento/lcov-coverage-check@v3
               with:
                   lcov-file: wordpress-plugin/coverage/js/lcov.info
                   path: |
-                      src/
+                      wordpress-plugin/src/
                   coverage-label: plugin-js
                   github-token: ${{ secrets.GITHUB_TOKEN }}

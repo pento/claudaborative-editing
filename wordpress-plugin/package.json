@@ -4,6 +4,7 @@
 	"description": "WordPress plugin that adds AI action controls to the Gutenberg editor.",
 	"private": true,
 	"devDependencies": {
+		"@wordpress/env": "^11.2.0",
 		"@wordpress/scripts": "^31.6.0"
 	},
 	"scripts": {
