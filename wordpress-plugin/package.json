@@ -8,8 +8,8 @@
 		"@wordpress/scripts": "^31.6.0"
 	},
 	"scripts": {
-		"build": "wp-scripts build --webpack-src-dir=src",
-		"start": "wp-scripts start --webpack-src-dir=src",
+		"build": "wp-scripts build ai-actions/index=src/ai-actions/index.js",
+		"start": "wp-scripts start ai-actions/index=src/ai-actions/index.js",
 		"pretest:php": "npx wp-env --config .wp-env.test.json start",
 		"test:php": "npx wp-env --config .wp-env.test.json run cli --env-cwd=wp-content/plugins/claudaborative-editing vendor/bin/phpunit",
 		"pretest:php:coverage": "npx wp-env --config .wp-env.test.json start --xdebug=coverage",

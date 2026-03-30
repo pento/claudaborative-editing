@@ -229,6 +229,19 @@ export async function trashPost(postId: number): Promise<void> {
 	});
 }
 
+export async function listCommands(postId?: number): Promise<
+	Array<{
+		id: number;
+		post_id: number;
+		prompt: string;
+		status: string;
+		arguments: Record<string, unknown>;
+	}>
+> {
+	const query = postId ? `?post_id=${postId}` : '';
+	return apiFetch(`/wpce/v1/commands${query}`);
+}
+
 export async function createAppPassword(label: string): Promise<string> {
 	const result = await apiFetch<{ password: string }>(
 		`/wp/v2/users/me/application-passwords`,

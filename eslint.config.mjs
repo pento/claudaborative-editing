@@ -110,15 +110,13 @@ export default [
 	},
 
 	// WordPress plugin JS: @wordpress/eslint-plugin via FlatCompat
-	// Uses individual sub-configs rather than 'recommended' to avoid loading
-	// eslint-plugin-react (and its prop-types dep) until we have React code.
-	// Add 'plugin:@wordpress/eslint-plugin/react' and
-	// 'plugin:@wordpress/eslint-plugin/jsx-a11y' when React is introduced.
 	...compat
 		.extends(
 			'plugin:@wordpress/eslint-plugin/esnext',
 			'plugin:@wordpress/eslint-plugin/custom',
-			'plugin:@wordpress/eslint-plugin/i18n'
+			'plugin:@wordpress/eslint-plugin/i18n',
+			'plugin:@wordpress/eslint-plugin/react',
+			'plugin:@wordpress/eslint-plugin/jsx-a11y'
 		)
 		.map((config) => ({
 			...config,
