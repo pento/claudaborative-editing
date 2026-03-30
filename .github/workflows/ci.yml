@@ -39,6 +39,7 @@ jobs:
                   lcov-file: coverage/lcov.info
                   path: |
                       src/
+                      wordpress-plugin/src/
                   ignore-patterns: |
                       **/types.ts
                   coverage-label: typescript
