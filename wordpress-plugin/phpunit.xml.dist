@@ -9,4 +9,12 @@
 			<directory suffix="Test.php">./tests</directory>
 		</testsuite>
 	</testsuites>
+	<coverage includeUncoveredFiles="true" processUncoveredFiles="true">
+		<include>
+			<directory suffix=".php">./includes</directory>
+		</include>
+		<report>
+			<clover outputFile="coverage/clover.xml" />
+		</report>
+	</coverage>
 </phpunit>

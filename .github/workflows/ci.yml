@@ -33,16 +33,16 @@ jobs:
             - run: npm run build
             - run: npm test -- --coverage
 
-            - name: Check coverage
+            - name: Check TypeScript coverage
               if: matrix.node-version == 22
-              uses: pento/lcov-coverage-check@v2
+              uses: pento/lcov-coverage-check@v3
               with:
                   lcov-file: coverage/lcov.info
                   path: |
                       src/
-                      wordpress-plugin/src/
                   ignore-patterns: |
                       **/types.ts
+                  coverage-label: typescript
                   github-token: ${{ secrets.GITHUB_TOKEN }}
 
     e2e:
@@ -111,5 +111,26 @@ jobs:
               run: npm run build
               working-directory: wordpress-plugin
 
-            - name: Run PHPUnit
-              run: npm run test:php
+            - name: Run PHPUnit with coverage
+              run: npm run test:php:coverage
+
+            - name: Convert Clover XML to LCOV
+              uses: andstor/clover2lcov-action@v1
+              with:
+                  src: wordpress-plugin/coverage/clover.xml
+                  dst: wordpress-plugin/coverage/lcov.info
+
+            - name: Rewrite container paths in LCOV
+              run: >-
+                  sed -i
+                  's|SF:/var/www/html/wp-content/plugins/claudaborative-editing/|SF:wordpress-plugin/|g'
+                  wordpress-plugin/coverage/lcov.info
+
+            - name: Check PHP coverage
+              uses: pento/lcov-coverage-check@v3
+              with:
+                  lcov-file: wordpress-plugin/coverage/lcov.info
+                  path: |
+                      wordpress-plugin/includes/
+                  coverage-label: php
+                  github-token: ${{ secrets.GITHUB_TOKEN }}
