@@ -123,6 +123,32 @@ export default [
 			files: ['wordpress-plugin/**/*.js'],
 		})),
 
+	// WordPress plugin test files: add Jest and CJS globals
+	{
+		files: [
+			'wordpress-plugin/src/**/test/**/*.js',
+			'wordpress-plugin/src/__mocks__/**/*.js',
+		],
+		languageOptions: {
+			globals: {
+				jest: 'readonly',
+				describe: 'readonly',
+				it: 'readonly',
+				expect: 'readonly',
+				beforeEach: 'readonly',
+				afterEach: 'readonly',
+				beforeAll: 'readonly',
+				afterAll: 'readonly',
+				module: 'readonly',
+				require: 'readonly',
+			},
+		},
+		rules: {
+			'@wordpress/i18n-no-variables': 'off',
+			'@wordpress/i18n-text-domain': 'off',
+		},
+	},
+
 	// Root package.json only (plugin has its own conventions)
 	{
 		...packageJson.configs.recommended,

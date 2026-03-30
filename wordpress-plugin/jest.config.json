@@ -1,6 +1,18 @@
 {
 	"preset": "@wordpress/jest-preset-default",
-	"collectCoverageFrom": ["src/**/*.js", "!src/**/test/**"],
+	"transform": {
+		"\\.[jt]sx?$": "<rootDir>/node_modules/@wordpress/scripts/config/babel-transform.js"
+	},
+	"moduleNameMapper": {
+		"@wordpress/data": "<rootDir>/src/__mocks__/@wordpress/data.js",
+		"@wordpress/api-fetch": "<rootDir>/src/__mocks__/@wordpress/api-fetch.js",
+		"\\.(css|scss)$": "<rootDir>/node_modules/@wordpress/jest-preset-default/scripts/style-mock.js"
+	},
+	"collectCoverageFrom": [
+		"src/**/*.js",
+		"!src/**/test/**",
+		"!src/__mocks__/**"
+	],
 	"coverageDirectory": "coverage/js",
 	"coverageReporters": ["text", "lcov"]
 }
