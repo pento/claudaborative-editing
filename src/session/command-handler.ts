@@ -88,9 +88,11 @@ export class CommandHandler {
 
 		this.commandClient = client;
 
-		// Start listening (SSE with polling fallback) — don't await,
-		// it runs in the background.
-		void client.start();
+		// Start listening (SSE with polling fallback). Await so that
+		// transport initialization completes before we report success —
+		// SSE resolves after headers arrive, polling resolves after the
+		// first timer is scheduled.
+		await client.start();
 
 		return true;
 	}
@@ -144,11 +146,12 @@ export class CommandHandler {
 	 * Handle an incoming command: claim it and send a channel notification.
 	 */
 	private async handleCommand(command: Command): Promise<void> {
-		if (!this.commandClient) return;
+		const client = this.commandClient;
+		if (!client) return;
 
 		// Attempt to claim the command
 		try {
-			await this.commandClient.claimCommand(command.id);
+			await client.claimCommand(command.id);
 		} catch (error) {
 			// Claim failed — another instance may have claimed it, or it
 			// was cancelled/expired. Skip silently.
@@ -162,6 +165,9 @@ export class CommandHandler {
 			console.error(`Failed to claim command ${command.id}:`, error);
 			return;
 		}
+
+		// stop() may have been called during the claim await
+		if (!this.commandClient) return;
 
 		// Build the notification
 		const argsEntries = Object.entries(command.arguments);

@@ -458,21 +458,23 @@ export class SessionManager {
 	 * Disconnect from the WordPress site.
 	 */
 	async disconnect(): Promise<void> {
-		if (this.state === 'editing') {
-			await this.closePost();
-		}
+		try {
+			if (this.state === 'editing') {
+				await this.closePost();
+			}
+		} finally {
+			if (this.commandHandler) {
+				this.commandHandler.stop();
+				this.commandHandler = null;
+			}
 
-		if (this.commandHandler) {
-			this.commandHandler.stop();
-			this.commandHandler = null;
+			this._apiClient = null;
+			this._user = null;
+			this.awarenessState = null;
+			this.collaborators = [];
+			this.notesSupported = false;
+			this.state = 'disconnected';
 		}
-
-		this._apiClient = null;
-		this._user = null;
-		this.awarenessState = null;
-		this.collaborators = [];
-		this.notesSupported = false;
-		this.state = 'disconnected';
 	}
 
 	// --- Posts ---

@@ -956,11 +956,12 @@ describe('CommandClient', () => {
 			);
 		});
 
-		it('only delivers commands with ids greater than lastSeenCommandId', async () => {
-			// Commands arrive out of order in the response
-			const cmd1 = fakeCommand({ id: 3 });
-			const cmd2 = fakeCommand({ id: 1 });
-			const cmd3 = fakeCommand({ id: 5 });
+		it('delivers all unseen commands regardless of response order', async () => {
+			// API returns commands newest-first (DESC by date),
+			// but the client should deliver all unseen ones in ascending ID order
+			const cmd1 = fakeCommand({ id: 5 }); // newest, returned first
+			const cmd2 = fakeCommand({ id: 1 }); // oldest
+			const cmd3 = fakeCommand({ id: 3 }); // middle
 
 			apiClient.request.mockResolvedValueOnce([cmd1, cmd2, cmd3]);
 			apiClient.request.mockResolvedValue([]);
@@ -970,12 +971,32 @@ describe('CommandClient', () => {
 
 			await vi.advanceTimersByTimeAsync(config.pollInterval);
 
-			// cmd1 (id:3) is delivered because 3 > 0
-			// cmd2 (id:1) is skipped because 1 < 3 (lastSeenCommandId is now 3)
-			// cmd3 (id:5) is delivered because 5 > 3
+			// All three are unseen (> lastSeenCommandId 0), delivered in ascending ID order
+			expect(onCommand).toHaveBeenCalledTimes(3);
+			expect(onCommand).toHaveBeenNthCalledWith(1, cmd2); // id:1
+			expect(onCommand).toHaveBeenNthCalledWith(2, cmd3); // id:3
+			expect(onCommand).toHaveBeenNthCalledWith(3, cmd1); // id:5
+		});
+
+		it('skips already-seen commands on subsequent polls', async () => {
+			const cmd1 = fakeCommand({ id: 3 });
+			const cmd2 = fakeCommand({ id: 5 });
+
+			// First poll: deliver both
+			apiClient.request.mockResolvedValueOnce([cmd2, cmd1]);
+			// Second poll: same commands still pending (not yet claimed)
+			apiClient.request.mockResolvedValueOnce([cmd2, cmd1]);
+			apiClient.request.mockResolvedValue([]);
+
+			await client.start();
+			await vi.advanceTimersByTimeAsync(0);
+
+			await vi.advanceTimersByTimeAsync(config.pollInterval);
 			expect(onCommand).toHaveBeenCalledTimes(2);
-			expect(onCommand).toHaveBeenCalledWith(cmd1);
-			expect(onCommand).toHaveBeenCalledWith(cmd3);
+
+			// Second poll — both should be skipped (lastSeenCommandId is now 5)
+			await vi.advanceTimersByTimeAsync(config.pollInterval);
+			expect(onCommand).toHaveBeenCalledTimes(2); // no new calls
 		});
 	});
 

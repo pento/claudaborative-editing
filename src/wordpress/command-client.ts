@@ -68,6 +68,7 @@ export class CommandClient {
 	private pollTimer: ReturnType<typeof setTimeout> | null = null;
 	private sseRetryFromPollingTimer: ReturnType<typeof setTimeout> | null =
 		null;
+	private sseBackoffTimer: ReturnType<typeof setTimeout> | null = null;
 	private _transport: CommandTransport = 'none';
 	private sseRetryCount = 0;
 	private lastSeenCommandId = 0;
@@ -170,6 +171,11 @@ export class CommandClient {
 			clearTimeout(this.sseRetryFromPollingTimer);
 			this.sseRetryFromPollingTimer = null;
 		}
+
+		if (this.sseBackoffTimer !== null) {
+			clearTimeout(this.sseBackoffTimer);
+			this.sseBackoffTimer = null;
+		}
 	}
 
 	// --- SSE transport ---
@@ -263,7 +269,8 @@ export class CommandClient {
 			this.config.sseBackoffMax
 		);
 
-		setTimeout(() => {
+		this.sseBackoffTimer = setTimeout(() => {
+			this.sseBackoffTimer = null;
 			if (this.isStopped()) return;
 			this.connectSSE().catch(() => {
 				this.handleSSEDisconnect();
@@ -400,12 +407,23 @@ export class CommandClient {
 		try {
 			const commands = await this.listPendingCommands();
 
-			for (const command of commands) {
+			// Filter to commands newer than the last seen, then process in
+			// ascending ID order to avoid skipping older pending commands when
+			// the API returns results newest-first (DESC by date).
+			const newCommands = commands
+				.filter((c) => c.id > this.lastSeenCommandId)
+				.sort((a, b) => a.id - b.id);
+
+			let maxDeliveredId = this.lastSeenCommandId;
+			for (const command of newCommands) {
 				if (this.isStopped()) break;
-				if (command.id > this.lastSeenCommandId) {
-					this.lastSeenCommandId = command.id;
-					this.onCommand(command);
+				this.onCommand(command);
+				if (command.id > maxDeliveredId) {
+					maxDeliveredId = command.id;
 				}
+			}
+			if (maxDeliveredId > this.lastSeenCommandId) {
+				this.lastSeenCommandId = maxDeliveredId;
 			}
 		} catch {
 			// Network error — will retry on next poll
