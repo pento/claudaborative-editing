@@ -6,6 +6,11 @@
 	"moduleNameMapper": {
 		"@wordpress/data": "<rootDir>/src/__mocks__/@wordpress/data.js",
 		"@wordpress/api-fetch": "<rootDir>/src/__mocks__/@wordpress/api-fetch.js",
+		"@wordpress/element": "<rootDir>/src/__mocks__/@wordpress/element.js",
+		"@wordpress/i18n": "<rootDir>/src/__mocks__/@wordpress/i18n.js",
+		"@wordpress/components": "<rootDir>/src/__mocks__/@wordpress/components.js",
+		"@wordpress/editor": "<rootDir>/src/__mocks__/@wordpress/editor.js",
+		"@wordpress/plugins": "<rootDir>/src/__mocks__/@wordpress/plugins.js",
 		"\\.(css|scss)$": "<rootDir>/node_modules/@wordpress/jest-preset-default/scripts/style-mock.js"
 	},
 	"collectCoverageFrom": [

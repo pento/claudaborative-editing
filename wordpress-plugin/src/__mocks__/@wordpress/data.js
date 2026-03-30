@@ -1,7 +1,7 @@
-const createReduxStore = jest.fn((name, config) => ({
+export const createReduxStore = jest.fn((name, config) => ({
 	name,
 	...config,
 }));
-const register = jest.fn();
-
-export default { createReduxStore, register };
+export const register = jest.fn();
+export const useSelect = jest.fn();
+export const useDispatch = jest.fn(() => ({}));
