@@ -26,7 +26,7 @@ jobs:
               with:
                   node-version: ${{ matrix.node-version }}
 
-            - run: npm ci --verbose --timing
+            - run: npm ci --no-audit
             - run: npm run typecheck
             - run: npm run lint
             - run: npm run build
@@ -56,7 +56,7 @@ jobs:
               with:
                   node-version: 22
 
-            - run: npm ci
+            - run: npm ci --no-audit
             - run: npx playwright install --with-deps chromium
             - run: npm run test:e2e
 
@@ -101,10 +101,10 @@ jobs:
                       wordpress-plugin/package-lock.json
 
             - name: Install root npm dependencies
-              run: npm ci
+              run: npm ci --no-audit
 
             - name: Install plugin npm dependencies
-              run: npm ci
+              run: npm ci --no-audit
               working-directory: wordpress-plugin
 
             - name: Build plugin
@@ -149,7 +149,7 @@ jobs:
                   cache-dependency-path: wordpress-plugin/package-lock.json
 
             - name: Install plugin npm dependencies
-              run: npm ci
+              run: npm ci --no-audit
               working-directory: wordpress-plugin
 
             - name: Run Jest with coverage
