@@ -35,7 +35,7 @@ jobs:
 
             - name: Check TypeScript coverage
               if: matrix.node-version == 22
-              uses: pento/lcov-coverage-check@feat/coverage-label
+              uses: pento/lcov-coverage-check@v3
               with:
                   lcov-file: coverage/lcov.info
                   path: |
@@ -127,7 +127,7 @@ jobs:
                   wordpress-plugin/coverage/lcov.info
 
             - name: Check PHP coverage
-              uses: pento/lcov-coverage-check@feat/coverage-label
+              uses: pento/lcov-coverage-check@v3
               with:
                   lcov-file: wordpress-plugin/coverage/lcov.info
                   path: |
