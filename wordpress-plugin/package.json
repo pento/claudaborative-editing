@@ -8,6 +8,12 @@
 	},
 	"scripts": {
 		"build": "wp-scripts build --webpack-src-dir=src",
-		"start": "wp-scripts start --webpack-src-dir=src"
+		"start": "wp-scripts start --webpack-src-dir=src",
+		"pretest:php": "npx wp-env --config .wp-env.test.json start",
+		"test:php": "npx wp-env --config .wp-env.test.json run cli --env-cwd=wp-content/plugins/claudaborative-editing vendor/bin/phpunit",
+		"pretest:php:coverage": "npx wp-env --config .wp-env.test.json start --xdebug=coverage",
+		"test:php:coverage": "npx wp-env --config .wp-env.test.json run cli --env-cwd=wp-content/plugins/claudaborative-editing vendor/bin/phpunit",
+		"test": "wp-scripts test-unit-js --passWithNoTests",
+		"test:coverage": "wp-scripts test-unit-js --coverage --passWithNoTests"
 	}
 }

@@ -113,6 +113,7 @@ jobs:
 
             - name: Run PHPUnit with coverage
               run: npm run test:php:coverage
+              working-directory: wordpress-plugin
 
             - name: Convert Clover XML to LCOV
               uses: andstor/clover2lcov-action@v1
@@ -132,5 +133,34 @@ jobs:
                   lcov-file: wordpress-plugin/coverage/lcov.info
                   path: |
                       wordpress-plugin/includes/
-                  coverage-label: php
+                  coverage-label: plugin-php
+                  github-token: ${{ secrets.GITHUB_TOKEN }}
+
+    plugin-test-js:
+        name: Plugin JS Tests
+        runs-on: ubuntu-latest
+
+        steps:
+            - uses: actions/checkout@v6
+
+            - uses: actions/setup-node@v6
+              with:
+                  node-version: 22
+                  cache: npm
+
+            - name: Install plugin npm dependencies
+              run: npm ci
+              working-directory: wordpress-plugin
+
+            - name: Run Jest with coverage
+              run: npm run test:coverage
+              working-directory: wordpress-plugin
+
+            - name: Check JS coverage
+              uses: pento/lcov-coverage-check@v3
+              with:
+                  lcov-file: wordpress-plugin/coverage/js/lcov.info
+                  path: |
+                      src/
+                  coverage-label: plugin-js
                   github-token: ${{ secrets.GITHUB_TOKEN }}
