@@ -26,6 +26,7 @@ jobs:
               with:
                   node-version: ${{ matrix.node-version }}
                   cache: npm
+                  cache-dependency-path: package-lock.json
 
             - run: npm ci
             - run: npm run typecheck
@@ -57,6 +58,7 @@ jobs:
               with:
                   node-version: 22
                   cache: npm
+                  cache-dependency-path: package-lock.json
 
             - run: npm ci
             - run: npx playwright install --with-deps chromium
@@ -99,6 +101,9 @@ jobs:
               with:
                   node-version: 22
                   cache: npm
+                  cache-dependency-path: |
+                      package-lock.json
+                      wordpress-plugin/package-lock.json
 
             - name: Install root npm dependencies
               run: npm ci
@@ -147,6 +152,7 @@ jobs:
               with:
                   node-version: 22
                   cache: npm
+                  cache-dependency-path: wordpress-plugin/package-lock.json
 
             - name: Install plugin npm dependencies
               run: npm ci
