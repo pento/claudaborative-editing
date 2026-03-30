@@ -53,8 +53,11 @@ export class CommandHandler {
 		// Flush any notifications that were buffered before the notifier was set
 		const pending = this.pendingNotifications.splice(0);
 		for (const params of pending) {
-			void notifier(params).catch(() => {
-				// Notification delivery failed — log and continue
+			void notifier(params).catch((error: unknown) => {
+				console.error(
+					'Failed to deliver buffered channel notification:',
+					error
+				);
 			});
 		}
 	}

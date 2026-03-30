@@ -173,6 +173,29 @@ describe('startServer()', () => {
 		);
 	});
 
+	it('channel notifier callback sends notification via MCP server', async () => {
+		const { startServer } = await import('../../src/server.js');
+		await startServer();
+
+		// Extract the callback passed to setChannelNotifier
+		const notifierCallback = mockSetChannelNotifier.mock.calls[0][0] as (
+			params: Record<string, unknown>
+		) => Promise<void>;
+		assertDefined(notifierCallback);
+
+		const testParams = {
+			channel: 'wpce',
+			data: { command_id: 42, prompt: 'proofread' },
+		};
+		await notifierCallback(testParams);
+
+		expect(mockServerNotification).toHaveBeenCalledOnce();
+		expect(mockServerNotification).toHaveBeenCalledWith({
+			method: 'notifications/claude/channel',
+			params: testParams,
+		});
+	});
+
 	it('sets disconnected instructions when auto-connect fails', async () => {
 		process.env.WP_SITE_URL = 'https://example.com';
 		process.env.WP_USERNAME = 'admin';

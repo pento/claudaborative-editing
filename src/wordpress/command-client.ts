@@ -289,6 +289,40 @@ export class CommandClient {
 		let eventData: string[] = [];
 		let eventId: string | undefined;
 
+		/** Parse a single SSE field line and accumulate into the current event. */
+		function parseLine(line: string): void {
+			if (line.startsWith(':')) return; // Comment — ignore
+
+			const colonIndex = line.indexOf(':');
+			let field: string;
+			let fieldValue: string;
+
+			if (colonIndex === -1) {
+				field = line.replace(/\r$/, '');
+				fieldValue = '';
+			} else {
+				field = line.slice(0, colonIndex);
+				// Strip leading space after colon (per SSE spec)
+				fieldValue = line.slice(
+					colonIndex + 1 + (line[colonIndex + 1] === ' ' ? 1 : 0)
+				);
+				fieldValue = fieldValue.replace(/\r$/, '');
+			}
+
+			switch (field) {
+				case 'event':
+					eventType = fieldValue;
+					break;
+				case 'data':
+					eventData.push(fieldValue);
+					break;
+				case 'id':
+					eventId = fieldValue;
+					break;
+				// 'retry' and unknown fields are ignored
+			}
+		}
+
 		try {
 			for (;;) {
 				const { done, value } = await reader.read();
@@ -314,62 +348,18 @@ export class CommandClient {
 						eventType = '';
 						eventData = [];
 						eventId = undefined;
-					} else if (line.startsWith(':')) {
-						// Comment — ignore
 					} else {
-						const colonIndex = line.indexOf(':');
-						let field: string;
-						let fieldValue: string;
-
-						if (colonIndex === -1) {
-							field = line.replace(/\r$/, '');
-							fieldValue = '';
-						} else {
-							field = line.slice(0, colonIndex);
-							// Strip leading space after colon (per SSE spec)
-							fieldValue = line.slice(
-								colonIndex +
-									1 +
-									(line[colonIndex + 1] === ' ' ? 1 : 0)
-							);
-							fieldValue = fieldValue.replace(/\r$/, '');
-						}
-
-						switch (field) {
-							case 'event':
-								eventType = fieldValue;
-								break;
-							case 'data':
-								eventData.push(fieldValue);
-								break;
-							case 'id':
-								eventId = fieldValue;
-								break;
-							// 'retry' and unknown fields are ignored
-						}
+						parseLine(line);
 					}
 				}
 			}
 
-			// Flush any remaining event in the buffer
+			// Flush the TextDecoder (handles multi-byte chars split across chunks)
+			buffer += decoder.decode();
+
+			// Process any remaining buffered line
 			if (buffer.trim()) {
-				// Process remaining buffer as a line
-				const line = buffer.replace(/\r$/, '');
-				if (line && !line.startsWith(':')) {
-					const colonIndex = line.indexOf(':');
-					if (colonIndex !== -1) {
-						const field = line.slice(0, colonIndex);
-						let fieldValue = line.slice(
-							colonIndex +
-								1 +
-								(line[colonIndex + 1] === ' ' ? 1 : 0)
-						);
-						fieldValue = fieldValue.replace(/\r$/, '');
-						if (field === 'data') eventData.push(fieldValue);
-						else if (field === 'event') eventType = fieldValue;
-						else if (field === 'id') eventId = fieldValue;
-					}
-				}
+				parseLine(buffer.replace(/\r$/, ''));
 			}
 
 			if (eventData.length > 0 || eventType) {

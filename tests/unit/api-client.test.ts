@@ -1252,4 +1252,212 @@ describe('WordPressApiClient', () => {
 			).toBeUndefined();
 		});
 	});
+
+	describe('request()', () => {
+		it('delegates to apiFetch and returns parsed JSON', async () => {
+			fetchMock.mockResolvedValue(mockResponse({ ok: true }));
+			const client = createClient();
+			const result = await client.request<{ ok: boolean }>(
+				'/wpce/v1/status'
+			);
+
+			expect(fetchMock).toHaveBeenCalledWith(
+				'https://example.com/wp-json/wpce/v1/status',
+				expect.anything()
+			);
+			const options = fetchMock.mock.calls[0][1] as RequestInit;
+			const headers = options.headers as Record<string, string>;
+			expect(headers.Authorization).toBeDefined();
+			expect(headers.Accept).toBe('application/json');
+			expect(result).toEqual({ ok: true });
+		});
+
+		it('passes method and body through correctly', async () => {
+			fetchMock.mockResolvedValue(mockResponse({ id: 1 }));
+			const client = createClient();
+			const body = JSON.stringify({ prompt: 'proofread' });
+			await client.request('/wpce/v1/commands', {
+				method: 'POST',
+				body,
+			});
+
+			const [, options] = fetchMock.mock.calls[0] as [
+				string,
+				RequestInit,
+			];
+			expect(options.method).toBe('POST');
+			expect(options.body).toBe(body);
+			expect(
+				(options.headers as Record<string, string>)['Content-Type']
+			).toBe('application/json');
+		});
+	});
+
+	describe('requestStream()', () => {
+		it('returns raw Response for streaming', async () => {
+			const rawResponse = mockResponse('data: {}\n\n');
+			fetchMock.mockResolvedValue(rawResponse);
+			const client = createClient();
+			const result = await client.requestStream(
+				'/wpce/v1/commands/stream'
+			);
+
+			expect(result).toBe(rawResponse);
+		});
+
+		it('sets Accept: text/event-stream header', async () => {
+			fetchMock.mockResolvedValue(mockResponse(''));
+			const client = createClient();
+			await client.requestStream('/wpce/v1/commands/stream');
+
+			const [, options] = fetchMock.mock.calls[0] as [
+				string,
+				RequestInit,
+			];
+			expect((options.headers as Record<string, string>).Accept).toBe(
+				'text/event-stream'
+			);
+		});
+
+		it('includes Authorization header', async () => {
+			fetchMock.mockResolvedValue(mockResponse(''));
+			const client = createClient();
+			await client.requestStream('/wpce/v1/commands/stream');
+
+			const expectedAuth = `Basic ${btoa('admin:xxxx yyyy zzzz')}`;
+			const [, options] = fetchMock.mock.calls[0] as [
+				string,
+				RequestInit,
+			];
+			expect(
+				(options.headers as Record<string, string>).Authorization
+			).toBe(expectedAuth);
+		});
+
+		it('throws WordPressApiError on non-OK response', async () => {
+			fetchMock.mockResolvedValue(
+				mockResponse(
+					{ code: 'rest_forbidden', message: 'Forbidden' },
+					{ status: 403, statusText: 'Forbidden' }
+				)
+			);
+			const client = createClient();
+
+			await expect(
+				client.requestStream('/wpce/v1/commands/stream')
+			).rejects.toThrow(WordPressApiError);
+
+			try {
+				await client.requestStream('/wpce/v1/commands/stream');
+			} catch (err) {
+				const apiErr = err as WordPressApiError;
+				expect(apiErr.status).toBe(403);
+				expect(apiErr.message).toContain('Authentication failed');
+			}
+		});
+
+		it('passes signal through for AbortController', async () => {
+			fetchMock.mockResolvedValue(mockResponse(''));
+			const client = createClient();
+			const controller = new AbortController();
+			await client.requestStream('/wpce/v1/commands/stream', {
+				signal: controller.signal,
+			});
+
+			const [, options] = fetchMock.mock.calls[0] as [
+				string,
+				RequestInit,
+			];
+			expect(options.signal).toBe(controller.signal);
+		});
+
+		it('builds correct URL from path', async () => {
+			fetchMock.mockResolvedValue(mockResponse(''));
+			const client = createClient();
+			await client.requestStream('/wpce/v1/commands/stream');
+
+			const url = fetchMock.mock.calls[0][0] as string;
+			expect(url).toBe(
+				'https://example.com/wp-json/wpce/v1/commands/stream'
+			);
+		});
+	});
+
+	describe('PATCH requests', () => {
+		it('includes Content-Type: application/json header', async () => {
+			fetchMock.mockResolvedValue(
+				mockResponse({ id: 1, status: 'claimed' })
+			);
+			const client = createClient();
+			await client.request('/wpce/v1/commands/1', {
+				method: 'PATCH',
+				body: JSON.stringify({ status: 'claimed' }),
+			});
+
+			const [, options] = fetchMock.mock.calls[0] as [
+				string,
+				RequestInit,
+			];
+			expect(options.method).toBe('PATCH');
+			expect(
+				(options.headers as Record<string, string>)['Content-Type']
+			).toBe('application/json');
+		});
+	});
+
+	describe('error body fallback', () => {
+		it('uses fallback when response.text() throws in apiFetch', async () => {
+			const failingResponse = {
+				ok: false,
+				status: 500,
+				statusText: 'Internal Server Error',
+				json() {
+					return Promise.reject(new Error('no json'));
+				},
+				text() {
+					return Promise.reject(new Error('body read failed'));
+				},
+				headers: new Headers(),
+			} as unknown as Response;
+
+			fetchMock.mockResolvedValue(failingResponse);
+			const client = createClient();
+
+			try {
+				await client.getCurrentUser();
+				expect.fail('should have thrown');
+			} catch (err) {
+				const apiErr = err as WordPressApiError;
+				expect(apiErr.status).toBe(500);
+				expect(apiErr.body).toBe('(unable to read response body)');
+			}
+		});
+
+		it('uses fallback when response.text() throws in requestStream', async () => {
+			const failingResponse = {
+				ok: false,
+				status: 502,
+				statusText: 'Bad Gateway',
+				json() {
+					return Promise.reject(new Error('no json'));
+				},
+				text() {
+					return Promise.reject(new Error('body read failed'));
+				},
+				headers: new Headers(),
+			} as unknown as Response;
+
+			fetchMock.mockResolvedValue(failingResponse);
+			const client = createClient();
+
+			try {
+				await client.requestStream('/wpce/v1/commands/stream');
+				expect.fail('should have thrown');
+			} catch (err) {
+				const apiErr = err as WordPressApiError;
+				expect(apiErr.status).toBe(502);
+				expect(apiErr.body).toBe('(unable to read response body)');
+			}
+		});
+	});
 });
