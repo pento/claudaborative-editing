@@ -48,8 +48,7 @@ JavaScript linting is handled by the root project's ESLint config. Run `npm run 
 
 ### Test
 
-From the repository root:
-
 ```bash
-npm run test:php     # PHPUnit tests
+npm run test:php                 # from plugin directory
+npm run test:plugin-php          # from repo root
 ```
