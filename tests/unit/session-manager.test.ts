@@ -119,6 +119,29 @@ vi.mock('../../src/wordpress/sync-client.js', () => {
 	};
 });
 
+// --- Mock the command handler ---
+const mockCommandHandlerStart = vi.fn<() => Promise<boolean>>();
+const mockCommandHandlerStop = vi.fn();
+const mockCommandHandlerSetNotifier = vi.fn();
+const mockCommandHandlerUpdateCommandStatus = vi.fn<() => Promise<void>>();
+const mockCommandHandlerGetPluginStatus = vi.fn();
+const mockCommandHandlerGetTransport = vi.fn();
+
+vi.mock('../../src/session/command-handler.js', () => {
+	return {
+		CommandHandler: vi.fn().mockImplementation(function (
+			this: Record<string, unknown>
+		) {
+			this.start = mockCommandHandlerStart;
+			this.stop = mockCommandHandlerStop;
+			this.setNotifier = mockCommandHandlerSetNotifier;
+			this.updateCommandStatus = mockCommandHandlerUpdateCommandStatus;
+			this.getPluginStatus = mockCommandHandlerGetPluginStatus;
+			this.getTransport = mockCommandHandlerGetTransport;
+		}),
+	};
+});
+
 // --- Test data ---
 
 const fakeUser: WPUser = {
@@ -181,6 +204,7 @@ describe('SessionManager', () => {
 		mockGetBlockTypes.mockRejectedValue(new Error('Not available'));
 		mockGetWordPressVersion.mockResolvedValue('7.0');
 		mockCheckNotesSupport.mockResolvedValue(false);
+		mockCommandHandlerStart.mockResolvedValue(false);
 		session = new SessionManager();
 		session.syncWaitTimeout = 0; // Skip sync wait in tests
 		session.postHealthCheckInterval = 0; // Disable periodic health checks in tests
@@ -3231,6 +3255,274 @@ describe('SessionManager', () => {
 			// Post is not gone — closePost should clean up the running timer
 			await session.closePost();
 			expect(session.getState()).toBe('connected');
+		});
+	});
+
+	describe('command handler integration', () => {
+		describe('plugin detection in connect()', () => {
+			it('creates command handler and stores it when plugin is detected', async () => {
+				mockCommandHandlerStart.mockResolvedValue(true);
+				mockCommandHandlerGetPluginStatus.mockReturnValue({
+					version: '1.0.0',
+					protocol_version: 1,
+					mcp_connected: true,
+					mcp_last_seen_at: null,
+				});
+				mockCommandHandlerGetTransport.mockReturnValue('sse');
+
+				await connectSession(session);
+
+				expect(mockCommandHandlerStart).toHaveBeenCalledTimes(1);
+				expect(session.getPluginInfo()).toEqual({
+					version: '1.0.0',
+					protocolVersion: 1,
+					transport: 'sse',
+				});
+			});
+
+			it('does not store command handler when plugin is not detected', async () => {
+				mockCommandHandlerStart.mockResolvedValue(false);
+
+				await connectSession(session);
+
+				expect(mockCommandHandlerStart).toHaveBeenCalledTimes(1);
+				expect(session.getPluginInfo()).toBeNull();
+			});
+
+			it('swallows errors from plugin detection and connects successfully', async () => {
+				mockCommandHandlerStart.mockRejectedValue(
+					new Error('Network error')
+				);
+
+				await connectSession(session);
+
+				expect(session.getState()).toBe('connected');
+				expect(session.getPluginInfo()).toBeNull();
+			});
+
+			it('passes stored channel notifier to new command handler', async () => {
+				const notifier = vi.fn();
+				session.setChannelNotifier(notifier);
+
+				mockCommandHandlerStart.mockResolvedValue(true);
+				mockCommandHandlerGetPluginStatus.mockReturnValue({
+					version: '1.0.0',
+					protocol_version: 1,
+					mcp_connected: false,
+					mcp_last_seen_at: null,
+				});
+				mockCommandHandlerGetTransport.mockReturnValue('polling');
+
+				await connectSession(session);
+
+				expect(mockCommandHandlerSetNotifier).toHaveBeenCalledWith(
+					notifier
+				);
+			});
+
+			it('does not pass notifier to handler when none is set', async () => {
+				mockCommandHandlerStart.mockResolvedValue(true);
+				mockCommandHandlerGetPluginStatus.mockReturnValue({
+					version: '1.0.0',
+					protocol_version: 1,
+					mcp_connected: false,
+					mcp_last_seen_at: null,
+				});
+				mockCommandHandlerGetTransport.mockReturnValue('sse');
+
+				await connectSession(session);
+
+				expect(mockCommandHandlerSetNotifier).not.toHaveBeenCalled();
+			});
+		});
+
+		describe('command handler cleanup in disconnect()', () => {
+			it('stops command handler on disconnect', async () => {
+				mockCommandHandlerStart.mockResolvedValue(true);
+				mockCommandHandlerGetPluginStatus.mockReturnValue({
+					version: '1.0.0',
+					protocol_version: 1,
+					mcp_connected: false,
+					mcp_last_seen_at: null,
+				});
+				mockCommandHandlerGetTransport.mockReturnValue('sse');
+
+				await connectSession(session);
+				await session.disconnect();
+
+				expect(mockCommandHandlerStop).toHaveBeenCalledTimes(1);
+				expect(session.getPluginInfo()).toBeNull();
+			});
+
+			it('does not call stop when no command handler exists', async () => {
+				mockCommandHandlerStart.mockResolvedValue(false);
+
+				await connectSession(session);
+				await session.disconnect();
+
+				expect(mockCommandHandlerStop).not.toHaveBeenCalled();
+			});
+		});
+
+		describe('setChannelNotifier()', () => {
+			it('stores the notifier for future connections', async () => {
+				const notifier = vi.fn();
+				session.setChannelNotifier(notifier);
+
+				// Connect — the stored notifier should be forwarded
+				mockCommandHandlerStart.mockResolvedValue(true);
+				mockCommandHandlerGetPluginStatus.mockReturnValue({
+					version: '1.0.0',
+					protocol_version: 1,
+					mcp_connected: false,
+					mcp_last_seen_at: null,
+				});
+				mockCommandHandlerGetTransport.mockReturnValue('sse');
+
+				await connectSession(session);
+
+				expect(mockCommandHandlerSetNotifier).toHaveBeenCalledWith(
+					notifier
+				);
+			});
+
+			it('forwards to existing command handler immediately', async () => {
+				mockCommandHandlerStart.mockResolvedValue(true);
+				mockCommandHandlerGetPluginStatus.mockReturnValue({
+					version: '1.0.0',
+					protocol_version: 1,
+					mcp_connected: false,
+					mcp_last_seen_at: null,
+				});
+				mockCommandHandlerGetTransport.mockReturnValue('sse');
+
+				await connectSession(session);
+
+				// Clear the mock to isolate the setChannelNotifier call
+				mockCommandHandlerSetNotifier.mockClear();
+
+				const notifier = vi.fn();
+				session.setChannelNotifier(notifier);
+
+				expect(mockCommandHandlerSetNotifier).toHaveBeenCalledWith(
+					notifier
+				);
+			});
+
+			it('does not call setNotifier on handler when disconnected', () => {
+				const notifier = vi.fn();
+				session.setChannelNotifier(notifier);
+
+				// No command handler exists when disconnected
+				expect(mockCommandHandlerSetNotifier).not.toHaveBeenCalled();
+			});
+		});
+
+		describe('updateCommandStatus()', () => {
+			it('delegates to command handler when plugin is connected', async () => {
+				mockCommandHandlerStart.mockResolvedValue(true);
+				mockCommandHandlerGetPluginStatus.mockReturnValue({
+					version: '1.0.0',
+					protocol_version: 1,
+					mcp_connected: false,
+					mcp_last_seen_at: null,
+				});
+				mockCommandHandlerGetTransport.mockReturnValue('sse');
+				mockCommandHandlerUpdateCommandStatus.mockResolvedValue(
+					undefined
+				);
+
+				await connectSession(session);
+
+				await session.updateCommandStatus(123, 'completed', 'Done');
+
+				expect(
+					mockCommandHandlerUpdateCommandStatus
+				).toHaveBeenCalledWith(123, 'completed', 'Done');
+			});
+
+			it('delegates without message parameter', async () => {
+				mockCommandHandlerStart.mockResolvedValue(true);
+				mockCommandHandlerGetPluginStatus.mockReturnValue({
+					version: '1.0.0',
+					protocol_version: 1,
+					mcp_connected: false,
+					mcp_last_seen_at: null,
+				});
+				mockCommandHandlerGetTransport.mockReturnValue('sse');
+				mockCommandHandlerUpdateCommandStatus.mockResolvedValue(
+					undefined
+				);
+
+				await connectSession(session);
+
+				await session.updateCommandStatus(456, 'running');
+
+				expect(
+					mockCommandHandlerUpdateCommandStatus
+				).toHaveBeenCalledWith(456, 'running', undefined);
+			});
+
+			it('throws when no command handler exists', async () => {
+				mockCommandHandlerStart.mockResolvedValue(false);
+
+				await connectSession(session);
+
+				await expect(
+					session.updateCommandStatus(123, 'completed')
+				).rejects.toThrow(
+					'WordPress editor plugin is not connected. Command features are not available.'
+				);
+			});
+
+			it('throws when disconnected', async () => {
+				await expect(
+					session.updateCommandStatus(123, 'completed')
+				).rejects.toThrow(/not connected/i);
+			});
+		});
+
+		describe('getPluginInfo()', () => {
+			it('returns plugin info when handler has status', async () => {
+				mockCommandHandlerStart.mockResolvedValue(true);
+				mockCommandHandlerGetPluginStatus.mockReturnValue({
+					version: '2.1.0',
+					protocol_version: 3,
+					mcp_connected: true,
+					mcp_last_seen_at: '2026-01-01T00:00:00',
+				});
+				mockCommandHandlerGetTransport.mockReturnValue('polling');
+
+				await connectSession(session);
+
+				expect(session.getPluginInfo()).toEqual({
+					version: '2.1.0',
+					protocolVersion: 3,
+					transport: 'polling',
+				});
+			});
+
+			it('returns null when no command handler exists', async () => {
+				mockCommandHandlerStart.mockResolvedValue(false);
+
+				await connectSession(session);
+
+				expect(session.getPluginInfo()).toBeNull();
+			});
+
+			it('returns null when handler has no plugin status', async () => {
+				mockCommandHandlerStart.mockResolvedValue(true);
+				mockCommandHandlerGetPluginStatus.mockReturnValue(null);
+				mockCommandHandlerGetTransport.mockReturnValue('sse');
+
+				await connectSession(session);
+
+				expect(session.getPluginInfo()).toBeNull();
+			});
+
+			it('returns null when disconnected', () => {
+				expect(session.getPluginInfo()).toBeNull();
+			});
 		});
 	});
 });

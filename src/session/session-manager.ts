@@ -31,6 +31,8 @@ import {
 	type PostMetadata,
 } from '../blocks/renderer.js';
 import { buildAwarenessState, parseCollaborators } from './awareness.js';
+import { CommandHandler } from './command-handler.js';
+import type { ChannelNotifier } from './command-handler.js';
 import { DEFAULT_SYNC_CONFIG } from '../wordpress/types.js';
 import {
 	CRDT_DOC_VERSION,
@@ -333,6 +335,11 @@ export class SessionManager {
 	/** Promise for the currently running queue processor, or null if idle. */
 	private streamProcessor: Promise<void> | null = null;
 
+	/** Command handler for WordPress editor plugin integration. */
+	private commandHandler: CommandHandler | null = null;
+	/** Stored channel notifier for reconnection scenarios. */
+	private _channelNotifier: ChannelNotifier | null = null;
+
 	/** Room name for the comment sync room. */
 	private static readonly COMMENT_ROOM = 'root/comment';
 
@@ -426,6 +433,20 @@ export class SessionManager {
 			this.notesSupported = false;
 		}
 
+		// Detect WordPress editor plugin and start command listener
+		const handler = new CommandHandler();
+		if (this._channelNotifier) {
+			handler.setNotifier(this._channelNotifier);
+		}
+		try {
+			const detected = await handler.start(this.apiClient);
+			if (detected) {
+				this.commandHandler = handler;
+			}
+		} catch {
+			// Plugin detection failed — command features disabled
+		}
+
 		// Build awareness state from user info
 		this.awarenessState = buildAwarenessState(user);
 
@@ -437,16 +458,23 @@ export class SessionManager {
 	 * Disconnect from the WordPress site.
 	 */
 	async disconnect(): Promise<void> {
-		if (this.state === 'editing') {
-			await this.closePost();
-		}
+		try {
+			if (this.state === 'editing') {
+				await this.closePost();
+			}
+		} finally {
+			if (this.commandHandler) {
+				this.commandHandler.stop();
+				this.commandHandler = null;
+			}
 
-		this._apiClient = null;
-		this._user = null;
-		this.awarenessState = null;
-		this.collaborators = [];
-		this.notesSupported = false;
-		this.state = 'disconnected';
+			this._apiClient = null;
+			this._user = null;
+			this.awarenessState = null;
+			this.collaborators = [];
+			this.notesSupported = false;
+			this.state = 'disconnected';
+		}
 	}
 
 	// --- Posts ---
@@ -1609,6 +1637,57 @@ export class SessionManager {
 
 	getNotesSupported(): boolean {
 		return this.notesSupported;
+	}
+
+	// --- Command handler (WordPress editor plugin) ---
+
+	/**
+	 * Set the channel notifier callback for forwarding commands to Claude Code.
+	 * Called from server.ts after the McpServer is created.
+	 * Stored for use on reconnection.
+	 */
+	setChannelNotifier(notifier: ChannelNotifier): void {
+		this._channelNotifier = notifier;
+		this.commandHandler?.setNotifier(notifier);
+	}
+
+	/**
+	 * Update a command's status (delegated to the command handler).
+	 * Used by the wp_update_command_status tool.
+	 */
+	async updateCommandStatus(
+		commandId: number,
+		status: string,
+		message?: string
+	): Promise<void> {
+		if (!this.commandHandler) {
+			throw new Error(
+				'WordPress editor plugin is not connected. Command features are not available.'
+			);
+		}
+		await this.commandHandler.updateCommandStatus(
+			commandId,
+			status,
+			message
+		);
+	}
+
+	/**
+	 * Plugin and command listener status for wp_status reporting.
+	 */
+	getPluginInfo(): {
+		version: string;
+		protocolVersion: number;
+		transport: string;
+	} | null {
+		if (!this.commandHandler) return null;
+		const ps = this.commandHandler.getPluginStatus();
+		if (!ps) return null;
+		return {
+			version: ps.version,
+			protocolVersion: ps.protocol_version,
+			transport: this.commandHandler.getTransport(),
+		};
 	}
 
 	getTitle(): string {

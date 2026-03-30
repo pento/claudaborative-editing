@@ -53,7 +53,7 @@
 	},
 	"lint-staged": {
 		"*.{ts,js,md,json,jsonc}": "prettier --write",
-		"*.{ts,js}": "env ESLINT_USE_FLAT_CONFIG=true eslint --max-warnings 0",
+		"*.{ts,js}": "env ESLINT_USE_FLAT_CONFIG=true eslint --max-warnings 0 --no-warn-ignored",
 		"*.md": "markdownlint-cli2",
 		"wordpress-plugin/**/*.php": [
 			"bash -c 'cd wordpress-plugin && (vendor/bin/phpcbf --no-cache || test $? -eq 1)'",

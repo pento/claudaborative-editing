@@ -366,6 +366,57 @@ export class WordPressApiClient {
 	}
 
 	/**
+	 * Public wrapper around apiFetch for use by transport clients (e.g., CommandClient).
+	 * Delegates to the internal fetch helper with auth and error handling.
+	 */
+	async request<T>(path: string, options?: RequestInit): Promise<T> {
+		return this.apiFetch<T>(path, options);
+	}
+
+	/**
+	 * Returns a raw Response for streaming endpoints (e.g., SSE).
+	 * Does not parse JSON — the caller is responsible for reading the body.
+	 */
+	async requestStream(
+		path: string,
+		options?: RequestInit
+	): Promise<Response> {
+		const url = `${this.baseUrl}${path}`;
+
+		const headers: Record<string, string> = {
+			Authorization: this.authHeader,
+			Accept: 'text/event-stream',
+		};
+
+		const response = await fetch(url, {
+			...options,
+			headers: {
+				...headers,
+				...(options?.headers as Record<string, string> | undefined),
+			},
+		});
+
+		if (!response.ok) {
+			let errorBody: string;
+			try {
+				errorBody = await response.text();
+			} catch {
+				errorBody = '(unable to read response body)';
+			}
+
+			const message = this.formatErrorMessage(
+				path,
+				response.status,
+				errorBody
+			);
+
+			throw new WordPressApiError(message, response.status, errorBody);
+		}
+
+		return response;
+	}
+
+	/**
 	 * Internal fetch helper with auth and error handling.
 	 */
 	private async apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
@@ -378,7 +429,9 @@ export class WordPressApiClient {
 
 		// Add Content-Type for JSON requests (skip for FormData — fetch auto-sets the boundary)
 		if (
-			(options?.method === 'POST' || options?.method === 'PUT') &&
+			(options?.method === 'POST' ||
+				options?.method === 'PUT' ||
+				options?.method === 'PATCH') &&
 			!(options.body instanceof FormData)
 		) {
 			headers['Content-Type'] = 'application/json';

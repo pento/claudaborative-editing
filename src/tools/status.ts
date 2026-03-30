@@ -30,6 +30,15 @@ export function registerStatusTools(
 					`Notes: ${session.getNotesSupported() ? 'supported' : 'not supported (requires WordPress 6.9+)'}`
 				);
 
+				const pluginInfo = session.getPluginInfo();
+				if (pluginInfo) {
+					lines.push(
+						`Plugin: v${pluginInfo.version} (protocol v${pluginInfo.protocolVersion}), listener: ${pluginInfo.transport}`
+					);
+				} else {
+					lines.push('Plugin: not detected');
+				}
+
 				const post = session.getCurrentPost();
 				if (state === 'editing' && post) {
 					const postGoneInfo = session.isPostGone();
