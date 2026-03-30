@@ -326,10 +326,11 @@ composer phpstan       # PHPStan static analysis (level 7)
 
 JS linting is handled by the root ESLint config (`eslint.config.mjs`) via `@wordpress/eslint-plugin` + FlatCompat. Run `npm run lint` from the repo root to lint everything (MCP TypeScript + plugin JS + Prettier + markdownlint).
 
-PHPUnit tests require wp-env (run from the repo root):
+PHPUnit tests require wp-env:
 
 ```bash
-npm run test:php
+npm run test:plugin-php          # from repo root
+cd wordpress-plugin && npm run test:php  # from plugin directory
 ```
 
 ### Plugin Structure

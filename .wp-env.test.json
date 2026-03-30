@@ -9,6 +9,6 @@
 		"wp-content/plugins/claudaborative-editing": "./wordpress-plugin"
 	},
 	"lifecycleScripts": {
-		"afterStart": "./bin/after-start.sh --test-env"
+		"afterStart": "npx wp-env --config .wp-env.test.json run cli wp plugin activate gutenberg claudaborative-editing && npx wp-env --config .wp-env.test.json run cli wp option update wp_collaboration_enabled 1"
 	}
 }

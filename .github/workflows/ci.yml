@@ -25,9 +25,8 @@ jobs:
             - uses: actions/setup-node@v6
               with:
                   node-version: ${{ matrix.node-version }}
-                  cache: npm
 
-            - run: npm ci
+            - run: npm ci --no-audit
             - run: npm run typecheck
             - run: npm run lint
             - run: npm run build
@@ -56,9 +55,8 @@ jobs:
             - uses: actions/setup-node@v6
               with:
                   node-version: 22
-                  cache: npm
 
-            - run: npm ci
+            - run: npm ci --no-audit
             - run: npx playwright install --with-deps chromium
             - run: npm run test:e2e
 
@@ -98,13 +96,15 @@ jobs:
             - uses: actions/setup-node@v6
               with:
                   node-version: 22
-                  cache: npm
+                  cache-dependency-path: |
+                      package-lock.json
+                      wordpress-plugin/package-lock.json
 
             - name: Install root npm dependencies
-              run: npm ci
+              run: npm ci --no-audit
 
             - name: Install plugin npm dependencies
-              run: npm ci
+              run: npm ci --no-audit
               working-directory: wordpress-plugin
 
             - name: Build plugin
@@ -113,6 +113,7 @@ jobs:
 
             - name: Run PHPUnit with coverage
               run: npm run test:php:coverage
+              working-directory: wordpress-plugin
 
             - name: Convert Clover XML to LCOV
               uses: andstor/clover2lcov-action@v1
@@ -132,5 +133,40 @@ jobs:
                   lcov-file: wordpress-plugin/coverage/lcov.info
                   path: |
                       wordpress-plugin/includes/
-                  coverage-label: php
+                  coverage-label: plugin-php
+                  github-token: ${{ secrets.GITHUB_TOKEN }}
+
+    plugin-test-js:
+        name: Plugin JS Tests
+        runs-on: ubuntu-latest
+
+        steps:
+            - uses: actions/checkout@v6
+
+            - uses: actions/setup-node@v6
+              with:
+                  node-version: 22
+                  cache-dependency-path: wordpress-plugin/package-lock.json
+
+            - name: Install plugin npm dependencies
+              run: npm ci --no-audit
+              working-directory: wordpress-plugin
+
+            - name: Run Jest with coverage
+              run: npm run test:coverage
+              working-directory: wordpress-plugin
+
+            - name: Rewrite source paths in LCOV
+              run: >-
+                  sed -i
+                  's|SF:src/|SF:wordpress-plugin/src/|g'
+                  wordpress-plugin/coverage/js/lcov.info
+
+            - name: Check JS coverage
+              uses: pento/lcov-coverage-check@v3
+              with:
+                  lcov-file: wordpress-plugin/coverage/js/lcov.info
+                  path: |
+                      wordpress-plugin/src/
+                  coverage-label: plugin-js
                   github-token: ${{ secrets.GITHUB_TOKEN }}
