@@ -25,7 +25,8 @@ Claude Code  <--stdio-->  MCP Server (Node.js)  <--HTTP polling-->  WordPress
                            ├─ Yjs Y.Doc (in memory)                  /wp-sync/v1/updates
                            ├─ Sync client (polling loop)
                            ├─ Block converter (Y.Doc ↔ Block model)
-                           └─ Awareness (presence as "Claude")
+                           ├─ Awareness (presence as "Claude")
+                           └─ Command listener (SSE/polling)          /wpce/v1/commands
 ```
 
 ### Source Layout
@@ -37,10 +38,12 @@ Claude Code  <--stdio-->  MCP Server (Node.js)  <--HTTP polling-->  WordPress
 - `src/cli/clients.ts` — MCP client registry, detection, platform path resolution
 - `src/cli/config-writer.ts` — JSON config read/merge/write for MCP client settings files
 - `src/cli/auth-server.ts` — WordPress Application Password auth with localhost HTTP callback (WP 7.0+) and fallback to non-callback auth page on older versions
-- `src/wordpress/` — REST API client, HTTP polling sync client, MIME type detection
+- `src/wordpress/` — REST API client, HTTP polling sync client, command client, MIME type detection
+- `src/wordpress/command-client.ts` — REST methods for plugin command endpoints + SSE/polling transport
 - `src/yjs/` — Y.Doc management, block ↔ Yjs conversion, sync protocol encoding
-- `src/session/` — Connection lifecycle, awareness/presence
-- `src/tools/` — MCP tool handlers (connect, posts, read, edit, media, metadata, notes, status)
+- `src/session/` — Connection lifecycle, awareness/presence, command handler
+- `src/session/command-handler.ts` — Command listener lifecycle, claim logic, channel notification dispatch
+- `src/tools/` — MCP tool handlers (connect, posts, read, edit, media, metadata, notes, commands, status)
 - `src/prompts/` — MCP prompt handlers (editing, review, authoring)
 - `src/blocks/` — Gutenberg HTML parser, Claude-friendly renderer
 - `tests/` — Unit and integration tests
@@ -55,6 +58,30 @@ disconnected ──connect──→ connected ──openPost/createPost──→
 ```
 
 `wp_close_post` returns to `connected` state (can open another post). `wp_disconnect` tears down the entire connection.
+
+### Channel Capability and Command Listener
+
+The MCP server declares the `claude/channel` experimental capability and includes instructions telling Claude how to handle channel notifications from the WordPress editor plugin. This enables users in the WordPress Gutenberg editor to trigger actions (proofread, review, edit, translate) that are forwarded to Claude Code.
+
+**Plugin detection**: During `connect()`, after validating the sync endpoint, the session manager probes `GET /wpce/v1/status`. If the plugin is detected, a `CommandHandler` is created and the command listener starts. If the plugin is not installed (404), command features are silently disabled.
+
+**Command listener lifecycle**:
+
+- Starts automatically after successful `connect()` if the WordPress editor plugin is detected
+- Runs continuously in the `connected` state — independent of the sync loop, does not require a post to be open
+- Stops on `disconnect()`
+- Uses SSE as primary transport with REST polling as fallback
+
+**Transport abstraction** (`CommandClient`):
+
+- **SSE (primary)**: Opens `GET /wpce/v1/commands/stream` with Application Password auth. Parses Server-Sent Events from the response stream. Reconnects automatically when the connection drops (server closes after ~5 minutes). Uses exponential backoff on errors.
+- **Polling (fallback)**: Falls back to `GET /wpce/v1/commands?status=pending` polling every 5 seconds after 3 failed SSE attempts. Periodically retries SSE (every 60 seconds) to recover when the connection issue was transient.
+
+**Command flow**: When a command arrives (via SSE or polling), the handler claims it (`PATCH /wpce/v1/commands/{id}` with `status: claimed`), then pushes a channel notification to Claude Code via `server.server.notification()`. If the claim fails with 409 (another instance got it) or 404, the command is skipped silently.
+
+**Channel notification format**: The `notifications/claude/channel` notification includes a `content` field describing the request and `meta` fields with `command_id`, `prompt`, `post_id`, and optionally `arguments`. Claude Code wraps this as a `<channel source="wpce">` tag (source is set automatically from the server name).
+
+**Notification buffering**: During auto-connect, the command handler may start before the `McpServer` is created and the notifier callback is wired. Notifications are buffered and flushed when `setChannelNotifier()` is called from `server.ts`.
 
 ### Post Deletion Detection
 
@@ -249,6 +276,12 @@ Both tools replace all existing terms (not append).
 - `wp_set_slug` — Set URL slug (WordPress may auto-modify for uniqueness)
 - `wp_set_sticky` — Pin/unpin on front page
 - `wp_set_comment_status` — Enable/disable comments (open/closed)
+
+## Command Status
+
+- `wp_update_command_status` — Update the status of a command received from the WordPress editor via a channel notification. Parameters: `commandId` (number), `status` (`running` | `completed` | `failed`), `message` (optional string). Called by Claude during command execution to report progress back to the browser.
+
+The `wp_status` tool reports plugin detection state, version, protocol version, and command listener transport (SSE/polling/disabled) when the WordPress editor plugin is connected.
 
 ## Prompts
 

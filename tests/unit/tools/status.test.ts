@@ -108,6 +108,43 @@ describe('status tools', () => {
 			expect(text).not.toContain('Queue:');
 		});
 
+		it('shows plugin info when detected', async () => {
+			const session = createMockSession({
+				state: 'connected',
+				user: fakeUser,
+				pluginInfo: {
+					version: '1.0.0',
+					protocolVersion: 1,
+					transport: 'sse',
+				},
+			});
+			registerStatusTools(server as unknown as McpServer, session);
+
+			const tool = server.registeredTools.get('wp_status');
+			assertDefined(tool);
+			const result = await tool.handler({});
+			const text = result.content[0].text;
+
+			expect(text).toContain('Plugin: v1.0.0');
+			expect(text).toContain('protocol v1');
+			expect(text).toContain('listener: sse');
+		});
+
+		it('shows plugin not detected when getPluginInfo returns null', async () => {
+			const session = createMockSession({
+				state: 'connected',
+				user: fakeUser,
+				pluginInfo: null,
+			});
+			registerStatusTools(server as unknown as McpServer, session);
+
+			const tool = server.registeredTools.get('wp_status');
+			assertDefined(tool);
+			const result = await tool.handler({});
+
+			expect(result.content[0].text).toContain('Plugin: not detected');
+		});
+
 		it('reads title from Y.Doc via getTitle(), not from getCurrentPost()', async () => {
 			const session = createMockSession({
 				state: 'editing',

@@ -15,6 +15,9 @@ let capturedOptions: Record<string, unknown> | undefined;
 const mockServerClose = vi
 	.fn<() => Promise<void>>()
 	.mockResolvedValue(undefined);
+const mockServerNotification = vi
+	.fn<() => Promise<void>>()
+	.mockResolvedValue(undefined);
 
 vi.mock('@modelcontextprotocol/sdk/server/mcp.js', () => {
 	return {
@@ -28,6 +31,7 @@ vi.mock('@modelcontextprotocol/sdk/server/mcp.js', () => {
 			this.registerPrompt = vi.fn();
 			this.connect = vi.fn().mockResolvedValue(undefined);
 			this.close = mockServerClose;
+			this.server = { notification: mockServerNotification };
 		}),
 	};
 });
@@ -41,6 +45,7 @@ vi.mock('@modelcontextprotocol/sdk/server/stdio.js', () => {
 // --- Mock SessionManager ---
 const mockConnect = vi.fn<() => Promise<WPUser>>();
 const mockDisconnect = vi.fn();
+const mockSetChannelNotifier = vi.fn();
 vi.mock('../../src/session/session-manager.js', () => {
 	return {
 		SessionManager: vi.fn().mockImplementation(function (
@@ -48,6 +53,7 @@ vi.mock('../../src/session/session-manager.js', () => {
 		) {
 			this.connect = mockConnect;
 			this.disconnect = mockDisconnect;
+			this.setChannelNotifier = mockSetChannelNotifier;
 		}),
 	};
 });
@@ -67,6 +73,9 @@ vi.mock('../../src/tools/media.js', () => ({ registerMediaTools: vi.fn() }));
 vi.mock('../../src/tools/notes.js', () => ({ registerNoteTools: vi.fn() }));
 vi.mock('../../src/tools/metadata.js', () => ({
 	registerMetadataTools: vi.fn(),
+}));
+vi.mock('../../src/tools/commands.js', () => ({
+	registerCommandTools: vi.fn(),
 }));
 
 // --- Mock prompt registration functions (no-ops) ---
@@ -126,6 +135,42 @@ describe('startServer()', () => {
 		assertDefined(capturedOptions);
 		expect(capturedOptions.instructions).toContain('wp_connect');
 		expect(capturedOptions.instructions).not.toContain('Already connected');
+	});
+
+	it('includes channel instructions in all instruction variants', async () => {
+		const { startServer } = await import('../../src/server.js');
+		await startServer();
+
+		assertDefined(capturedOptions);
+		const instructions = capturedOptions.instructions as string;
+		expect(instructions).toContain('source="wpce"');
+		expect(instructions).toContain('wp_update_command_status');
+		expect(instructions).toContain('wp_open_post');
+	});
+
+	it('declares claude/channel experimental capability', async () => {
+		const { startServer } = await import('../../src/server.js');
+		await startServer();
+
+		assertDefined(capturedOptions);
+		const capabilities = capturedOptions.capabilities as Record<
+			string,
+			unknown
+		>;
+		expect(capabilities).toBeDefined();
+		expect(capabilities.experimental).toEqual({
+			'claude/channel': {},
+		});
+	});
+
+	it('wires up channel notifier on session', async () => {
+		const { startServer } = await import('../../src/server.js');
+		await startServer();
+
+		expect(mockSetChannelNotifier).toHaveBeenCalledOnce();
+		expect(mockSetChannelNotifier).toHaveBeenCalledWith(
+			expect.any(Function)
+		);
 	});
 
 	it('sets disconnected instructions when auto-connect fails', async () => {

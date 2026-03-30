@@ -17,6 +17,7 @@ export default [
 			'coverage/**',
 			'node_modules/**',
 			'.gutenberg/**',
+			'bin/**',
 			'wordpress-plugin/vendor/**',
 			'wordpress-plugin/node_modules/**',
 			'wordpress-plugin/build/**',

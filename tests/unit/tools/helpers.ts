@@ -146,6 +146,11 @@ export function createMockSession(
 		blockContent?: string;
 		editBlockTextResult?: EditBlockTextResult;
 		postGone?: { gone: boolean; reason: string | null };
+		pluginInfo?: {
+			version: string;
+			protocolVersion: number;
+			transport: string;
+		} | null;
 	} = {}
 ): SessionManager {
 	const state = overrides.state ?? 'disconnected';
@@ -242,5 +247,7 @@ export function createMockSession(
 				overrides.postGone ?? { gone: false, reason: null }
 			),
 		drainStreamQueue: vi.fn().mockResolvedValue(undefined),
+		updateCommandStatus: vi.fn().mockResolvedValue(undefined),
+		getPluginInfo: vi.fn().mockReturnValue(overrides.pluginInfo ?? null),
 	} as unknown as SessionManager;
 }

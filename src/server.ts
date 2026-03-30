@@ -10,6 +10,7 @@ import { registerBlockTypeTools } from './tools/block-types.js';
 import { registerMediaTools } from './tools/media.js';
 import { registerNoteTools } from './tools/notes.js';
 import { registerMetadataTools } from './tools/metadata.js';
+import { registerCommandTools } from './tools/commands.js';
 import { registerEditingPrompts } from './prompts/editing.js';
 import { registerReviewPrompts } from './prompts/review.js';
 import { registerAuthoringPrompts } from './prompts/authoring.js';
@@ -39,13 +40,28 @@ export async function startServer(): Promise<void> {
 	}
 
 	// Set instructions based on whether auto-connect succeeded
-	const instructions = autoConnected
+	const baseInstructions = autoConnected
 		? 'Already connected to WordPress. Do NOT call wp_connect. Use wp_status to check connection state, then wp_open_post or wp_create_post to start editing.'
 		: 'Use wp_connect to connect to a WordPress site first, or use wp_status to check connection state.';
 
+	const channelInstructions = `
+
+When you receive a <channel source="wpce"> event, it contains a command from a user in the WordPress editor. Follow these steps:
+1. Call wp_update_command_status with the command_id from the notification metadata and status "running".
+2. If no post is open, call wp_open_post with the post_id from the notification metadata. If a different post is open, call wp_close_post first.
+3. Execute the requested action based on the prompt field: "proofread" (fix grammar/spelling), "review" (leave editorial notes), "respond-to-notes" (address existing notes), "edit" (edit with the focus from arguments.editingFocus), "translate" (translate to arguments.language).
+4. Call wp_update_command_status with status "completed" and a brief summary, or "failed" with an error message.`;
+
+	const instructions = baseInstructions + channelInstructions;
+
 	const server = new McpServer(
 		{ name: 'wpce', version: VERSION },
-		{ instructions }
+		{
+			capabilities: {
+				experimental: { 'claude/channel': {} },
+			},
+			instructions,
+		}
 	);
 
 	// Register all tools
@@ -58,6 +74,17 @@ export async function startServer(): Promise<void> {
 	registerMediaTools(server, session);
 	registerNoteTools(server, session);
 	registerMetadataTools(server, session);
+	registerCommandTools(server, session);
+
+	// Wire up channel notifications from the command handler to the MCP client.
+	// Uses a type cast because notifications/claude/channel is experimental
+	// and not in the SDK's ServerNotification union type.
+	session.setChannelNotifier(async (params) => {
+		await server.server.notification({
+			method: 'notifications/claude/channel',
+			params,
+		} as never);
+	});
 
 	// Register all prompts
 	registerEditingPrompts(server, session);
