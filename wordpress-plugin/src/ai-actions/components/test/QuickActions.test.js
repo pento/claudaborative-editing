@@ -1,8 +1,18 @@
-/* eslint-disable jsdoc/require-jsdoc */
+jest.mock('@wordpress/data', () => ({
+	useSelect: jest.fn(),
+}));
 
-import { render, screen, fireEvent } from '@testing-library/react';
-import { useSelect } from '@wordpress/data';
-import QuickActions from '../QuickActions';
+jest.mock('@wordpress/components', () => {
+	const { createElement } = require('react');
+	return {
+		Button: ({ children, disabled, onClick, ...props }) =>
+			createElement('button', { disabled, onClick, ...props }, children),
+		PanelBody: ({ children }) => createElement('div', null, children),
+		Spinner: () => createElement('div', { 'data-testid': 'spinner' }),
+		Notice: ({ children, isDismissible, onDismiss, ...props }) =>
+			createElement('div', { role: 'alert', ...props }, children),
+	};
+});
 
 jest.mock('../../hooks/use-mcp-status', () => ({
 	useMcpStatus: jest.fn(),
@@ -12,8 +22,13 @@ jest.mock('../../hooks/use-commands', () => ({
 	useCommands: jest.fn(),
 }));
 
+jest.mock('../../store', () => ({ STORE_NAME: 'wpce/ai-actions' }));
+
+import { render, screen, fireEvent } from '@testing-library/react';
+import { useSelect } from '@wordpress/data';
 import { useMcpStatus } from '../../hooks/use-mcp-status';
 import { useCommands } from '../../hooks/use-commands';
+import QuickActions from '../QuickActions';
 
 function mockUseSelect(stores) {
 	useSelect.mockImplementation((selector) => {

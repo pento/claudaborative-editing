@@ -1,4 +1,12 @@
-/* eslint-disable jsdoc/require-jsdoc */
+jest.mock('@wordpress/plugins', () => ({
+	registerPlugin: jest.fn(),
+}));
+jest.mock('../store', () => {});
+jest.mock('../editor.css', () => {});
+jest.mock('../components/AiActionsSidebar', () => ({
+	__esModule: true,
+	default: () => null,
+}));
 
 import { registerPlugin } from '@wordpress/plugins';
 

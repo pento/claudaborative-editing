@@ -1,14 +1,21 @@
-/* eslint-disable jsdoc/require-jsdoc */
+jest.mock('@wordpress/data', () => ({
+	useSelect: jest.fn(),
+}));
 
-import { render, screen } from '@testing-library/react';
-import { useSelect } from '@wordpress/data';
-import ConnectionStatus from '../ConnectionStatus';
+jest.mock('@wordpress/components', () => ({
+	PanelRow: ({ children }) => <div>{children}</div>,
+}));
 
 jest.mock('../../hooks/use-mcp-status', () => ({
 	useMcpStatus: jest.fn(),
 }));
 
+jest.mock('../../store', () => ({ STORE_NAME: 'wpce/ai-actions' }));
+
+import { render, screen } from '@testing-library/react';
+import { useSelect } from '@wordpress/data';
 import { useMcpStatus } from '../../hooks/use-mcp-status';
+import ConnectionStatus from '../ConnectionStatus';
 
 function mockUseSelect(stores) {
 	useSelect.mockImplementation((selector) => {

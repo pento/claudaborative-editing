@@ -110,32 +110,21 @@ export default [
 		},
 	},
 
-	// WordPress plugin JS: @wordpress/eslint-plugin via FlatCompat
+	// WordPress plugin JS: @wordpress/eslint-plugin recommended (without Prettier
+	// rule — we handle formatting via eslint-config-prettier at the end)
 	...compat
-		.extends(
-			'plugin:@wordpress/eslint-plugin/esnext',
-			'plugin:@wordpress/eslint-plugin/custom',
-			'plugin:@wordpress/eslint-plugin/i18n',
-			'plugin:@wordpress/eslint-plugin/react',
-			'plugin:@wordpress/eslint-plugin/jsx-a11y'
-		)
+		.extends('plugin:@wordpress/eslint-plugin/recommended-with-formatting')
 		.map((config) => ({
 			...config,
 			files: ['wordpress-plugin/**/*.js'],
 		})),
 
-	// WordPress plugin test and mock files: Jest globals
+	// WordPress plugin test files: Jest globals
 	{
-		files: [
-			'wordpress-plugin/src/**/test/**/*.js',
-			'wordpress-plugin/src/__mocks__/**/*.js',
-		],
+		files: ['wordpress-plugin/src/**/test/**/*.js'],
 		languageOptions: {
 			globals: globals.jest,
 		},
-	},
-	{
-		files: ['wordpress-plugin/src/**/test/**/*.js'],
 		rules: {
 			'@wordpress/i18n-no-variables': 'off',
 			'@wordpress/i18n-text-domain': 'off',

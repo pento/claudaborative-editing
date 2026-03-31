@@ -1,4 +1,8 @@
-/* eslint-disable jsdoc/require-jsdoc */
+jest.mock('@wordpress/data', () => ({
+	useSelect: jest.fn(),
+	useDispatch: jest.fn(() => ({})),
+}));
+jest.mock('../../store', () => ({ STORE_NAME: 'wpce/ai-actions' }));
 
 import { renderHook, act } from '@testing-library/react';
 import { useSelect, useDispatch } from '@wordpress/data';

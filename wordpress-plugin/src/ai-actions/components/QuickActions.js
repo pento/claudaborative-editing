@@ -5,8 +5,6 @@
  * respond to notes) and displays the status of the currently active command.
  */
 
-/* global window */
-
 /**
  * WordPress dependencies
  */

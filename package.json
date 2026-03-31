@@ -74,6 +74,8 @@
 		"@eslint/eslintrc": "^2.1.4",
 		"@eslint/js": "^8.57.1",
 		"@playwright/test": "^1.58.2",
+		"@types/eslint__eslintrc": "^2.1.2",
+		"@types/eslint__js": "^8.42.3",
 		"@types/node": "^22.19.15",
 		"@vitest/coverage-v8": "^4.1.0",
 		"@wordpress/env": "^11.2.0",

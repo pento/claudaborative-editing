@@ -5,8 +5,6 @@
  * with automatic polling to keep the status up to date.
  */
 
-/* global window */
-
 /**
  * WordPress dependencies
  */

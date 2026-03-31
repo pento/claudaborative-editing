@@ -6,8 +6,6 @@
  * Automatically polls for updates while a command is active.
  */
 
-/* global window */
-
 /**
  * WordPress dependencies
  */

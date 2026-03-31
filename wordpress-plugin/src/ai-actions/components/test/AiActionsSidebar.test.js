@@ -1,8 +1,14 @@
-/* eslint-disable jsdoc/require-jsdoc */
+jest.mock('@wordpress/editor', () => ({
+	PluginSidebar: ({ children, ...props }) => (
+		<div data-testid="plugin-sidebar" {...props}>
+			{children}
+		</div>
+	),
+}));
 
-import { render, screen } from '@testing-library/react';
-import { useSelect } from '@wordpress/data';
-import AiActionsSidebar from '../AiActionsSidebar';
+jest.mock('@wordpress/components', () => ({
+	PanelBody: ({ children }) => <div>{children}</div>,
+}));
 
 jest.mock('../ConnectionStatus', () => {
 	const Component = () => <div data-testid="connection-status" />;
@@ -16,10 +22,12 @@ jest.mock('../QuickActions', () => {
 	return { __esModule: true, default: Component };
 });
 
+import { render, screen } from '@testing-library/react';
+import AiActionsSidebar from '../AiActionsSidebar';
+
 describe('AiActionsSidebar', () => {
 	beforeEach(() => {
 		jest.clearAllMocks();
-		useSelect.mockReturnValue(null);
 	});
 
 	it('renders PluginSidebar with correct name', () => {

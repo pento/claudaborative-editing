@@ -5,12 +5,16 @@
  * the sidebar panel's state management.
  */
 
-/* eslint-disable jsdoc/require-jsdoc */
+jest.mock('@wordpress/data', () => ({
+	createReduxStore: jest.fn((name, config) => ({ name, ...config })),
+	register: jest.fn(),
+}));
 
-/**
- * Mocks are provided via moduleNameMapper in jest.config.json
- * pointing to src/__mocks__/@wordpress/{data,api-fetch}.js.
- */
+jest.mock('@wordpress/api-fetch', () => {
+	const fn = jest.fn();
+	return { __esModule: true, default: fn };
+});
+
 import { createReduxStore } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
 import { STORE_NAME } from '../index';

@@ -169,7 +169,6 @@ jobs:
                   path: |
                       wordpress-plugin/src/
                   ignore-patterns: |
-                      wordpress-plugin/src/__mocks__/**
                       wordpress-plugin/src/**/test/**
                   coverage-label: plugin-js
                   github-token: ${{ secrets.GITHUB_TOKEN }}
