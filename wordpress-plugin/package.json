@@ -12,6 +12,7 @@
 		"@wordpress/element": "^6.42.0",
 		"@wordpress/env": "^11.2.0",
 		"@wordpress/i18n": "^6.15.0",
+		"@wordpress/interface": "^9.27.0",
 		"@wordpress/plugins": "^7.42.0",
 		"@wordpress/scripts": "^31.6.0",
 		"react": "^18.3.1"

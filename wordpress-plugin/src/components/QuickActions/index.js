@@ -1,7 +1,7 @@
 /**
  * Quick actions component.
  *
- * Provides action buttons for common AI operations (proofread, review,
+ * Provides menu items for common AI operations (proofread, review,
  * respond to notes) and displays the status of the currently active command.
  */
 
@@ -9,7 +9,7 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { Button, PanelBody, Spinner, Notice } from '@wordpress/components';
+import { MenuGroup, MenuItem, Spinner } from '@wordpress/components';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { useState, useEffect, useCallback, useRef } from '@wordpress/element';
 
@@ -44,9 +44,11 @@ function getStatusLabel(prompt) {
 /**
  * QuickActions component.
  *
+ * @param {Object}   props         Component props.
+ * @param {Function} props.onClose Callback to close the parent dropdown.
  * @return {import('react').ReactElement} Rendered component.
  */
-export default function QuickActions() {
+export default function QuickActions({ onClose }) {
 	const { mcpConnected } = useMcpStatus();
 
 	const postId = useSelect(
@@ -92,7 +94,7 @@ export default function QuickActions() {
 		[postId]
 	);
 
-	const buttonsDisabled =
+	const itemsDisabled =
 		!mcpConnected ||
 		isSubmitting ||
 		activeCommand !== null ||
@@ -145,71 +147,84 @@ export default function QuickActions() {
 		(activeCommand.status === 'pending' ||
 			activeCommand.status === 'claimed');
 
+	const handleSubmit = (prompt) => {
+		submit(prompt);
+		if (onClose) {
+			onClose();
+		}
+	};
+
 	return (
-		<PanelBody
-			title={__('Quick Actions', 'claudaborative-editing')}
-			initialOpen
-		>
-			<div className="wpce-quick-actions">
-				<Button
-					variant="secondary"
-					disabled={buttonsDisabled}
-					onClick={() => submit('proofread')}
+		<div className="wpce-quick-actions-menu">
+			<MenuGroup>
+				<MenuItem
+					info={__(
+						'Fix grammar, spelling, and punctuation',
+						'claudaborative-editing'
+					)}
+					disabled={itemsDisabled}
+					onClick={() => handleSubmit('proofread')}
 				>
 					{__('Proofread', 'claudaborative-editing')}
-				</Button>
-				<Button
-					variant="secondary"
-					disabled={buttonsDisabled}
-					onClick={() => submit('review')}
+				</MenuItem>
+				<MenuItem
+					info={__(
+						'Leave editorial notes the post',
+						'claudaborative-editing'
+					)}
+					disabled={itemsDisabled}
+					onClick={() => handleSubmit('review')}
 				>
 					{__('Review', 'claudaborative-editing')}
-				</Button>
+				</MenuItem>
 				{hasNotes && (
-					<Button
-						variant="secondary"
-						disabled={buttonsDisabled}
-						onClick={() => submit('respond-to-notes')}
+					<MenuItem
+						info={__(
+							'Address existing notes with edits and replies',
+							'claudaborative-editing'
+						)}
+						disabled={itemsDisabled}
+						onClick={() => handleSubmit('respond-to-notes')}
 					>
 						{__('Respond to Notes', 'claudaborative-editing')}
-					</Button>
+					</MenuItem>
 				)}
-			</div>
+			</MenuGroup>
 
 			{activeCommand && (
-				<div className="wpce-command-status">
-					<Spinner />
-					<span>{getStatusLabel(activeCommand.prompt)}</span>
-					{isCancellable && (
-						<Button
-							variant="link"
-							onClick={() => cancel(activeCommand.id)}
-						>
-							{__('Cancel', 'claudaborative-editing')}
-						</Button>
-					)}
-				</div>
+				<MenuGroup>
+					<div className="wpce-command-status">
+						<Spinner />
+						<span>{getStatusLabel(activeCommand.prompt)}</span>
+						{isCancellable && (
+							<MenuItem
+								variant="tertiary"
+								onClick={() => cancel(activeCommand.id)}
+							>
+								{__('Cancel', 'claudaborative-editing')}
+							</MenuItem>
+						)}
+					</div>
+				</MenuGroup>
 			)}
 
 			{error && (
-				<div className="wpce-command-notice">
-					<Notice status="error" isDismissible={false}>
+				<MenuGroup>
+					<div className="wpce-command-notice wpce-command-notice--error">
 						{error}
-					</Notice>
-				</div>
+					</div>
+				</MenuGroup>
 			)}
 
 			{completedMessage && (
-				<div className="wpce-command-notice">
-					<Notice
-						status={completedMessage.status}
-						isDismissible
-						onDismiss={clearMessage}
+				<MenuGroup>
+					<div
+						className={`wpce-command-notice wpce-command-notice--${completedMessage.status}`}
 					>
 						{completedMessage.text}
-					</Notice>
-				</div>
+					</div>
+				</MenuGroup>
 			)}
-		</PanelBody>
+		</div>
 	);
 }

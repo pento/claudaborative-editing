@@ -18,11 +18,11 @@ import { registerPlugin } from '@wordpress/plugins';
 // Register the data store (side-effect import).
 import './store';
 
-import AiActionsSidebar from './components/AiActionsSidebar';
+import AiActionsMenu from './components/AiActionsSidebar';
 import ConnectionStatus from './components/ConnectionStatus';
 
 registerPlugin('claudaborative-editing-ai-actions', {
-	render: AiActionsSidebar,
+	render: AiActionsMenu,
 });
 
 registerPlugin('claudaborative-editing-status', {

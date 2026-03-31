@@ -1,11 +1,25 @@
-jest.mock('@wordpress/editor', () => ({
-	PluginSidebar: ({ children, icon, ...props }) => (
-		<div data-testid="plugin-sidebar" {...props}>
-			<span data-testid="sidebar-icon">{icon}</span>
-			{children}
-		</div>
-	),
-}));
+jest.mock('@wordpress/components', () => {
+	const { createElement } = require('react');
+	return {
+		DropdownMenu: ({ children, icon, label }) =>
+			createElement(
+				'div',
+				{ 'data-testid': 'dropdown-menu', 'aria-label': label },
+				createElement('span', { 'data-testid': 'menu-icon' }, icon),
+				typeof children === 'function'
+					? children({ onClose: jest.fn() })
+					: children
+			),
+	};
+});
+
+jest.mock('@wordpress/interface', () => {
+	const { createElement } = require('react');
+	return {
+		PinnedItems: ({ children }) =>
+			createElement('div', { 'data-testid': 'pinned-items' }, children),
+	};
+});
 
 jest.mock('../../QuickActions', () => {
 	const Component = () => <div data-testid="quick-actions" />;
@@ -14,40 +28,36 @@ jest.mock('../../QuickActions', () => {
 });
 
 import { render, screen } from '@testing-library/react';
-import AiActionsSidebar from '..';
+import AiActionsMenu from '..';
 
-describe('AiActionsSidebar', () => {
+describe('AiActionsMenu', () => {
 	beforeEach(() => {
 		jest.clearAllMocks();
 	});
 
-	it('renders PluginSidebar with correct name', () => {
-		render(<AiActionsSidebar />);
+	it('renders inside PinnedItems', () => {
+		render(<AiActionsMenu />);
 
-		const sidebar = screen.getByTestId('plugin-sidebar');
-		expect(sidebar).toBeTruthy();
-		expect(sidebar.getAttribute('name')).toBe(
-			'claudaborative-editing-ai-actions'
-		);
+		expect(screen.getByTestId('pinned-items')).toBeTruthy();
 	});
 
-	it('renders PluginSidebar with correct title', () => {
-		render(<AiActionsSidebar />);
+	it('renders DropdownMenu with correct label', () => {
+		render(<AiActionsMenu />);
 
-		const sidebar = screen.getByTestId('plugin-sidebar');
-		expect(sidebar.getAttribute('title')).toBe('Claudaborative Editing');
+		const menu = screen.getByTestId('dropdown-menu');
+		expect(menu.getAttribute('aria-label')).toBe('Claudaborative Editing');
 	});
 
 	it('contains QuickActions component', () => {
-		render(<AiActionsSidebar />);
+		render(<AiActionsMenu />);
 
 		expect(screen.getByTestId('quick-actions')).toBeTruthy();
 	});
 
 	it('renders the icon SVG', () => {
-		render(<AiActionsSidebar />);
+		render(<AiActionsMenu />);
 
-		const iconContainer = screen.getByTestId('sidebar-icon');
+		const iconContainer = screen.getByTestId('menu-icon');
 		const svg = iconContainer.querySelector('svg');
 		expect(svg).toBeTruthy();
 	});

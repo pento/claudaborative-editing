@@ -1,15 +1,16 @@
 /**
- * AI Actions sidebar component.
+ * AI Actions dropdown menu.
  *
- * Registers a PluginSidebar panel in the Gutenberg editor containing
- * the MCP connection status and quick action buttons.
+ * Registers a toolbar dropdown in the Gutenberg editor header containing
+ * quick action buttons for AI-assisted editing.
  */
 
 /**
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { PluginSidebar } from '@wordpress/editor';
+import { DropdownMenu } from '@wordpress/components';
+import { PinnedItems } from '@wordpress/interface';
 
 /**
  * Internal dependencies
@@ -17,7 +18,7 @@ import { PluginSidebar } from '@wordpress/editor';
 import QuickActions from '../QuickActions';
 
 /**
- * Custom icon for the AI Actions sidebar.
+ * Custom icon for the AI Actions menu.
  *
  * Document page with a magic wand overlay. The wand tip and sparkle
  * use Claude's brand colour.
@@ -91,18 +92,22 @@ const AiActionsIcon = () => (
 );
 
 /**
- * AiActionsSidebar component.
+ * AiActionsMenu component.
  *
- * @return {import('react').ReactElement} Rendered sidebar.
+ * Renders a dropdown button in the editor toolbar's pinned items area.
+ *
+ * @return {import('react').ReactElement} Rendered dropdown.
  */
-export default function AiActionsSidebar() {
+export default function AiActionsMenu() {
 	return (
-		<PluginSidebar
-			name="claudaborative-editing-ai-actions"
-			title={__('Claudaborative Editing', 'claudaborative-editing')}
-			icon={<AiActionsIcon />}
-		>
-			<QuickActions />
-		</PluginSidebar>
+		<PinnedItems scope="core">
+			<DropdownMenu
+				icon={<AiActionsIcon />}
+				label={__('Claudaborative Editing', 'claudaborative-editing')}
+				popoverProps={{ placement: 'bottom-end' }}
+			>
+				{({ onClose }) => <QuickActions onClose={onClose} />}
+			</DropdownMenu>
+		</PinnedItems>
 	);
 }

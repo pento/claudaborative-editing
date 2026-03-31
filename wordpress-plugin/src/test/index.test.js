@@ -2,8 +2,11 @@ jest.mock('@wordpress/plugins', () => ({
 	registerPlugin: jest.fn(),
 }));
 jest.mock('../store', () => {});
-jest.mock('../editor.css', () => {});
 jest.mock('../components/AiActionsSidebar', () => ({
+	__esModule: true,
+	default: () => null,
+}));
+jest.mock('../components/ConnectionStatus', () => ({
 	__esModule: true,
 	default: () => null,
 }));
@@ -14,9 +17,18 @@ import { registerPlugin } from '@wordpress/plugins';
 import '../index';
 
 describe('AI Actions entry point', () => {
-	it('registers the plugin with correct name', () => {
+	it('registers the actions menu plugin', () => {
 		expect(registerPlugin).toHaveBeenCalledWith(
 			'claudaborative-editing-ai-actions',
+			expect.objectContaining({
+				render: expect.any(Function),
+			})
+		);
+	});
+
+	it('registers the status indicator plugin', () => {
+		expect(registerPlugin).toHaveBeenCalledWith(
+			'claudaborative-editing-status',
 			expect.objectContaining({
 				render: expect.any(Function),
 			})

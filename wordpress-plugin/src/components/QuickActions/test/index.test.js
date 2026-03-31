@@ -6,20 +6,16 @@ jest.mock('@wordpress/data', () => ({
 jest.mock('@wordpress/components', () => {
 	const { createElement } = require('react');
 	return {
-		Button: ({ children, disabled, onClick, ...props }) =>
-			createElement('button', { disabled, onClick, ...props }, children),
-		PanelBody: ({ children }) => createElement('div', null, children),
-		Spinner: () => createElement('div', { 'data-testid': 'spinner' }),
-		Notice: ({ children, isDismissible, onDismiss, ...props }) =>
-			createElement('div', { role: 'alert', ...props }, [
+		MenuGroup: ({ children }) =>
+			createElement('div', { role: 'group' }, children),
+		MenuItem: ({ children, disabled, onClick, info, ...props }) =>
+			createElement(
+				'button',
+				{ role: 'menuitem', disabled, onClick, ...props },
 				children,
-				isDismissible &&
-					createElement(
-						'button',
-						{ key: 'dismiss', onClick: onDismiss },
-						'Dismiss'
-					),
-			]),
+				info && createElement('span', { className: 'info' }, info)
+			),
+		Spinner: () => createElement('div', { 'data-testid': 'spinner' }),
 	};
 });
 
@@ -85,14 +81,23 @@ describe('QuickActions', () => {
 		});
 	});
 
-	it('renders Proofread and Review buttons', () => {
+	it('renders Proofread and Review menu items', () => {
 		render(<QuickActions />);
 
 		expect(screen.getByText('Proofread')).toBeTruthy();
 		expect(screen.getByText('Review')).toBeTruthy();
 	});
 
-	it('buttons disabled when not connected', () => {
+	it('menu items show info descriptions', () => {
+		render(<QuickActions />);
+
+		expect(
+			screen.getByText('Fix grammar, spelling, and punctuation')
+		).toBeTruthy();
+		expect(screen.getByText('Leave editorial notes the post')).toBeTruthy();
+	});
+
+	it('items disabled when not connected', () => {
 		useMcpStatus.mockReturnValue({
 			mcpConnected: false,
 			mcpLastSeenAt: null,
@@ -110,7 +115,7 @@ describe('QuickActions', () => {
 		);
 	});
 
-	it('buttons enabled when connected with no active command', () => {
+	it('items enabled when connected with no active command', () => {
 		render(<QuickActions />);
 
 		expect(screen.getByText('Proofread').closest('button').disabled).toBe(
@@ -166,7 +171,7 @@ describe('QuickActions', () => {
 		expect(screen.getByText('Proofreading\u2026')).toBeTruthy();
 	});
 
-	it('shows cancel button when command is pending', () => {
+	it('shows cancel when command is pending', () => {
 		useCommands.mockReturnValue({
 			activeCommand: {
 				id: 42,
@@ -186,7 +191,7 @@ describe('QuickActions', () => {
 		expect(screen.getByText('Cancel')).toBeTruthy();
 	});
 
-	it('shows cancel button when command is claimed', () => {
+	it('shows cancel when command is claimed', () => {
 		useCommands.mockReturnValue({
 			activeCommand: {
 				id: 42,
@@ -206,7 +211,7 @@ describe('QuickActions', () => {
 		expect(screen.getByText('Cancel')).toBeTruthy();
 	});
 
-	it('does not show cancel button when command is running', () => {
+	it('does not show cancel when command is running', () => {
 		useCommands.mockReturnValue({
 			activeCommand: {
 				id: 42,
@@ -226,20 +231,24 @@ describe('QuickActions', () => {
 		expect(screen.queryByText('Cancel')).toBeNull();
 	});
 
-	it('click Proofread calls submit', () => {
-		render(<QuickActions />);
+	it('click Proofread calls submit and onClose', () => {
+		const onClose = jest.fn();
+		render(<QuickActions onClose={onClose} />);
 
 		fireEvent.click(screen.getByText('Proofread'));
 
 		expect(submit).toHaveBeenCalledWith('proofread');
+		expect(onClose).toHaveBeenCalled();
 	});
 
-	it('click Review calls submit', () => {
-		render(<QuickActions />);
+	it('click Review calls submit and onClose', () => {
+		const onClose = jest.fn();
+		render(<QuickActions onClose={onClose} />);
 
 		fireEvent.click(screen.getByText('Review'));
 
 		expect(submit).toHaveBeenCalledWith('review');
+		expect(onClose).toHaveBeenCalled();
 	});
 
 	it('click Cancel calls cancel with command id', () => {
@@ -264,7 +273,7 @@ describe('QuickActions', () => {
 		expect(cancel).toHaveBeenCalledWith(42);
 	});
 
-	it('shows error notice when error exists', () => {
+	it('shows error message when error exists', () => {
 		useCommands.mockReturnValue({
 			activeCommand: null,
 			isSubmitting: false,
@@ -279,7 +288,7 @@ describe('QuickActions', () => {
 		expect(screen.getByText('Something went wrong')).toBeTruthy();
 	});
 
-	it('buttons disabled when command is active', () => {
+	it('items disabled when command is active', () => {
 		useCommands.mockReturnValue({
 			activeCommand: {
 				id: 42,
@@ -304,7 +313,7 @@ describe('QuickActions', () => {
 		);
 	});
 
-	it('buttons disabled when submitting', () => {
+	it('items disabled when submitting', () => {
 		useCommands.mockReturnValue({
 			activeCommand: null,
 			isSubmitting: true,
@@ -321,7 +330,7 @@ describe('QuickActions', () => {
 		);
 	});
 
-	it('buttons disabled when editing other post', () => {
+	it('items disabled when editing other post', () => {
 		mockUseSelect({
 			'core/editor': {
 				getCurrentPostId: () => 123,
@@ -425,10 +434,9 @@ describe('QuickActions', () => {
 		expect(screen.getByText('Working\u2026')).toBeTruthy();
 	});
 
-	it('shows completion notice when command completes', () => {
+	it('shows completion message when command completes', () => {
 		const { rerender } = render(<QuickActions />);
 
-		// Simulate an active command
 		useCommands.mockReturnValue({
 			activeCommand: {
 				id: 42,
@@ -444,7 +452,6 @@ describe('QuickActions', () => {
 		});
 		rerender(<QuickActions />);
 
-		// Command completes — active becomes null, history gets the result
 		useCommands.mockReturnValue({
 			activeCommand: null,
 			isSubmitting: false,
@@ -466,7 +473,7 @@ describe('QuickActions', () => {
 		expect(screen.getByText('All done!')).toBeTruthy();
 	});
 
-	it('shows failure notice when command fails', () => {
+	it('shows failure message when command fails', () => {
 		const { rerender } = render(<QuickActions />);
 
 		useCommands.mockReturnValue({
@@ -505,50 +512,7 @@ describe('QuickActions', () => {
 		expect(screen.getByText('Command failed.')).toBeTruthy();
 	});
 
-	it('completion notice can be dismissed', () => {
-		const { rerender } = render(<QuickActions />);
-
-		useCommands.mockReturnValue({
-			activeCommand: {
-				id: 42,
-				prompt: 'proofread',
-				status: 'running',
-				post_id: 123,
-			},
-			isSubmitting: false,
-			error: null,
-			history: [],
-			submit,
-			cancel,
-		});
-		rerender(<QuickActions />);
-
-		useCommands.mockReturnValue({
-			activeCommand: null,
-			isSubmitting: false,
-			error: null,
-			history: [
-				{
-					id: 42,
-					prompt: 'proofread',
-					status: 'completed',
-					message: 'Done!',
-					post_id: 123,
-				},
-			],
-			submit,
-			cancel,
-		});
-		rerender(<QuickActions />);
-
-		expect(screen.getByText('Done!')).toBeTruthy();
-
-		fireEvent.click(screen.getByText('Dismiss'));
-
-		expect(screen.queryByText('Done!')).toBeNull();
-	});
-
-	it('auto-dismisses completion notice after timeout', () => {
+	it('auto-dismisses completion message after timeout', () => {
 		jest.useFakeTimers();
 
 		const { rerender } = render(<QuickActions />);
