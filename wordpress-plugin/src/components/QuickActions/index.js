@@ -11,7 +11,6 @@
 import { __ } from '@wordpress/i18n';
 import { MenuGroup, MenuItem } from '@wordpress/components';
 import { useSelect, useDispatch } from '@wordpress/data';
-import { useEffect } from '@wordpress/element';
 
 /**
  * Internal dependencies
@@ -51,33 +50,6 @@ export default function QuickActions({ onClose }) {
 		[]
 	);
 	const { submitCommand } = useDispatch(STORE_NAME);
-
-	const hasNotes = useSelect(
-		(select) => {
-			const notes = select('core').getEntityRecords('root', 'comment', {
-				post: postId,
-				type: 'note',
-				status: 'all',
-				per_page: 1,
-			});
-			return Array.isArray(notes) && notes.length > 0;
-		},
-		[postId]
-	);
-
-	// Notes can be added by collaborators via Yjs, but getEntityRecords
-	// caches the result. Periodically invalidate to re-fetch.
-	const { invalidateResolution } = useDispatch('core');
-	useEffect(() => {
-		const id = window.setInterval(() => {
-			invalidateResolution('getEntityRecords', [
-				'root',
-				'comment',
-				{ post: postId, type: 'note', status: 'all', per_page: 1 },
-			]);
-		}, 10000);
-		return () => window.clearInterval(id);
-	}, [postId, invalidateResolution]);
 
 	const isEditingOtherPost = useSelect(
 		(select) => {
@@ -123,18 +95,6 @@ export default function QuickActions({ onClose }) {
 				>
 					{__('Review', 'claudaborative-editing')}
 				</MenuItem>
-				{hasNotes && (
-					<MenuItem
-						info={__(
-							'Address existing notes with edits and replies',
-							'claudaborative-editing'
-						)}
-						disabled={itemsDisabled}
-						onClick={() => handleSubmit('respond-to-notes')}
-					>
-						{__('Respond to Notes', 'claudaborative-editing')}
-					</MenuItem>
-				)}
 			</MenuGroup>
 
 			{error && (

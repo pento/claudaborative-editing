@@ -119,26 +119,6 @@ describe('QuickActions', () => {
 		);
 	});
 
-	it('Respond to Notes hidden when no notes', () => {
-		render(<QuickActions />);
-
-		expect(screen.queryByText('Respond to Notes')).toBeNull();
-	});
-
-	it('Respond to Notes shown when notes exist', () => {
-		mockUseSelect(
-			defaultStores({
-				core: {
-					getEntityRecords: () => [{ id: 1 }],
-				},
-			})
-		);
-
-		render(<QuickActions />);
-
-		expect(screen.getByText('Respond to Notes')).toBeTruthy();
-	});
-
 	it('click Proofread calls submitCommand and onClose', () => {
 		const onClose = jest.fn();
 		render(<QuickActions onClose={onClose} />);
@@ -239,21 +219,5 @@ describe('QuickActions', () => {
 		expect(screen.getByText('Proofread').closest('button').disabled).toBe(
 			true
 		);
-	});
-
-	it('click Respond to Notes calls submitCommand', () => {
-		mockUseSelect(
-			defaultStores({
-				core: {
-					getEntityRecords: () => [{ id: 1 }],
-				},
-			})
-		);
-
-		render(<QuickActions />);
-
-		fireEvent.click(screen.getByText('Respond to Notes'));
-
-		expect(mockSubmitCommand).toHaveBeenCalledWith('respond-to-notes', 123);
 	});
 });

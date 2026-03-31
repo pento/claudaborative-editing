@@ -1,0 +1,50 @@
+// Override Gutenberg's overflow: hidden and top padding so sticky works
+.editor-collab-sidebar-panel:has(.wpce-notes-respond-all) {
+	overflow: visible;
+	padding-top: 0;
+}
+
+.wpce-notes-respond-all {
+	position: sticky;
+	top: 0;
+	z-index: 10;
+	border-bottom: 1px solid #e0e0e0;
+	background: #fff;
+	// Counteract remaining panel side padding so background fills edge-to-edge
+	margin: 0 -16px;
+	padding: 16px;
+
+	// In floating mode, add a left border to separate from the editor
+	.editor-collab-sidebar & {
+		border-left: 1px solid #e0e0e0;
+	}
+
+	// In full mode, stick below the sidebar header (which is also sticky at top: 0)
+	.interface-complementary-area:not(:has(.editor-collab-sidebar)) & {
+		top: 47px;
+	}
+
+	&__button {
+		width: 100%;
+		justify-content: center;
+		gap: 6px;
+
+		svg {
+			flex-shrink: 0;
+			overflow: visible;
+		}
+	}
+}
+
+.wpce-notes-ask-claude {
+	display: inline-flex;
+
+	&__button.components-button.is-small {
+		min-height: 24px;
+		padding: 0 4px 0 0;
+
+		svg {
+			overflow: visible;
+		}
+	}
+}

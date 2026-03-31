@@ -29,6 +29,7 @@ class REST_Controller extends WP_REST_Controller {
 		'proofread',
 		'review',
 		'respond-to-notes',
+		'respond-to-note',
 		'edit',
 		'translate',
 	];

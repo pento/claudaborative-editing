@@ -20,6 +20,7 @@ import './store';
 
 import AiActionsMenu from './components/AiActionsSidebar';
 import ConnectionStatus from './components/ConnectionStatus';
+import NotesIntegration from './components/NotesIntegration';
 
 registerPlugin('claudaborative-editing-ai-actions', {
 	render: AiActionsMenu,
@@ -27,4 +28,8 @@ registerPlugin('claudaborative-editing-ai-actions', {
 
 registerPlugin('claudaborative-editing-status', {
 	render: ConnectionStatus,
+});
+
+registerPlugin('claudaborative-editing-notes', {
+	render: NotesIntegration,
 });
