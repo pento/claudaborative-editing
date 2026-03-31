@@ -21,7 +21,7 @@ vi.mock('os', () => ({
 }));
 
 const { execSync, execFileSync } = await import('child_process');
-const { existsSync, readFileSync } = await import('fs');
+const { existsSync, readFileSync, writeFileSync } = await import('fs');
 const { homedir, platform } = await import('os');
 
 const { MCP_CLIENTS, detectInstalledClients, SERVER_NAME } =
@@ -31,6 +31,7 @@ const execSyncMock = vi.mocked(execSync);
 const execFileSyncMock = vi.mocked(execFileSync);
 const existsSyncMock = vi.mocked(existsSync);
 const readFileSyncMock = vi.mocked(readFileSync);
+const writeFileSyncMock = vi.mocked(writeFileSync);
 const homedirMock = vi.mocked(homedir);
 const platformMock = vi.mocked(platform);
 
@@ -271,6 +272,27 @@ describe('clients registry', () => {
 				['mcp', 'remove', '--scope', 'user', SERVER_NAME],
 				{ stdio: 'ignore' }
 			);
+		});
+
+		it('removes tool permission from settings.json when present', async () => {
+			execFileSyncMock.mockReturnValue(Buffer.from(''));
+			const permission = `mcp__${SERVER_NAME}__*`;
+			readFileSyncMock.mockReturnValue(
+				JSON.stringify({
+					permissions: { allow: [permission, 'other-perm'] },
+				})
+			);
+
+			const removeCli = MCP_CLIENTS['claude-code'].removeCli;
+			assertDefined(removeCli);
+			await removeCli();
+
+			expect(writeFileSyncMock).toHaveBeenCalled();
+			const writtenJson = JSON.parse(
+				writeFileSyncMock.mock.calls[0][1] as string
+			) as { permissions: { allow: string[] } };
+			expect(writtenJson.permissions.allow).not.toContain(permission);
+			expect(writtenJson.permissions.allow).toContain('other-perm');
 		});
 
 		it('returns false when removal fails', async () => {
