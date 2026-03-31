@@ -87,7 +87,9 @@ describe('QuickActions', () => {
 		expect(
 			screen.getByText('Fix grammar, spelling, and punctuation')
 		).toBeTruthy();
-		expect(screen.getByText('Leave editorial notes the post')).toBeTruthy();
+		expect(
+			screen.getByText('Leave editorial notes on the post')
+		).toBeTruthy();
 	});
 
 	it('items disabled when not connected', () => {

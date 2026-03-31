@@ -87,7 +87,7 @@ export default function QuickActions({ onClose }) {
 				</MenuItem>
 				<MenuItem
 					info={__(
-						'Leave editorial notes the post',
+						'Leave editorial notes on the post',
 						'claudaborative-editing'
 					)}
 					disabled={itemsDisabled}

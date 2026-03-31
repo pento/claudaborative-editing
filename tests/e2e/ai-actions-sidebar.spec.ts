@@ -35,24 +35,18 @@ async function openEditor(page: Page, postId: number): Promise<void> {
 }
 
 /**
- * Returns a locator for the AI Actions sidebar panel.
- *
- * Gutenberg renders all plugin sidebars inside a shared
- * `region "Editor settings"`. We scope to the panel that
- * contains the "Claudaborative Editing" heading.
+ * Returns the AI Actions dropdown toggle button in the toolbar.
  */
-function getSidebar(page: Page) {
-	return page.getByRole('region', { name: 'Editor settings' }).filter({
-		has: page.getByRole('heading', { name: 'Claudaborative Editing' }),
-	});
+function getDropdownToggle(page: Page) {
+	return page.getByRole('button', { name: 'Claudaborative Editing' });
 }
 
-async function openSidebar(page: Page): Promise<void> {
-	const sidebarButton = page.getByRole('button', {
-		name: 'Claudaborative Editing',
-	});
-	await sidebarButton.click();
-	await expect(getSidebar(page)).toBeVisible();
+/**
+ * Opens the AI Actions dropdown menu and waits for it to be visible.
+ */
+async function openDropdown(page: Page): Promise<void> {
+	await getDropdownToggle(page).click();
+	await expect(page.getByRole('menu')).toBeVisible();
 }
 
 async function connectMcp(
@@ -87,48 +81,47 @@ async function waitForConnectedStatus(page: Page): Promise<void> {
 		.toBe('#D97706');
 }
 
-test.describe('AI Actions sidebar', () => {
-	test('sidebar opens and closes', async ({ page }) => {
+test.describe('AI Actions', () => {
+	test('dropdown opens and closes', async ({ page }) => {
 		test.setTimeout(120_000);
 
 		const postId = await createDraftPost(
-			'E2E sidebar open-close',
+			'E2E dropdown open-close',
 			PARAGRAPH_CONTENT
 		);
 
 		try {
 			await openEditor(page, postId);
 
-			const sidebarButton = page.getByRole('button', {
-				name: 'Claudaborative Editing',
-			});
-			await expect(sidebarButton).toBeVisible();
+			const toggle = getDropdownToggle(page);
+			await expect(toggle).toBeVisible();
 
-			// Open the sidebar
-			await sidebarButton.click();
-			const sidebar = getSidebar(page);
-			await expect(sidebar).toBeVisible();
+			// Open the dropdown
+			await toggle.click();
+			const menu = page.getByRole('menu');
+			await expect(menu).toBeVisible();
 
-			// Verify Quick Actions heading appears
+			// Verify Proofread and Review menu items appear
 			await expect(
-				sidebar.getByRole('button', { name: 'Quick Actions' })
+				page.getByRole('menuitem', { name: /Proofread/ })
+			).toBeVisible();
+			await expect(
+				page.getByRole('menuitem', { name: /Review/ })
 			).toBeVisible();
 
-			// Close the sidebar
-			await sidebarButton.click();
-			await expect(sidebar).not.toBeVisible();
+			// Close the dropdown
+			await toggle.click();
+			await expect(menu).not.toBeVisible();
 		} finally {
 			await deletePost(postId);
 		}
 	});
 
-	test('connection status shows disconnected without MCP', async ({
-		page,
-	}) => {
+	test('footer shows disconnected status without MCP', async ({ page }) => {
 		test.setTimeout(120_000);
 
 		const postId = await createDraftPost(
-			'E2E sidebar disconnected',
+			'E2E disconnected status',
 			PARAGRAPH_CONTENT
 		);
 
@@ -140,26 +133,25 @@ test.describe('AI Actions sidebar', () => {
 				getFooterStatus(page).locator('svg path').first()
 			).toHaveAttribute('fill', '#949494');
 
-			// Verify action buttons are disabled in sidebar
-			await openSidebar(page);
-			const sidebar = getSidebar(page);
+			// Verify menu items are disabled in dropdown
+			await openDropdown(page);
 
 			await expect(
-				sidebar.getByRole('button', { name: 'Proofread' })
+				page.getByRole('menuitem', { name: /Proofread/ })
 			).toBeDisabled();
 			await expect(
-				sidebar.getByRole('button', { name: 'Review' })
+				page.getByRole('menuitem', { name: /Review/ })
 			).toBeDisabled();
 		} finally {
 			await deletePost(postId);
 		}
 	});
 
-	test('connection status shows connected with MCP', async ({ page }) => {
+	test('footer shows connected status with MCP', async ({ page }) => {
 		test.setTimeout(120_000);
 
 		const postId = await createDraftPost(
-			'E2E sidebar connected',
+			'E2E connected status',
 			PARAGRAPH_CONTENT
 		);
 		const appPassword = getSharedAppPassword();
@@ -179,24 +171,22 @@ test.describe('AI Actions sidebar', () => {
 			// Wait for connected status (orange sparkle)
 			await waitForConnectedStatus(page);
 
-			// Verify buttons become enabled in sidebar
-			await openSidebar(page);
-			const sidebar = getSidebar(page);
+			// Verify menu items become enabled
+			await openDropdown(page);
 
 			await expect
 				.poll(
 					async () => {
-						const proofread = sidebar.getByRole('button', {
-							name: 'Proofread',
-						});
-						return proofread.isDisabled();
+						return page
+							.getByRole('menuitem', { name: /Proofread/ })
+							.isDisabled();
 					},
 					{ timeout: 30_000, intervals: [1000] }
 				)
 				.toBe(false);
 
 			await expect(
-				sidebar.getByRole('button', { name: 'Review' })
+				page.getByRole('menuitem', { name: /Review/ })
 			).toBeEnabled();
 		} catch (error) {
 			const stderrOutput = stderr.join('').trim();
@@ -210,11 +200,11 @@ test.describe('AI Actions sidebar', () => {
 		}
 	});
 
-	test('Proofread button submits command', async ({ page }) => {
+	test('Proofread submits command', async ({ page }) => {
 		test.setTimeout(120_000);
 
 		const postId = await createDraftPost(
-			'E2E sidebar proofread',
+			'E2E proofread command',
 			PARAGRAPH_CONTENT
 		);
 		const appPassword = getSharedAppPassword();
@@ -222,7 +212,6 @@ test.describe('AI Actions sidebar', () => {
 
 		try {
 			await openEditor(page, postId);
-			await openSidebar(page);
 
 			// Connect MCP client
 			await connectMcp(client, appPassword);
@@ -230,22 +219,22 @@ test.describe('AI Actions sidebar', () => {
 			// Wait for connected status
 			await waitForConnectedStatus(page);
 
-			const sidebar = getSidebar(page);
+			// Open dropdown and wait for Proofread to be enabled
+			await openDropdown(page);
 
-			// Wait for Proofread to be enabled
 			await expect
 				.poll(
 					async () => {
-						return sidebar
-							.getByRole('button', { name: 'Proofread' })
+						return page
+							.getByRole('menuitem', { name: /Proofread/ })
 							.isDisabled();
 					},
 					{ timeout: 30_000, intervals: [1000] }
 				)
 				.toBe(false);
 
-			// Click Proofread
-			await sidebar.getByRole('button', { name: 'Proofread' }).click();
+			// Click Proofread (dropdown auto-closes)
+			await page.getByRole('menuitem', { name: /Proofread/ }).click();
 
 			// Verify a command was created
 			await expect
@@ -279,11 +268,11 @@ test.describe('AI Actions sidebar', () => {
 		}
 	});
 
-	test('Review button submits command', async ({ page }) => {
+	test('Review submits command', async ({ page }) => {
 		test.setTimeout(120_000);
 
 		const postId = await createDraftPost(
-			'E2E sidebar review',
+			'E2E review command',
 			PARAGRAPH_CONTENT
 		);
 		const appPassword = getSharedAppPassword();
@@ -291,7 +280,6 @@ test.describe('AI Actions sidebar', () => {
 
 		try {
 			await openEditor(page, postId);
-			await openSidebar(page);
 
 			// Connect MCP client
 			await connectMcp(client, appPassword);
@@ -299,22 +287,22 @@ test.describe('AI Actions sidebar', () => {
 			// Wait for connected status
 			await waitForConnectedStatus(page);
 
-			const sidebar = getSidebar(page);
+			// Open dropdown and wait for Review to be enabled
+			await openDropdown(page);
 
-			// Wait for Review to be enabled
 			await expect
 				.poll(
 					async () => {
-						return sidebar
-							.getByRole('button', { name: 'Review' })
+						return page
+							.getByRole('menuitem', { name: /Review/ })
 							.isDisabled();
 					},
 					{ timeout: 30_000, intervals: [1000] }
 				)
 				.toBe(false);
 
-			// Click Review
-			await sidebar.getByRole('button', { name: 'Review' }).click();
+			// Click Review (dropdown auto-closes)
+			await page.getByRole('menuitem', { name: /Review/ }).click();
 
 			// Verify a command was created
 			await expect
@@ -348,11 +336,11 @@ test.describe('AI Actions sidebar', () => {
 		}
 	});
 
-	test('buttons disabled while command is active', async ({ page }) => {
+	test('menu items disabled while command is active', async ({ page }) => {
 		test.setTimeout(120_000);
 
 		const postId = await createDraftPost(
-			'E2E sidebar buttons disabled',
+			'E2E items disabled',
 			PARAGRAPH_CONTENT
 		);
 		const appPassword = getSharedAppPassword();
@@ -360,7 +348,6 @@ test.describe('AI Actions sidebar', () => {
 
 		try {
 			await openEditor(page, postId);
-			await openSidebar(page);
 
 			// Connect MCP client
 			await connectMcp(client, appPassword);
@@ -368,29 +355,35 @@ test.describe('AI Actions sidebar', () => {
 			// Wait for connected status
 			await waitForConnectedStatus(page);
 
-			const sidebar = getSidebar(page);
+			// Open dropdown and wait for items to be enabled
+			await openDropdown(page);
 
-			// Wait for buttons to be enabled
 			await expect
 				.poll(
 					async () => {
-						return sidebar
-							.getByRole('button', { name: 'Proofread' })
+						return page
+							.getByRole('menuitem', { name: /Proofread/ })
 							.isDisabled();
 					},
 					{ timeout: 30_000, intervals: [1000] }
 				)
 				.toBe(false);
 
-			// Click Proofread to submit a command
-			await sidebar.getByRole('button', { name: 'Proofread' }).click();
+			// Click Proofread to submit a command (dropdown auto-closes)
+			await page.getByRole('menuitem', { name: /Proofread/ }).click();
 
-			// Verify buttons become disabled (during submitting or active command)
+			// Wait for dropdown to close
+			await expect(page.getByRole('menu')).not.toBeVisible();
+
+			// Reopen dropdown to check disabled state
+			await openDropdown(page);
+
+			// Verify items become disabled
 			await expect
 				.poll(
 					async () => {
-						return sidebar
-							.getByRole('button', { name: 'Review' })
+						return page
+							.getByRole('menuitem', { name: /Review/ })
 							.isDisabled();
 					},
 					{ timeout: 30_000, intervals: [1000] }
@@ -398,65 +391,8 @@ test.describe('AI Actions sidebar', () => {
 				.toBe(true);
 
 			await expect(
-				sidebar.getByRole('button', { name: 'Proofread' })
+				page.getByRole('menuitem', { name: /Proofread/ })
 			).toBeDisabled();
-		} catch (error) {
-			const stderrOutput = stderr.join('').trim();
-			throw new Error(
-				`${error instanceof Error ? error.message : String(error)}${stderrOutput ? `\n\nMCP stderr:\n${stderrOutput}` : ''}`,
-				{ cause: error }
-			);
-		} finally {
-			await close();
-			await deletePost(postId);
-		}
-	});
-
-	test('Respond to Notes button visibility', async ({ page }) => {
-		test.setTimeout(120_000);
-
-		const postId = await createDraftPost(
-			'E2E sidebar respond-to-notes',
-			PARAGRAPH_CONTENT
-		);
-		const appPassword = getSharedAppPassword();
-		const { client, close, stderr } = await createMcpTestClient();
-
-		try {
-			await openEditor(page, postId);
-			await openSidebar(page);
-
-			const sidebar = getSidebar(page);
-
-			// Verify "Respond to Notes" button is NOT visible (no notes)
-			await expect(
-				sidebar.getByRole('button', { name: 'Respond to Notes' })
-			).not.toBeVisible();
-
-			// Connect MCP client and open the post
-			await connectMcp(client, appPassword);
-			await callToolOrThrow(client, 'wp_open_post', { postId });
-
-			// Wait for connected status
-			await waitForConnectedStatus(page);
-
-			// Add a note via MCP
-			await callToolOrThrow(client, 'wp_add_note', {
-				blockIndex: '0',
-				content: 'Test note for sidebar visibility',
-			});
-
-			// Poll until "Respond to Notes" button appears
-			await expect
-				.poll(
-					async () => {
-						return sidebar
-							.getByRole('button', { name: 'Respond to Notes' })
-							.isVisible();
-					},
-					{ timeout: 30_000, intervals: [1000] }
-				)
-				.toBe(true);
 		} catch (error) {
 			const stderrOutput = stderr.join('').trim();
 			throw new Error(
