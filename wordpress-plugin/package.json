@@ -17,8 +17,8 @@
 		"react": "^18.3.1"
 	},
 	"scripts": {
-		"build": "wp-scripts build ai-actions/index=src/ai-actions/index.js",
-		"start": "wp-scripts start ai-actions/index=src/ai-actions/index.js",
+		"build": "wp-scripts build",
+		"start": "wp-scripts start",
 		"pretest:php": "npx wp-env --config .wp-env.test.json start",
 		"test:php": "npx wp-env --config .wp-env.test.json run cli --env-cwd=wp-content/plugins/claudaborative-editing vendor/bin/phpunit",
 		"pretest:php:coverage": "npx wp-env --config .wp-env.test.json start --xdebug=coverage",

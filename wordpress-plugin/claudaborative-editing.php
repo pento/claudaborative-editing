@@ -51,7 +51,7 @@ class Claudaborative_Editing {
 	 * @return void
 	 */
 	public static function enqueue_editor_assets() {
-		$asset_file = __DIR__ . '/build/ai-actions/index.asset.php';
+		$asset_file = __DIR__ . '/build/index.asset.php';
 
 		if ( ! file_exists( $asset_file ) ) {
 			return;
@@ -61,18 +61,18 @@ class Claudaborative_Editing {
 
 		wp_enqueue_script(
 			'claudaborative-editing-ai-actions',
-			plugins_url( 'build/ai-actions/index.js', __FILE__ ),
+			plugins_url( 'build/index.js', __FILE__ ),
 			$asset['dependencies'],
 			$asset['version'],
 			true
 		);
 
-		$style_path = __DIR__ . '/build/ai-actions/style-index.css';
+		$style_path = __DIR__ . '/build/style-index.css';
 
 		if ( file_exists( $style_path ) ) {
 			wp_enqueue_style(
 				'claudaborative-editing-ai-actions',
-				plugins_url( 'build/ai-actions/style-index.css', __FILE__ ),
+				plugins_url( 'build/style-index.css', __FILE__ ),
 				[],
 				$asset['version']
 			);
