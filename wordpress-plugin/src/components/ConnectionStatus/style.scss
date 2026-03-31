@@ -1,33 +1,29 @@
-.wpce-connection-status {
+.wpce-footer-status {
+	position: absolute;
+	right: 8px;
+	top: 0;
+	height: 100%;
 	display: flex;
 	align-items: center;
-	flex-wrap: wrap;
-	gap: 8px;
+	cursor: pointer;
 
-	&__dot {
-		display: inline-block;
-		width: 8px;
-		height: 8px;
-		border-radius: 50%;
-		flex-shrink: 0;
-
-		&--connected {
-			background-color: #00a32a;
-		}
-
-		&--disconnected {
-			background-color: #949494;
-		}
+	svg {
+		display: block;
 	}
+}
 
-	&__text {
-		font-size: 13px;
-		color: #1e1e1e;
+.wpce-footer-status__popover .wpce-footer-status__tooltip {
+	padding: 8px 12px;
+	font-size: 12px;
+	line-height: 1.6;
+	white-space: nowrap;
+}
 
-		&--editing-other {
-			font-size: 12px;
-			color: #757575;
-			font-style: italic;
-		}
-	}
+.wpce-footer-status__title {
+	font-weight: 600;
+	margin-bottom: 2px;
+}
+
+.wpce-footer-status__line {
+	color: #757575;
 }

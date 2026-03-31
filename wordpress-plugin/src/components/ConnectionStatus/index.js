@@ -1,17 +1,18 @@
 /**
  * Connection status component.
  *
- * Displays the current MCP server connection status with a colored
- * indicator dot, and shows which post Claude is editing when active
- * on a different post.
+ * Renders a sparkle icon in the editor footer bar that indicates
+ * MCP connection state. Orange sparkles when connected, grey when
+ * disconnected. Hover tooltip shows detailed status information.
  */
 
 /**
  * WordPress dependencies
  */
 import { __, sprintf } from '@wordpress/i18n';
-import { PanelRow } from '@wordpress/components';
+import { Popover } from '@wordpress/components';
 import { useSelect } from '@wordpress/data';
+import { useState, useEffect, createPortal } from '@wordpress/element';
 
 /**
  * Internal dependencies
@@ -22,9 +23,45 @@ import { STORE_NAME } from '../../store';
 import './style.scss';
 
 /**
+ * Sparkle icon — 3 sparkles matching the sidebar icon.
+ *
+ * @param {Object}  props        Component props.
+ * @param {boolean} props.active Whether to show active (orange) or inactive (grey) colour.
+ * @return {import('react').ReactElement} SVG element.
+ */
+function SparkleIcon({ active }) {
+	const fill = active ? '#D97706' : '#949494';
+
+	return (
+		<svg
+			width="20"
+			height="20"
+			viewBox="6 2 18 16"
+			xmlns="http://www.w3.org/2000/svg"
+		>
+			<path
+				d="M14 4l1.5 4.5 4.5 1.5-4.5 1.5-1.5 4.5-1.5-4.5-4.5-1.5 4.5-1.5z"
+				fill={fill}
+			/>
+			<path
+				d="M20 4l.5 1.5 1.5.5-1.5.5-.5 1.5-.5-1.5-1.5-.5 1.5-.5z"
+				fill={fill}
+			/>
+			<path
+				d="M19.5 11l.4 1.1 1.1.4-1.1.4-.4 1.1-.4-1.1-1.1-.4 1.1-.4z"
+				fill={fill}
+			/>
+		</svg>
+	);
+}
+
+/**
  * ConnectionStatus component.
  *
- * @return {import('react').ReactElement} Rendered component.
+ * Portals into the editor footer and renders a sparkle icon with a
+ * hover popover showing connection details.
+ *
+ * @return {import('react').ReactElement|null} Rendered component or null.
  */
 export default function ConnectionStatus() {
 	const { mcpConnected } = useMcpStatus();
@@ -59,39 +96,84 @@ export default function ConnectionStatus() {
 		[isEditingOtherPost, activeCommand?.post_id]
 	);
 
-	const dotClassName = mcpConnected
-		? 'wpce-connection-status__dot wpce-connection-status__dot--connected'
-		: 'wpce-connection-status__dot wpce-connection-status__dot--disconnected';
+	const [footerEl, setFooterEl] = useState(null);
+	const [showPopover, setShowPopover] = useState(false);
 
-	const statusText = mcpConnected
-		? __('Claude connected', 'claudaborative-editing')
-		: __('Claude not connected', 'claudaborative-editing');
+	useEffect(() => {
+		const footer = document.querySelector(
+			'.interface-interface-skeleton__footer'
+		);
+		if (footer) {
+			setFooterEl(footer);
+		}
+	}, []);
 
-	return (
-		<PanelRow>
-			<div className="wpce-connection-status">
-				<span className={dotClassName} />
-				<span className="wpce-connection-status__text">
-					{statusText}
-				</span>
-				{isEditingOtherPost && (
-					<span className="wpce-connection-status__text wpce-connection-status__text--editing-other">
-						{otherPostTitle
-							? sprintf(
-									/* translators: %s: Title of the post Claude is editing. */
-									__(
-										'Claude is editing %s',
-										'claudaborative-editing'
-									),
-									otherPostTitle
-								)
-							: __(
-									'Claude is editing another post',
-									'claudaborative-editing'
-								)}
-					</span>
-				)}
-			</div>
-		</PanelRow>
+	if (!footerEl) {
+		return null;
+	}
+
+	const statusLines = [];
+
+	statusLines.push(
+		mcpConnected
+			? __('Status: connected', 'claudaborative-editing')
+			: __('Status: disconnected', 'claudaborative-editing')
+	);
+
+	if (mcpConnected) {
+		if (isEditingOtherPost) {
+			statusLines.push(
+				otherPostTitle
+					? sprintf(
+							/* translators: %s: Title of the post Claude is editing. */
+							__('Editing: %s', 'claudaborative-editing'),
+							otherPostTitle
+						)
+					: __('Editing another post', 'claudaborative-editing')
+			);
+		}
+
+		if (activeCommand) {
+			statusLines.push(
+				sprintf(
+					/* translators: %s: Command status string. */
+					__('Command: %s', 'claudaborative-editing'),
+					activeCommand.status
+				)
+			);
+		}
+	}
+
+	return createPortal(
+		<div
+			className="wpce-footer-status"
+			onMouseEnter={() => setShowPopover(true)}
+			onMouseLeave={() => setShowPopover(false)}
+		>
+			<SparkleIcon active={mcpConnected} />
+			{showPopover && (
+				<Popover
+					placement="top-end"
+					noArrow={false}
+					focusOnMount={false}
+					className="wpce-footer-status__popover"
+				>
+					<div className="wpce-footer-status__tooltip">
+						<div className="wpce-footer-status__title">
+							{__(
+								'Claudaborative Editing',
+								'claudaborative-editing'
+							)}
+						</div>
+						{statusLines.map((line, i) => (
+							<div key={i} className="wpce-footer-status__line">
+								{line}
+							</div>
+						))}
+					</div>
+				</Popover>
+			)}
+		</div>,
+		footerEl
 	);
 }

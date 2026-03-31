@@ -42,11 +42,9 @@ async function openEditor(page: Page, postId: number): Promise<void> {
  * contains the "Claudaborative Editing" heading.
  */
 function getSidebar(page: Page) {
-	return page
-		.getByRole('region', { name: 'Editor settings' })
-		.filter({
-			has: page.getByRole('heading', { name: 'Claudaborative Editing' }),
-		});
+	return page.getByRole('region', { name: 'Editor settings' }).filter({
+		has: page.getByRole('heading', { name: 'Claudaborative Editing' }),
+	});
 }
 
 async function openSidebar(page: Page): Promise<void> {
@@ -68,15 +66,25 @@ async function connectMcp(
 	});
 }
 
+/**
+ * Returns the footer status sparkle indicator.
+ */
+function getFooterStatus(page: Page) {
+	return page.locator('.wpce-footer-status');
+}
+
 async function waitForConnectedStatus(page: Page): Promise<void> {
 	await expect
 		.poll(
 			async () => {
-				return getSidebar(page).textContent();
+				return getFooterStatus(page)
+					.locator('svg path')
+					.first()
+					.getAttribute('fill');
 			},
 			{ timeout: 30_000, intervals: [1000] }
 		)
-		.toContain('Claude connected');
+		.toBe('#D97706');
 }
 
 test.describe('AI Actions sidebar', () => {
@@ -126,16 +134,16 @@ test.describe('AI Actions sidebar', () => {
 
 		try {
 			await openEditor(page, postId);
-			await openSidebar(page);
 
+			// Verify footer sparkle is grey (disconnected)
+			await expect(
+				getFooterStatus(page).locator('svg path').first()
+			).toHaveAttribute('fill', '#949494');
+
+			// Verify action buttons are disabled in sidebar
+			await openSidebar(page);
 			const sidebar = getSidebar(page);
 
-			// Verify disconnected status text
-			await expect(
-				sidebar.getByText('Claude not connected')
-			).toBeVisible();
-
-			// Verify action buttons are disabled
 			await expect(
 				sidebar.getByRole('button', { name: 'Proofread' })
 			).toBeDisabled();
@@ -159,22 +167,22 @@ test.describe('AI Actions sidebar', () => {
 
 		try {
 			await openEditor(page, postId);
-			await openSidebar(page);
 
-			const sidebar = getSidebar(page);
-
-			// Initially disconnected
+			// Initially disconnected (grey sparkle)
 			await expect(
-				sidebar.getByText('Claude not connected')
-			).toBeVisible();
+				getFooterStatus(page).locator('svg path').first()
+			).toHaveAttribute('fill', '#949494');
 
 			// Connect MCP client
 			await connectMcp(client, appPassword);
 
-			// Wait for connected status to appear (status polling is 5s)
+			// Wait for connected status (orange sparkle)
 			await waitForConnectedStatus(page);
 
-			// Verify buttons become enabled
+			// Verify buttons become enabled in sidebar
+			await openSidebar(page);
+			const sidebar = getSidebar(page);
+
 			await expect
 				.poll(
 					async () => {

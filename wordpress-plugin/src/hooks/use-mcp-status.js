@@ -33,10 +33,14 @@ const STATUS_POLL_INTERVAL = 5000;
  * @return {Object} Status object with `mcpConnected`, `mcpLastSeenAt`, `isLoading`, and `error` properties.
  */
 export function useMcpStatus() {
-	const { mcpConnected, mcpLastSeenAt, isLoading, error } = useSelect(
-		(select) => select(STORE_NAME).getMcpStatus(),
-		[]
-	);
+	const {
+		mcpConnected,
+		mcpLastSeenAt,
+		version,
+		protocolVersion,
+		isLoading,
+		error,
+	} = useSelect((select) => select(STORE_NAME).getMcpStatus(), []);
 
 	const { refreshStatus } = useDispatch(STORE_NAME);
 
@@ -50,5 +54,12 @@ export function useMcpStatus() {
 		};
 	}, [refreshStatus]);
 
-	return { mcpConnected, mcpLastSeenAt, isLoading, error };
+	return {
+		mcpConnected,
+		mcpLastSeenAt,
+		version,
+		protocolVersion,
+		isLoading,
+		error,
+	};
 }

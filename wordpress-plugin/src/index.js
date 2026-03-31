@@ -1,8 +1,9 @@
 /**
  * AI Actions editor plugin.
  *
- * Registers a Gutenberg sidebar panel with MCP connection status
- * and quick action buttons for AI-assisted editing.
+ * Registers a Gutenberg sidebar panel with quick action buttons for
+ * AI-assisted editing, and a footer status indicator showing MCP
+ * connection state.
  */
 
 /**
@@ -18,7 +19,12 @@ import { registerPlugin } from '@wordpress/plugins';
 import './store';
 
 import AiActionsSidebar from './components/AiActionsSidebar';
+import ConnectionStatus from './components/ConnectionStatus';
 
 registerPlugin('claudaborative-editing-ai-actions', {
 	render: AiActionsSidebar,
+});
+
+registerPlugin('claudaborative-editing-status', {
+	render: ConnectionStatus,
 });

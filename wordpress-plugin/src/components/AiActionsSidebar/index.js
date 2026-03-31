@@ -10,12 +10,10 @@
  */
 import { __ } from '@wordpress/i18n';
 import { PluginSidebar } from '@wordpress/editor';
-import { PanelBody } from '@wordpress/components';
 
 /**
  * Internal dependencies
  */
-import ConnectionStatus from '../ConnectionStatus';
 import QuickActions from '../QuickActions';
 
 /**
@@ -101,12 +99,9 @@ export default function AiActionsSidebar() {
 	return (
 		<PluginSidebar
 			name="claudaborative-editing-ai-actions"
-			title={__('AI Actions', 'claudaborative-editing')}
+			title={__('Claudaborative Editing', 'claudaborative-editing')}
 			icon={<AiActionsIcon />}
 		>
-			<PanelBody>
-				<ConnectionStatus />
-			</PanelBody>
 			<QuickActions />
 		</PluginSidebar>
 	);

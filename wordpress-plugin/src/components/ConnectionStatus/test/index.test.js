@@ -2,9 +2,17 @@ jest.mock('@wordpress/data', () => ({
 	useSelect: jest.fn(),
 }));
 
-jest.mock('@wordpress/components', () => ({
-	PanelRow: ({ children }) => <div>{children}</div>,
-}));
+jest.mock('@wordpress/components', () => {
+	const { createElement } = require('react');
+	return {
+		Popover: ({ children, className }) =>
+			createElement(
+				'div',
+				{ 'data-testid': 'popover', className },
+				children
+			),
+	};
+});
 
 jest.mock('../../../hooks/use-mcp-status', () => ({
 	useMcpStatus: jest.fn(),
@@ -12,7 +20,7 @@ jest.mock('../../../hooks/use-mcp-status', () => ({
 
 jest.mock('../../../store', () => ({ STORE_NAME: 'wpce/ai-actions' }));
 
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { useSelect } from '@wordpress/data';
 import { useMcpStatus } from '../../../hooks/use-mcp-status';
 import ConnectionStatus from '..';
@@ -25,8 +33,15 @@ function mockUseSelect(stores) {
 }
 
 describe('ConnectionStatus', () => {
+	let footerEl;
+
 	beforeEach(() => {
 		jest.clearAllMocks();
+
+		// Create a mock footer element for the portal
+		footerEl = document.createElement('div');
+		footerEl.className = 'interface-interface-skeleton__footer';
+		document.body.appendChild(footerEl);
 
 		useMcpStatus.mockReturnValue({
 			mcpConnected: false,
@@ -48,13 +63,27 @@ describe('ConnectionStatus', () => {
 		});
 	});
 
-	it('shows "Claude not connected" when disconnected', () => {
-		render(<ConnectionStatus />);
-
-		expect(screen.getByText('Claude not connected')).toBeTruthy();
+	afterEach(() => {
+		document.body.removeChild(footerEl);
 	});
 
-	it('shows "Claude connected" when connected', () => {
+	it('renders sparkle icon into the footer', () => {
+		render(<ConnectionStatus />);
+
+		const svg = footerEl.querySelector('svg');
+		expect(svg).toBeTruthy();
+	});
+
+	it('renders grey sparkles when disconnected', () => {
+		render(<ConnectionStatus />);
+
+		const paths = footerEl.querySelectorAll('svg path');
+		for (const path of paths) {
+			expect(path.getAttribute('fill')).toBe('#949494');
+		}
+	});
+
+	it('renders orange sparkles when connected', () => {
 		useMcpStatus.mockReturnValue({
 			mcpConnected: true,
 			mcpLastSeenAt: '2026-03-30T12:00:00Z',
@@ -64,10 +93,23 @@ describe('ConnectionStatus', () => {
 
 		render(<ConnectionStatus />);
 
-		expect(screen.getByText('Claude connected')).toBeTruthy();
+		const paths = footerEl.querySelectorAll('svg path');
+		for (const path of paths) {
+			expect(path.getAttribute('fill')).toBe('#D97706');
+		}
 	});
 
-	it('shows "Claude is editing another post" when editing other post', () => {
+	it('shows popover with "Status: disconnected" on hover', () => {
+		render(<ConnectionStatus />);
+
+		const statusEl = footerEl.querySelector('.wpce-footer-status');
+		fireEvent.mouseEnter(statusEl);
+
+		expect(screen.getByText('Status: disconnected')).toBeTruthy();
+		expect(screen.getByText('Claudaborative Editing')).toBeTruthy();
+	});
+
+	it('shows popover with "Status: connected" on hover when connected', () => {
 		useMcpStatus.mockReturnValue({
 			mcpConnected: true,
 			mcpLastSeenAt: '2026-03-30T12:00:00Z',
@@ -75,28 +117,26 @@ describe('ConnectionStatus', () => {
 			error: null,
 		});
 
-		mockUseSelect({
-			'wpce/ai-actions': {
-				getActiveCommand: () => ({
-					id: 1,
-					post_id: 999,
-					status: 'running',
-				}),
-			},
-			'core/editor': {
-				getCurrentPostId: () => 100,
-			},
-			core: {
-				getEntityRecord: () => null,
-			},
-		});
-
 		render(<ConnectionStatus />);
 
-		expect(screen.getByText('Claude is editing another post')).toBeTruthy();
+		const statusEl = footerEl.querySelector('.wpce-footer-status');
+		fireEvent.mouseEnter(statusEl);
+
+		expect(screen.getByText('Status: connected')).toBeTruthy();
 	});
 
-	it('shows post title when available for other post', () => {
+	it('hides popover on mouse leave', () => {
+		render(<ConnectionStatus />);
+
+		const statusEl = footerEl.querySelector('.wpce-footer-status');
+		fireEvent.mouseEnter(statusEl);
+		expect(screen.getByText('Status: disconnected')).toBeTruthy();
+
+		fireEvent.mouseLeave(statusEl);
+		expect(screen.queryByText('Status: disconnected')).toBeNull();
+	});
+
+	it('shows editing-other-post info in popover', () => {
 		useMcpStatus.mockReturnValue({
 			mcpConnected: true,
 			mcpLastSeenAt: '2026-03-30T12:00:00Z',
@@ -124,38 +164,19 @@ describe('ConnectionStatus', () => {
 
 		render(<ConnectionStatus />);
 
-		expect(
-			screen.getByText('Claude is editing My Other Post')
-		).toBeTruthy();
+		const statusEl = footerEl.querySelector('.wpce-footer-status');
+		fireEvent.mouseEnter(statusEl);
+
+		expect(screen.getByText('Editing: My Other Post')).toBeTruthy();
 	});
 
-	it('does not show other post message when editing same post', () => {
-		useMcpStatus.mockReturnValue({
-			mcpConnected: true,
-			mcpLastSeenAt: '2026-03-30T12:00:00Z',
-			isLoading: false,
-			error: null,
-		});
+	it('returns null when footer element is not found', () => {
+		document.body.removeChild(footerEl);
 
-		mockUseSelect({
-			'wpce/ai-actions': {
-				getActiveCommand: () => ({
-					id: 1,
-					post_id: 100,
-					status: 'running',
-				}),
-			},
-			'core/editor': {
-				getCurrentPostId: () => 100,
-			},
-			core: {
-				getEntityRecord: () => null,
-			},
-		});
+		const { container } = render(<ConnectionStatus />);
+		expect(container.innerHTML).toBe('');
 
-		render(<ConnectionStatus />);
-
-		expect(screen.getByText('Claude connected')).toBeTruthy();
-		expect(screen.queryByText('Claude is editing another post')).toBeNull();
+		// Re-add so afterEach cleanup doesn't fail
+		document.body.appendChild(footerEl);
 	});
 });

@@ -7,16 +7,6 @@ jest.mock('@wordpress/editor', () => ({
 	),
 }));
 
-jest.mock('@wordpress/components', () => ({
-	PanelBody: ({ children }) => <div>{children}</div>,
-}));
-
-jest.mock('../../ConnectionStatus', () => {
-	const Component = () => <div data-testid="connection-status" />;
-	Component.displayName = 'ConnectionStatus';
-	return { __esModule: true, default: Component };
-});
-
 jest.mock('../../QuickActions', () => {
 	const Component = () => <div data-testid="quick-actions" />;
 	Component.displayName = 'QuickActions';
@@ -46,12 +36,6 @@ describe('AiActionsSidebar', () => {
 
 		const sidebar = screen.getByTestId('plugin-sidebar');
 		expect(sidebar.getAttribute('title')).toBe('Claudaborative Editing');
-	});
-
-	it('contains ConnectionStatus component', () => {
-		render(<AiActionsSidebar />);
-
-		expect(screen.getByTestId('connection-status')).toBeTruthy();
 	});
 
 	it('contains QuickActions component', () => {
