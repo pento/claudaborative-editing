@@ -10,7 +10,15 @@ jest.mock('@wordpress/components', () => {
 		PanelBody: ({ children }) => createElement('div', null, children),
 		Spinner: () => createElement('div', { 'data-testid': 'spinner' }),
 		Notice: ({ children, isDismissible, onDismiss, ...props }) =>
-			createElement('div', { role: 'alert', ...props }, children),
+			createElement('div', { role: 'alert', ...props }, [
+				children,
+				isDismissible &&
+					createElement(
+						'button',
+						{ key: 'dismiss', onClick: onDismiss },
+						'Dismiss'
+					),
+			]),
 	};
 });
 
@@ -24,7 +32,7 @@ jest.mock('../../hooks/use-commands', () => ({
 
 jest.mock('../../store', () => ({ STORE_NAME: 'wpce/ai-actions' }));
 
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { useSelect } from '@wordpress/data';
 import { useMcpStatus } from '../../hooks/use-mcp-status';
 import { useCommands } from '../../hooks/use-commands';
@@ -334,5 +342,257 @@ describe('QuickActions', () => {
 		expect(screen.getByText('Proofread').closest('button').disabled).toBe(
 			true
 		);
+	});
+
+	it('click Respond to Notes calls submit', () => {
+		mockUseSelect({
+			'core/editor': {
+				getCurrentPostId: () => 123,
+			},
+			core: {
+				getEntityRecords: () => [{ id: 1 }],
+			},
+			'wpce/ai-actions': {
+				getActiveCommand: () => null,
+			},
+		});
+
+		render(<QuickActions />);
+
+		fireEvent.click(screen.getByText('Respond to Notes'));
+
+		expect(submit).toHaveBeenCalledWith('respond-to-notes');
+	});
+
+	it('shows status label for review prompt', () => {
+		useCommands.mockReturnValue({
+			activeCommand: {
+				id: 42,
+				prompt: 'review',
+				status: 'running',
+				post_id: 123,
+			},
+			isSubmitting: false,
+			error: null,
+			history: [],
+			submit,
+			cancel,
+		});
+
+		render(<QuickActions />);
+
+		expect(screen.getByText('Reviewing\u2026')).toBeTruthy();
+	});
+
+	it('shows status label for respond-to-notes prompt', () => {
+		useCommands.mockReturnValue({
+			activeCommand: {
+				id: 42,
+				prompt: 'respond-to-notes',
+				status: 'running',
+				post_id: 123,
+			},
+			isSubmitting: false,
+			error: null,
+			history: [],
+			submit,
+			cancel,
+		});
+
+		render(<QuickActions />);
+
+		expect(screen.getByText('Responding to notes\u2026')).toBeTruthy();
+	});
+
+	it('shows generic status label for unknown prompt', () => {
+		useCommands.mockReturnValue({
+			activeCommand: {
+				id: 42,
+				prompt: 'translate',
+				status: 'running',
+				post_id: 123,
+			},
+			isSubmitting: false,
+			error: null,
+			history: [],
+			submit,
+			cancel,
+		});
+
+		render(<QuickActions />);
+
+		expect(screen.getByText('Working\u2026')).toBeTruthy();
+	});
+
+	it('shows completion notice when command completes', () => {
+		const { rerender } = render(<QuickActions />);
+
+		// Simulate an active command
+		useCommands.mockReturnValue({
+			activeCommand: {
+				id: 42,
+				prompt: 'proofread',
+				status: 'running',
+				post_id: 123,
+			},
+			isSubmitting: false,
+			error: null,
+			history: [],
+			submit,
+			cancel,
+		});
+		rerender(<QuickActions />);
+
+		// Command completes — active becomes null, history gets the result
+		useCommands.mockReturnValue({
+			activeCommand: null,
+			isSubmitting: false,
+			error: null,
+			history: [
+				{
+					id: 42,
+					prompt: 'proofread',
+					status: 'completed',
+					message: 'All done!',
+					post_id: 123,
+				},
+			],
+			submit,
+			cancel,
+		});
+		rerender(<QuickActions />);
+
+		expect(screen.getByText('All done!')).toBeTruthy();
+	});
+
+	it('shows failure notice when command fails', () => {
+		const { rerender } = render(<QuickActions />);
+
+		useCommands.mockReturnValue({
+			activeCommand: {
+				id: 42,
+				prompt: 'proofread',
+				status: 'running',
+				post_id: 123,
+			},
+			isSubmitting: false,
+			error: null,
+			history: [],
+			submit,
+			cancel,
+		});
+		rerender(<QuickActions />);
+
+		useCommands.mockReturnValue({
+			activeCommand: null,
+			isSubmitting: false,
+			error: null,
+			history: [
+				{
+					id: 42,
+					prompt: 'proofread',
+					status: 'failed',
+					message: null,
+					post_id: 123,
+				},
+			],
+			submit,
+			cancel,
+		});
+		rerender(<QuickActions />);
+
+		expect(screen.getByText('Command failed.')).toBeTruthy();
+	});
+
+	it('completion notice can be dismissed', () => {
+		const { rerender } = render(<QuickActions />);
+
+		useCommands.mockReturnValue({
+			activeCommand: {
+				id: 42,
+				prompt: 'proofread',
+				status: 'running',
+				post_id: 123,
+			},
+			isSubmitting: false,
+			error: null,
+			history: [],
+			submit,
+			cancel,
+		});
+		rerender(<QuickActions />);
+
+		useCommands.mockReturnValue({
+			activeCommand: null,
+			isSubmitting: false,
+			error: null,
+			history: [
+				{
+					id: 42,
+					prompt: 'proofread',
+					status: 'completed',
+					message: 'Done!',
+					post_id: 123,
+				},
+			],
+			submit,
+			cancel,
+		});
+		rerender(<QuickActions />);
+
+		expect(screen.getByText('Done!')).toBeTruthy();
+
+		fireEvent.click(screen.getByText('Dismiss'));
+
+		expect(screen.queryByText('Done!')).toBeNull();
+	});
+
+	it('auto-dismisses completion notice after timeout', () => {
+		jest.useFakeTimers();
+
+		const { rerender } = render(<QuickActions />);
+
+		useCommands.mockReturnValue({
+			activeCommand: {
+				id: 42,
+				prompt: 'proofread',
+				status: 'running',
+				post_id: 123,
+			},
+			isSubmitting: false,
+			error: null,
+			history: [],
+			submit,
+			cancel,
+		});
+		rerender(<QuickActions />);
+
+		useCommands.mockReturnValue({
+			activeCommand: null,
+			isSubmitting: false,
+			error: null,
+			history: [
+				{
+					id: 42,
+					prompt: 'proofread',
+					status: 'completed',
+					message: 'Done!',
+					post_id: 123,
+				},
+			],
+			submit,
+			cancel,
+		});
+		rerender(<QuickActions />);
+
+		expect(screen.getByText('Done!')).toBeTruthy();
+
+		act(() => {
+			jest.advanceTimersByTime(5000);
+		});
+
+		expect(screen.queryByText('Done!')).toBeNull();
+
+		jest.useRealTimers();
 	});
 });

@@ -1,6 +1,7 @@
 jest.mock('@wordpress/editor', () => ({
-	PluginSidebar: ({ children, ...props }) => (
+	PluginSidebar: ({ children, icon, ...props }) => (
 		<div data-testid="plugin-sidebar" {...props}>
+			<span data-testid="sidebar-icon">{icon}</span>
 			{children}
 		</div>
 	),
@@ -57,5 +58,13 @@ describe('AiActionsSidebar', () => {
 		render(<AiActionsSidebar />);
 
 		expect(screen.getByTestId('quick-actions')).toBeTruthy();
+	});
+
+	it('renders the icon SVG', () => {
+		render(<AiActionsSidebar />);
+
+		const iconContainer = screen.getByTestId('sidebar-icon');
+		const svg = iconContainer.querySelector('svg');
+		expect(svg).toBeTruthy();
 	});
 });
