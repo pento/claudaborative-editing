@@ -100,12 +100,22 @@ export default function ConnectionStatus() {
 	const [showPopover, setShowPopover] = useState(false);
 
 	useEffect(() => {
-		const footer = document.querySelector(
-			'.interface-interface-skeleton__footer'
-		);
-		if (footer) {
-			setFooterEl(footer);
-		}
+		// Check for the footer element immediately, then observe the DOM
+		// for it appearing/disappearing (e.g., distraction-free mode,
+		// screen resizing).
+		const selector = '.interface-interface-skeleton__footer';
+
+		const check = () => {
+			const el = document.querySelector(selector);
+			setFooterEl(el || null);
+		};
+
+		check();
+
+		const observer = new window.MutationObserver(check);
+		observer.observe(document.body, { childList: true, subtree: true });
+
+		return () => observer.disconnect();
 	}, []);
 
 	if (!footerEl) {

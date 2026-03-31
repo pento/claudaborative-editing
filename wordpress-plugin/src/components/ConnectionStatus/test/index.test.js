@@ -20,10 +20,17 @@ jest.mock('../../../hooks/use-mcp-status', () => ({
 
 jest.mock('../../../store', () => ({ STORE_NAME: 'wpce/ai-actions' }));
 
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { useSelect } from '@wordpress/data';
 import { useMcpStatus } from '../../../hooks/use-mcp-status';
 import ConnectionStatus from '..';
+
+// MutationObserver stub for jsdom — no-op, footer element is
+// already present before render so the initial check() finds it.
+global.MutationObserver = class {
+	observe() {}
+	disconnect() {}
+};
 
 function mockUseSelect(stores) {
 	useSelect.mockImplementation((selector) => {
@@ -67,15 +74,15 @@ describe('ConnectionStatus', () => {
 		document.body.removeChild(footerEl);
 	});
 
-	it('renders sparkle icon into the footer', () => {
-		render(<ConnectionStatus />);
+	it('renders sparkle icon into the footer', async () => {
+		await act(async () => render(<ConnectionStatus />));
 
 		const svg = footerEl.querySelector('svg');
 		expect(svg).toBeTruthy();
 	});
 
-	it('renders grey sparkles when disconnected', () => {
-		render(<ConnectionStatus />);
+	it('renders grey sparkles when disconnected', async () => {
+		await act(async () => render(<ConnectionStatus />));
 
 		const paths = footerEl.querySelectorAll('svg path');
 		for (const path of paths) {
@@ -83,7 +90,7 @@ describe('ConnectionStatus', () => {
 		}
 	});
 
-	it('renders orange sparkles when connected', () => {
+	it('renders orange sparkles when connected', async () => {
 		useMcpStatus.mockReturnValue({
 			mcpConnected: true,
 			mcpLastSeenAt: '2026-03-30T12:00:00Z',
@@ -91,7 +98,7 @@ describe('ConnectionStatus', () => {
 			error: null,
 		});
 
-		render(<ConnectionStatus />);
+		await act(async () => render(<ConnectionStatus />));
 
 		const paths = footerEl.querySelectorAll('svg path');
 		for (const path of paths) {
@@ -99,17 +106,17 @@ describe('ConnectionStatus', () => {
 		}
 	});
 
-	it('shows popover with "Status: disconnected" on hover', () => {
-		render(<ConnectionStatus />);
+	it('shows popover with "Status: disconnected" on hover', async () => {
+		await act(async () => render(<ConnectionStatus />));
 
 		const statusEl = footerEl.querySelector('.wpce-footer-status');
-		fireEvent.mouseEnter(statusEl);
+		await act(async () => fireEvent.mouseEnter(statusEl));
 
 		expect(screen.getByText('Status: disconnected')).toBeTruthy();
 		expect(screen.getByText('Claudaborative Editing')).toBeTruthy();
 	});
 
-	it('shows popover with "Status: connected" on hover when connected', () => {
+	it('shows popover with "Status: connected" on hover when connected', async () => {
 		useMcpStatus.mockReturnValue({
 			mcpConnected: true,
 			mcpLastSeenAt: '2026-03-30T12:00:00Z',
@@ -117,26 +124,26 @@ describe('ConnectionStatus', () => {
 			error: null,
 		});
 
-		render(<ConnectionStatus />);
+		await act(async () => render(<ConnectionStatus />));
 
 		const statusEl = footerEl.querySelector('.wpce-footer-status');
-		fireEvent.mouseEnter(statusEl);
+		await act(async () => fireEvent.mouseEnter(statusEl));
 
 		expect(screen.getByText('Status: connected')).toBeTruthy();
 	});
 
-	it('hides popover on mouse leave', () => {
-		render(<ConnectionStatus />);
+	it('hides popover on mouse leave', async () => {
+		await act(async () => render(<ConnectionStatus />));
 
 		const statusEl = footerEl.querySelector('.wpce-footer-status');
-		fireEvent.mouseEnter(statusEl);
+		await act(async () => fireEvent.mouseEnter(statusEl));
 		expect(screen.getByText('Status: disconnected')).toBeTruthy();
 
-		fireEvent.mouseLeave(statusEl);
+		await act(async () => fireEvent.mouseLeave(statusEl));
 		expect(screen.queryByText('Status: disconnected')).toBeNull();
 	});
 
-	it('shows editing-other-post info in popover', () => {
+	it('shows editing-other-post info in popover', async () => {
 		useMcpStatus.mockReturnValue({
 			mcpConnected: true,
 			mcpLastSeenAt: '2026-03-30T12:00:00Z',
@@ -162,15 +169,15 @@ describe('ConnectionStatus', () => {
 			},
 		});
 
-		render(<ConnectionStatus />);
+		await act(async () => render(<ConnectionStatus />));
 
 		const statusEl = footerEl.querySelector('.wpce-footer-status');
-		fireEvent.mouseEnter(statusEl);
+		await act(async () => fireEvent.mouseEnter(statusEl));
 
 		expect(screen.getByText('Editing: My Other Post')).toBeTruthy();
 	});
 
-	it('returns null when footer element is not found', () => {
+	it('returns null when footer element is not found', async () => {
 		document.body.removeChild(footerEl);
 
 		const { container } = render(<ConnectionStatus />);
