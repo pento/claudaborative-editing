@@ -11,7 +11,7 @@
 import { __ } from '@wordpress/i18n';
 import { MenuGroup, MenuItem, Spinner } from '@wordpress/components';
 import { useSelect, useDispatch } from '@wordpress/data';
-import { useState, useEffect, useCallback, useRef } from '@wordpress/element';
+import { useEffect, useRef } from '@wordpress/element';
 
 /**
  * Internal dependencies
@@ -100,47 +100,34 @@ export default function QuickActions({ onClose }) {
 		activeCommand !== null ||
 		isEditingOtherPost;
 
-	const [completedMessage, setCompletedMessage] = useState(null);
 	const prevActiveRef = useRef(activeCommand);
-	const dismissTimerRef = useRef(null);
-
-	const clearMessage = useCallback(() => {
-		setCompletedMessage(null);
-		if (dismissTimerRef.current) {
-			window.clearTimeout(dismissTimerRef.current);
-			dismissTimerRef.current = null;
-		}
-	}, []);
+	const { createNotice } = useDispatch('core/notices');
 
 	useEffect(() => {
 		const wasActive = prevActiveRef.current;
 		prevActiveRef.current = activeCommand;
 
 		// When activeCommand transitions from non-null to null, check history
-		// for the completed/failed entry.
+		// for the completed/failed entry and show a snackbar toast.
 		if (wasActive && activeCommand === null && history.length > 0) {
 			const latest = history[0];
 
-			if (latest.status === 'completed' || latest.status === 'failed') {
-				setCompletedMessage({
-					status: latest.status === 'completed' ? 'success' : 'error',
-					text:
-						latest.message ||
-						(latest.status === 'completed'
-							? __('Done!', 'claudaborative-editing')
-							: __('Command failed.', 'claudaborative-editing')),
-				});
-
-				dismissTimerRef.current = window.setTimeout(clearMessage, 5000);
+			if (latest.status === 'completed') {
+				createNotice(
+					'success',
+					latest.message || __('Done!', 'claudaborative-editing'),
+					{ type: 'snackbar' }
+				);
+			} else if (latest.status === 'failed') {
+				createNotice(
+					'error',
+					latest.message ||
+						__('Command failed.', 'claudaborative-editing'),
+					{ type: 'snackbar' }
+				);
 			}
 		}
-
-		return () => {
-			if (dismissTimerRef.current) {
-				window.clearTimeout(dismissTimerRef.current);
-			}
-		};
-	}, [activeCommand, history, clearMessage]);
+	}, [activeCommand, history, createNotice]);
 
 	const isCancellable =
 		activeCommand &&
@@ -212,16 +199,6 @@ export default function QuickActions({ onClose }) {
 				<MenuGroup>
 					<div className="wpce-command-notice wpce-command-notice--error">
 						{error}
-					</div>
-				</MenuGroup>
-			)}
-
-			{completedMessage && (
-				<MenuGroup>
-					<div
-						className={`wpce-command-notice wpce-command-notice--${completedMessage.status}`}
-					>
-						{completedMessage.text}
 					</div>
 				</MenuGroup>
 			)}

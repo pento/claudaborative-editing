@@ -1,6 +1,13 @@
+const mockCreateNotice = jest.fn();
+
 jest.mock('@wordpress/data', () => ({
 	useSelect: jest.fn(),
-	useDispatch: jest.fn(() => ({ invalidateResolution: jest.fn() })),
+	useDispatch: jest.fn((storeName) => {
+		if (storeName === 'core/notices') {
+			return { createNotice: mockCreateNotice };
+		}
+		return { invalidateResolution: jest.fn() };
+	}),
 }));
 
 jest.mock('@wordpress/components', () => {
@@ -29,7 +36,7 @@ jest.mock('../../../hooks/use-commands', () => ({
 
 jest.mock('../../../store', () => ({ STORE_NAME: 'wpce/ai-actions' }));
 
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { useSelect } from '@wordpress/data';
 import { useMcpStatus } from '../../../hooks/use-mcp-status';
 import { useCommands } from '../../../hooks/use-commands';
@@ -434,7 +441,7 @@ describe('QuickActions', () => {
 		expect(screen.getByText('Working\u2026')).toBeTruthy();
 	});
 
-	it('shows completion message when command completes', () => {
+	it('shows success snackbar when command completes', () => {
 		const { rerender } = render(<QuickActions />);
 
 		useCommands.mockReturnValue({
@@ -470,10 +477,12 @@ describe('QuickActions', () => {
 		});
 		rerender(<QuickActions />);
 
-		expect(screen.getByText('All done!')).toBeTruthy();
+		expect(mockCreateNotice).toHaveBeenCalledWith('success', 'All done!', {
+			type: 'snackbar',
+		});
 	});
 
-	it('shows failure message when command fails', () => {
+	it('shows error snackbar when command fails', () => {
 		const { rerender } = render(<QuickActions />);
 
 		useCommands.mockReturnValue({
@@ -509,55 +518,10 @@ describe('QuickActions', () => {
 		});
 		rerender(<QuickActions />);
 
-		expect(screen.getByText('Command failed.')).toBeTruthy();
-	});
-
-	it('auto-dismisses completion message after timeout', () => {
-		jest.useFakeTimers();
-
-		const { rerender } = render(<QuickActions />);
-
-		useCommands.mockReturnValue({
-			activeCommand: {
-				id: 42,
-				prompt: 'proofread',
-				status: 'running',
-				post_id: 123,
-			},
-			isSubmitting: false,
-			error: null,
-			history: [],
-			submit,
-			cancel,
-		});
-		rerender(<QuickActions />);
-
-		useCommands.mockReturnValue({
-			activeCommand: null,
-			isSubmitting: false,
-			error: null,
-			history: [
-				{
-					id: 42,
-					prompt: 'proofread',
-					status: 'completed',
-					message: 'Done!',
-					post_id: 123,
-				},
-			],
-			submit,
-			cancel,
-		});
-		rerender(<QuickActions />);
-
-		expect(screen.getByText('Done!')).toBeTruthy();
-
-		act(() => {
-			jest.advanceTimersByTime(5000);
-		});
-
-		expect(screen.queryByText('Done!')).toBeNull();
-
-		jest.useRealTimers();
+		expect(mockCreateNotice).toHaveBeenCalledWith(
+			'error',
+			'Command failed.',
+			{ type: 'snackbar' }
+		);
 	});
 });
