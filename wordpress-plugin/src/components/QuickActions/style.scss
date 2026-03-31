@@ -5,8 +5,8 @@
 .wpce-command-notice {
 	padding: 6px 12px;
 	font-size: 13px;
+}
 
-	&--error {
-		color: #cc1818;
-	}
+.wpce-command-notice-error {
+	color: #cc1818;
 }

@@ -99,7 +99,7 @@ export default function QuickActions({ onClose }) {
 
 			{error && (
 				<MenuGroup>
-					<div className="wpce-command-notice wpce-command-notice--error">
+					<div className="wpce-command-notice wpce-command-notice-error">
 						{error}
 					</div>
 				</MenuGroup>

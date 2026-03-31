@@ -35,8 +35,8 @@
 	"scripts": {
 		"build": "tsup",
 		"dev": "tsup --watch",
-		"lint": "ESLINT_USE_FLAT_CONFIG=true eslint --max-warnings 0 . && markdownlint-cli2 && prettier --check -u .",
-		"lint:fix": "ESLINT_USE_FLAT_CONFIG=true eslint --fix --max-warnings 0 . && markdownlint-cli2 --fix && prettier --write -u .",
+		"lint": "ESLINT_USE_FLAT_CONFIG=true eslint --max-warnings 0 . && npm --prefix wordpress-plugin run lint:style && markdownlint-cli2 && prettier --check -u .",
+		"lint:fix": "ESLINT_USE_FLAT_CONFIG=true eslint --fix --max-warnings 0 . && npm --prefix wordpress-plugin run lint:style:fix && markdownlint-cli2 --fix && prettier --write -u .",
 		"prepare": "husky",
 		"prepublishOnly": "npm run typecheck && npm run lint && npm test && npm run build",
 		"start": "node dist/index.js",
@@ -57,6 +57,7 @@
 		"*.{ts,js,md,json,jsonc}": "prettier --write",
 		"*.{ts,js}": "env ESLINT_USE_FLAT_CONFIG=true eslint --max-warnings 0 --no-warn-ignored",
 		"*.md": "markdownlint-cli2",
+		"wordpress-plugin/src/**/*.scss": "npm --prefix wordpress-plugin run lint:style:fix",
 		"wordpress-plugin/**/*.php": [
 			"bash -c 'cd wordpress-plugin && (vendor/bin/phpcbf --no-cache || test $? -eq 1)'",
 			"bash -c 'cd wordpress-plugin && vendor/bin/phpstan analyse --no-progress --memory-limit=512M'"

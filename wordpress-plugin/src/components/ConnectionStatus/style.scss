@@ -13,7 +13,7 @@
 	}
 }
 
-.wpce-footer-status__popover .wpce-footer-status__tooltip {
+.wpce-footer-status-popover .wpce-footer-status-tooltip {
 	padding: 8px 12px;
 	font-size: 12px;
 	line-height: 1.6;
@@ -21,16 +21,16 @@
 	min-width: 200px;
 }
 
-.wpce-footer-status__title {
+.wpce-footer-status-title {
 	font-weight: 600;
 	margin-bottom: 2px;
 }
 
-.wpce-footer-status__line {
+.wpce-footer-status-line {
 	color: #757575;
 }
 
-.wpce-footer-status__cancel {
+.wpce-footer-status-cancel {
 	display: inline;
 	font-size: 12px;
 	padding: 0;
@@ -40,20 +40,20 @@
 }
 
 // Extra sparkles hidden by default
-.wpce-sparkles__small--3,
-.wpce-sparkles__small--4,
-.wpce-sparkles__small--5 {
+.wpce-sparkles-small-3,
+.wpce-sparkles-small-4,
+.wpce-sparkles-small-5 {
 	opacity: 0;
 }
 
 // Processing animations
-.wpce-sparkles--processing {
-	.wpce-sparkles__main {
+.wpce-sparkles-processing {
+	.wpce-sparkles-main {
 		transform-origin: 14px 10px;
 		animation: wpce-pulse 2s ease-in-out infinite;
 	}
 
-	.wpce-sparkles__small--1 {
+	.wpce-sparkles-small-1 {
 		transform-origin: 20px 6px;
 		animation-name: wpce-twinkle;
 		animation-duration: 1.8s;
@@ -61,7 +61,7 @@
 		animation-iteration-count: infinite;
 	}
 
-	.wpce-sparkles__small--2 {
+	.wpce-sparkles-small-2 {
 		transform-origin: 19.5px 12.5px;
 		animation-name: wpce-twinkle;
 		animation-duration: 2.2s;
@@ -70,7 +70,7 @@
 		animation-iteration-count: infinite;
 	}
 
-	.wpce-sparkles__small--3 {
+	.wpce-sparkles-small-3 {
 		transform-origin: 8px 6.2px;
 		animation-name: wpce-twinkle;
 		animation-duration: 2s;
@@ -79,7 +79,7 @@
 		animation-iteration-count: infinite;
 	}
 
-	.wpce-sparkles__small--4 {
+	.wpce-sparkles-small-4 {
 		transform-origin: 22px 9.2px;
 		animation-name: wpce-twinkle;
 		animation-duration: 1.6s;
@@ -88,7 +88,7 @@
 		animation-iteration-count: infinite;
 	}
 
-	.wpce-sparkles__small--5 {
+	.wpce-sparkles-small-5 {
 		transform-origin: 10px 14.2px;
 		animation-name: wpce-twinkle;
 		animation-duration: 2.4s;

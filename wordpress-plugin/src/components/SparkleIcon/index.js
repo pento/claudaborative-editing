@@ -6,9 +6,9 @@
  * sparkles twinkle in and out with staggered timing.
  *
  * Uses CSS classes defined in ConnectionStatus/style.scss:
- * - .wpce-sparkles / .wpce-sparkles--processing
- * - .wpce-sparkles__main
- * - .wpce-sparkles__small--{1..5}
+ * - .wpce-sparkles / .wpce-sparkles-processing
+ * - .wpce-sparkles-main
+ * - .wpce-sparkles-small-{1..5}
  */
 
 /**
@@ -27,7 +27,7 @@ export default function SparkleIcon({
 }) {
 	const fill = active ? '#D97706' : '#949494';
 	const cls = processing
-		? 'wpce-sparkles wpce-sparkles--processing'
+		? 'wpce-sparkles wpce-sparkles-processing'
 		: 'wpce-sparkles';
 
 	return (
@@ -40,35 +40,35 @@ export default function SparkleIcon({
 		>
 			{/* Main sparkle — pulses when processing */}
 			<path
-				className="wpce-sparkles__main"
+				className="wpce-sparkles-main"
 				d="M14 4l1.5 4.5 4.5 1.5-4.5 1.5-1.5 4.5-1.5-4.5-4.5-1.5 4.5-1.5z"
 				fill={fill}
 			/>
 			{/* Small sparkle top-right */}
 			<path
-				className="wpce-sparkles__small wpce-sparkles__small--1"
+				className="wpce-sparkles-small wpce-sparkles-small-1"
 				d="M20 4l.5 1.5 1.5.5-1.5.5-.5 1.5-.5-1.5-1.5-.5 1.5-.5z"
 				fill={fill}
 			/>
 			{/* Small sparkle right */}
 			<path
-				className="wpce-sparkles__small wpce-sparkles__small--2"
+				className="wpce-sparkles-small wpce-sparkles-small-2"
 				d="M19.5 11l.4 1.1 1.1.4-1.1.4-.4 1.1-.4-1.1-1.1-.4 1.1-.4z"
 				fill={fill}
 			/>
 			{/* Extra sparkles — only visible when processing */}
 			<path
-				className="wpce-sparkles__small wpce-sparkles__small--3"
+				className="wpce-sparkles-small wpce-sparkles-small-3"
 				d="M8 5l.3.9.9.3-.9.3-.3.9-.3-.9-.9-.3.9-.3z"
 				fill={fill}
 			/>
 			<path
-				className="wpce-sparkles__small wpce-sparkles__small--4"
+				className="wpce-sparkles-small wpce-sparkles-small-4"
 				d="M22 8l.3.9.9.3-.9.3-.3.9-.3-.9-.9-.3.9-.3z"
 				fill={fill}
 			/>
 			<path
-				className="wpce-sparkles__small wpce-sparkles__small--5"
+				className="wpce-sparkles-small wpce-sparkles-small-5"
 				d="M10 13l.3.9.9.3-.9.3-.3.9-.3-.9-.9-.3.9-.3z"
 				fill={fill}
 			/>

@@ -181,24 +181,24 @@ export default function ConnectionStatus() {
 					placement="top-end"
 					noArrow={false}
 					focusOnMount={false}
-					className="wpce-footer-status__popover"
+					className="wpce-footer-status-popover"
 				>
-					<div className="wpce-footer-status__tooltip">
-						<div className="wpce-footer-status__title">
+					<div className="wpce-footer-status-tooltip">
+						<div className="wpce-footer-status-title">
 							{__(
 								'Claudaborative Editing',
 								'claudaborative-editing'
 							)}
 						</div>
 						{statusLines.map((line, i) => (
-							<div key={i} className="wpce-footer-status__line">
+							<div key={i} className="wpce-footer-status-line">
 								{line}
 								{i === statusLines.length - 1 &&
 									isCancellable && (
 										<>
 											{' '}
 											<Button
-												className="wpce-footer-status__cancel"
+												className="wpce-footer-status-cancel"
 												variant="link"
 												isDestructive
 												onClick={() =>

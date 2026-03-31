@@ -15,7 +15,8 @@
 		"@wordpress/interface": "^9.27.0",
 		"@wordpress/plugins": "^7.42.0",
 		"@wordpress/scripts": "^31.6.0",
-		"react": "^18.3.1"
+		"react": "^18.3.1",
+		"stylelint-config-prettier-scss": "^1.0.0"
 	},
 	"scripts": {
 		"build": "wp-scripts build",
@@ -24,6 +25,8 @@
 		"test:php": "npx wp-env --config .wp-env.test.json run cli --env-cwd=wp-content/plugins/claudaborative-editing vendor/bin/phpunit",
 		"pretest:php:coverage": "npx wp-env --config .wp-env.test.json start --xdebug=coverage",
 		"test:php:coverage": "npx wp-env --config .wp-env.test.json run cli --env-cwd=wp-content/plugins/claudaborative-editing vendor/bin/phpunit",
+		"lint:style": "wp-scripts lint-style 'src/**/*.scss'",
+		"lint:style:fix": "wp-scripts lint-style 'src/**/*.scss' --fix",
 		"test": "wp-scripts test-unit-js",
 		"test:coverage": "wp-scripts test-unit-js --coverage"
 	}

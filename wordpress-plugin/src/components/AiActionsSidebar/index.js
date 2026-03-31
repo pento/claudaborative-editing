@@ -31,7 +31,7 @@ import { STORE_NAME } from '../../store';
  */
 const AiActionsIcon = ({ processing }) => {
 	const cls = processing
-		? 'wpce-sparkles wpce-sparkles--processing'
+		? 'wpce-sparkles wpce-sparkles-processing'
 		: 'wpce-sparkles';
 
 	return (
@@ -85,19 +85,19 @@ const AiActionsIcon = ({ processing }) => {
 			/>
 			{/* Main sparkle at wand tip */}
 			<path
-				className="wpce-sparkles__main"
+				className="wpce-sparkles-main"
 				d="M14 4l1.5 4.5 4.5 1.5-4.5 1.5-1.5 4.5-1.5-4.5-4.5-1.5 4.5-1.5z"
 				fill="#D97706"
 			/>
 			{/* Small sparkle top-right */}
 			<path
-				className="wpce-sparkles__small wpce-sparkles__small--1"
+				className="wpce-sparkles-small wpce-sparkles-small-1"
 				d="M20 4l.5 1.5 1.5.5-1.5.5-.5 1.5-.5-1.5-1.5-.5 1.5-.5z"
 				fill="#D97706"
 			/>
 			{/* Small sparkle right */}
 			<path
-				className="wpce-sparkles__small wpce-sparkles__small--2"
+				className="wpce-sparkles-small wpce-sparkles-small-2"
 				d="M19.5 11l.4 1.1 1.1.4-1.1.4-.4 1.1-.4-1.1-1.1-.4 1.1-.4z"
 				fill="#D97706"
 			/>

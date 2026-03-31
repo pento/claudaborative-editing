@@ -108,7 +108,7 @@ export default function NotesIntegration() {
 		portals.push(
 			createPortal(
 				<Button
-					className="wpce-notes-respond-all__button"
+					className="wpce-notes-respond-all-button"
 					variant="secondary"
 					disabled={isDisabled}
 					onClick={() => submitCommand('respond-to-notes', postId)}
@@ -157,7 +157,7 @@ export default function NotesIntegration() {
 		portals.push(
 			createPortal(
 				<Button
-					className="wpce-notes-ask-claude__button"
+					className="wpce-notes-ask-claude-button"
 					variant="tertiary"
 					size="small"
 					disabled={isDisabled}
