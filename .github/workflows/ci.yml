@@ -39,7 +39,6 @@ jobs:
                   lcov-file: coverage/lcov.info
                   path: |
                       src/
-                      wordpress-plugin/src/
                   ignore-patterns: |
                       **/types.ts
                   coverage-label: typescript
@@ -169,5 +168,8 @@ jobs:
                   lcov-file: wordpress-plugin/coverage/js/lcov.info
                   path: |
                       wordpress-plugin/src/
+                  ignore-patterns: |
+                      wordpress-plugin/src/__mocks__/**
+                      wordpress-plugin/src/**/test/**
                   coverage-label: plugin-js
                   github-token: ${{ secrets.GITHUB_TOKEN }}
