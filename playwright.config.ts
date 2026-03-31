@@ -9,7 +9,7 @@ export default defineConfig({
 		timeout: 30_000,
 	},
 	fullyParallel: true,
-	workers: 4,
+	workers: 1,
 	reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
 	outputDir: 'test-results/playwright',
 	use: {

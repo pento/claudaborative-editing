@@ -10,7 +10,7 @@
  */
 import { __ } from '@wordpress/i18n';
 import { Button, PanelBody, Spinner, Notice } from '@wordpress/components';
-import { useSelect } from '@wordpress/data';
+import { useSelect, useDispatch } from '@wordpress/data';
 import { useState, useEffect, useCallback, useRef } from '@wordpress/element';
 
 /**
@@ -62,12 +62,27 @@ export default function QuickActions() {
 			const notes = select('core').getEntityRecords('root', 'comment', {
 				post: postId,
 				type: 'note',
+				status: 'all',
 				per_page: 1,
 			});
 			return Array.isArray(notes) && notes.length > 0;
 		},
 		[postId]
 	);
+
+	// Notes can be added by collaborators via Yjs, but getEntityRecords
+	// caches the result. Periodically invalidate to re-fetch.
+	const { invalidateResolution } = useDispatch('core');
+	useEffect(() => {
+		const id = window.setInterval(() => {
+			invalidateResolution('getEntityRecords', [
+				'root',
+				'comment',
+				{ post: postId, type: 'note', status: 'all', per_page: 1 },
+			]);
+		}, 10000);
+		return () => window.clearInterval(id);
+	}, [postId, invalidateResolution]);
 
 	const isEditingOtherPost = useSelect(
 		(select) => {

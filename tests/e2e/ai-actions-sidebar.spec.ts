@@ -34,12 +34,23 @@ async function openEditor(page: Page, postId: number): Promise<void> {
 		.toBeGreaterThan(0);
 }
 
+/**
+ * Returns a locator for the AI Actions sidebar panel.
+ *
+ * Gutenberg renders all plugin sidebars inside a shared
+ * `region "Editor settings"`. We scope to the panel that
+ * contains the "AI Actions" heading.
+ */
+function getSidebar(page: Page) {
+	return page
+		.getByRole('region', { name: 'Editor settings' })
+		.filter({ has: page.getByRole('heading', { name: 'AI Actions' }) });
+}
+
 async function openSidebar(page: Page): Promise<void> {
 	const sidebarButton = page.getByRole('button', { name: 'AI Actions' });
 	await sidebarButton.click();
-	await expect(
-		page.getByRole('complementary', { name: 'AI Actions' })
-	).toBeVisible();
+	await expect(getSidebar(page)).toBeVisible();
 }
 
 async function connectMcp(
@@ -57,10 +68,7 @@ async function waitForConnectedStatus(page: Page): Promise<void> {
 	await expect
 		.poll(
 			async () => {
-				const sidebar = page.getByRole('complementary', {
-					name: 'AI Actions',
-				});
-				return sidebar.textContent();
+				return getSidebar(page).textContent();
 			},
 			{ timeout: 30_000, intervals: [1000] }
 		)
@@ -86,9 +94,7 @@ test.describe('AI Actions sidebar', () => {
 
 			// Open the sidebar
 			await sidebarButton.click();
-			const sidebar = page.getByRole('complementary', {
-				name: 'AI Actions',
-			});
+			const sidebar = getSidebar(page);
 			await expect(sidebar).toBeVisible();
 
 			// Verify Quick Actions heading appears
@@ -118,9 +124,7 @@ test.describe('AI Actions sidebar', () => {
 			await openEditor(page, postId);
 			await openSidebar(page);
 
-			const sidebar = page.getByRole('complementary', {
-				name: 'AI Actions',
-			});
+			const sidebar = getSidebar(page);
 
 			// Verify disconnected status text
 			await expect(
@@ -153,9 +157,7 @@ test.describe('AI Actions sidebar', () => {
 			await openEditor(page, postId);
 			await openSidebar(page);
 
-			const sidebar = page.getByRole('complementary', {
-				name: 'AI Actions',
-			});
+			const sidebar = getSidebar(page);
 
 			// Initially disconnected
 			await expect(
@@ -216,9 +218,7 @@ test.describe('AI Actions sidebar', () => {
 			// Wait for connected status
 			await waitForConnectedStatus(page);
 
-			const sidebar = page.getByRole('complementary', {
-				name: 'AI Actions',
-			});
+			const sidebar = getSidebar(page);
 
 			// Wait for Proofread to be enabled
 			await expect
@@ -287,9 +287,7 @@ test.describe('AI Actions sidebar', () => {
 			// Wait for connected status
 			await waitForConnectedStatus(page);
 
-			const sidebar = page.getByRole('complementary', {
-				name: 'AI Actions',
-			});
+			const sidebar = getSidebar(page);
 
 			// Wait for Review to be enabled
 			await expect
@@ -358,9 +356,7 @@ test.describe('AI Actions sidebar', () => {
 			// Wait for connected status
 			await waitForConnectedStatus(page);
 
-			const sidebar = page.getByRole('complementary', {
-				name: 'AI Actions',
-			});
+			const sidebar = getSidebar(page);
 
 			// Wait for buttons to be enabled
 			await expect
@@ -418,9 +414,7 @@ test.describe('AI Actions sidebar', () => {
 			await openEditor(page, postId);
 			await openSidebar(page);
 
-			const sidebar = page.getByRole('complementary', {
-				name: 'AI Actions',
-			});
+			const sidebar = getSidebar(page);
 
 			// Verify "Respond to Notes" button is NOT visible (no notes)
 			await expect(
@@ -436,7 +430,7 @@ test.describe('AI Actions sidebar', () => {
 
 			// Add a note via MCP
 			await callToolOrThrow(client, 'wp_add_note', {
-				blockIndex: 0,
+				blockIndex: '0',
 				content: 'Test note for sidebar visibility',
 			});
 

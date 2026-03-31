@@ -1,5 +1,6 @@
 jest.mock('@wordpress/data', () => ({
 	useSelect: jest.fn(),
+	useDispatch: jest.fn(() => ({ invalidateResolution: jest.fn() })),
 }));
 
 jest.mock('@wordpress/components', () => {

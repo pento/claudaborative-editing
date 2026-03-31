@@ -8,6 +8,6 @@
 		"wp-content/plugins/claudaborative-editing": "./wordpress-plugin"
 	},
 	"lifecycleScripts": {
-		"afterStart": "./bin/after-start.sh"
+		"afterStart": "./bin/after-start-dev.sh"
 	}
 }

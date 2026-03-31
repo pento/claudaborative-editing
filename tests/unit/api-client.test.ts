@@ -850,11 +850,13 @@ describe('WordPressApiClient', () => {
 					post: number;
 					content: string;
 					type: string;
+					status: string;
 					parent?: number;
 				};
 				expect(body.post).toBe(42);
 				expect(body.content).toBe('A note');
 				expect(body.type).toBe('note');
+				expect(body.status).toBe('approved');
 				expect(body.parent).toBeUndefined();
 				expect(result).toEqual(fakeNote);
 			});

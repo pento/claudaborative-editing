@@ -83,24 +83,7 @@ export function getSharedAppPassword(): string {
 	return sharedAppPassword;
 }
 
-export async function ensureWpEnvRunning(): Promise<void> {
-	const alreadyRunning = await (async () => {
-		try {
-			const response = await fetch(`${WP_BASE_URL}/wp-login.php`, {
-				redirect: 'manual',
-			});
-			return response.ok || response.status === 302;
-		} catch {
-			return false;
-		}
-	})();
-
-	if (!alreadyRunning) {
-		runWpEnv(['start'], true);
-	}
-
-	await waitForWordPress();
-
+export function ensureWpEnvRunning(): void {
 	// Reuse an existing app password from a previous run if the state file
 	// exists (avoids accumulating passwords across repeated runs).
 	if (existsSync(STATE_FILE)) {
@@ -112,7 +95,6 @@ export async function ensureWpEnvRunning(): Promise<void> {
 			writeFileSync(
 				STATE_FILE,
 				JSON.stringify({
-					startedBySuite: !alreadyRunning,
 					appPassword: sharedAppPassword,
 				}),
 				'utf8'
@@ -137,11 +119,7 @@ export async function ensureWpEnvRunning(): Promise<void> {
 
 	sharedAppPassword = appPassword;
 
-	writeFileSync(
-		STATE_FILE,
-		JSON.stringify({ startedBySuite: !alreadyRunning, appPassword }),
-		'utf8'
-	);
+	writeFileSync(STATE_FILE, JSON.stringify({ appPassword }), 'utf8');
 }
 
 export function teardownWpEnv(): void {
@@ -153,14 +131,6 @@ export function teardownWpEnv(): void {
 	// reuse the app password without creating a new one.
 	if (process.env.CLAUDABORATIVE_E2E_REUSE_ENV === '1') {
 		return;
-	}
-
-	const state = JSON.parse(readFileSync(STATE_FILE, 'utf8')) as {
-		startedBySuite?: boolean;
-	};
-
-	if (state.startedBySuite) {
-		runWpEnv(['stop'], true);
 	}
 
 	unlinkSync(STATE_FILE);
