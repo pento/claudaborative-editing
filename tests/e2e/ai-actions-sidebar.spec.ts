@@ -39,16 +39,20 @@ async function openEditor(page: Page, postId: number): Promise<void> {
  *
  * Gutenberg renders all plugin sidebars inside a shared
  * `region "Editor settings"`. We scope to the panel that
- * contains the "AI Actions" heading.
+ * contains the "Claudaborative Editing" heading.
  */
 function getSidebar(page: Page) {
 	return page
 		.getByRole('region', { name: 'Editor settings' })
-		.filter({ has: page.getByRole('heading', { name: 'AI Actions' }) });
+		.filter({
+			has: page.getByRole('heading', { name: 'Claudaborative Editing' }),
+		});
 }
 
 async function openSidebar(page: Page): Promise<void> {
-	const sidebarButton = page.getByRole('button', { name: 'AI Actions' });
+	const sidebarButton = page.getByRole('button', {
+		name: 'Claudaborative Editing',
+	});
 	await sidebarButton.click();
 	await expect(getSidebar(page)).toBeVisible();
 }
@@ -88,7 +92,7 @@ test.describe('AI Actions sidebar', () => {
 			await openEditor(page, postId);
 
 			const sidebarButton = page.getByRole('button', {
-				name: 'AI Actions',
+				name: 'Claudaborative Editing',
 			});
 			await expect(sidebarButton).toBeVisible();
 

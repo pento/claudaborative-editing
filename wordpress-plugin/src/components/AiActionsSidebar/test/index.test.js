@@ -45,7 +45,7 @@ describe('AiActionsSidebar', () => {
 		render(<AiActionsSidebar />);
 
 		const sidebar = screen.getByTestId('plugin-sidebar');
-		expect(sidebar.getAttribute('title')).toBe('AI Actions');
+		expect(sidebar.getAttribute('title')).toBe('Claudaborative Editing');
 	});
 
 	it('contains ConnectionStatus component', () => {
