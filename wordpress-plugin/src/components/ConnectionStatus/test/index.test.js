@@ -13,6 +13,15 @@ jest.mock('@wordpress/data', () => ({
 jest.mock('@wordpress/components', () => {
 	const { createElement } = require('react');
 	return {
+		Button: ({
+			children,
+			onClick,
+			className,
+			isDestructive: _,
+			variant: _v,
+			...props
+		}) =>
+			createElement('button', { onClick, className, ...props }, children),
 		Popover: ({ children, className }) =>
 			createElement(
 				'div',
@@ -288,6 +297,101 @@ describe('ConnectionStatus', () => {
 			'Command failed.',
 			{ type: 'snackbar' }
 		);
+	});
+
+	it('shows human-readable status label for active command', async () => {
+		useMcpStatus.mockReturnValue({
+			mcpConnected: true,
+			mcpLastSeenAt: '2026-03-30T12:00:00Z',
+			isLoading: false,
+			error: null,
+		});
+
+		useCommands.mockReturnValue({
+			activeCommand: {
+				id: 42,
+				prompt: 'proofread',
+				status: 'running',
+				post_id: 100,
+			},
+			isSubmitting: false,
+			error: null,
+			history: [],
+			submit: jest.fn(),
+			cancel: jest.fn(),
+		});
+
+		await act(async () => render(<ConnectionStatus />));
+
+		const statusEl = footerEl.querySelector('.wpce-footer-status');
+		await act(async () => fireEvent.mouseEnter(statusEl));
+
+		expect(screen.getByText(/Proofreading/)).toBeTruthy();
+	});
+
+	it('shows cancel button for pending command', async () => {
+		useMcpStatus.mockReturnValue({
+			mcpConnected: true,
+			mcpLastSeenAt: '2026-03-30T12:00:00Z',
+			isLoading: false,
+			error: null,
+		});
+
+		const cancel = jest.fn();
+		useCommands.mockReturnValue({
+			activeCommand: {
+				id: 42,
+				prompt: 'review',
+				status: 'pending',
+				post_id: 100,
+			},
+			isSubmitting: false,
+			error: null,
+			history: [],
+			submit: jest.fn(),
+			cancel,
+		});
+
+		await act(async () => render(<ConnectionStatus />));
+
+		const statusEl = footerEl.querySelector('.wpce-footer-status');
+		await act(async () => fireEvent.mouseEnter(statusEl));
+
+		const cancelBtn = screen.getByText('(cancel)');
+		expect(cancelBtn).toBeTruthy();
+
+		await act(async () => fireEvent.click(cancelBtn));
+		expect(cancel).toHaveBeenCalledWith(42);
+	});
+
+	it('does not show cancel for running command', async () => {
+		useMcpStatus.mockReturnValue({
+			mcpConnected: true,
+			mcpLastSeenAt: '2026-03-30T12:00:00Z',
+			isLoading: false,
+			error: null,
+		});
+
+		useCommands.mockReturnValue({
+			activeCommand: {
+				id: 42,
+				prompt: 'review',
+				status: 'running',
+				post_id: 100,
+			},
+			isSubmitting: false,
+			error: null,
+			history: [],
+			submit: jest.fn(),
+			cancel: jest.fn(),
+		});
+
+		await act(async () => render(<ConnectionStatus />));
+
+		const statusEl = footerEl.querySelector('.wpce-footer-status');
+		await act(async () => fireEvent.mouseEnter(statusEl));
+
+		expect(screen.queryByText('(cancel)')).toBeNull();
 	});
 
 	it('returns null when footer element is not found', async () => {

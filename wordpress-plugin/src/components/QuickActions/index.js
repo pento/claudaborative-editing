@@ -9,7 +9,7 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { MenuGroup, MenuItem, Spinner } from '@wordpress/components';
+import { MenuGroup, MenuItem } from '@wordpress/components';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { useEffect } from '@wordpress/element';
 
@@ -20,25 +20,6 @@ import { useMcpStatus } from '../../hooks/use-mcp-status';
 import { STORE_NAME } from '../../store';
 
 import './style.scss';
-
-/**
- * Maps a command prompt identifier to a human-readable status label.
- *
- * @param {string} prompt The prompt identifier.
- * @return {string} Status label for the active command.
- */
-function getStatusLabel(prompt) {
-	switch (prompt) {
-		case 'proofread':
-			return __('Proofreading…', 'claudaborative-editing');
-		case 'review':
-			return __('Reviewing…', 'claudaborative-editing');
-		case 'respond-to-notes':
-			return __('Responding to notes…', 'claudaborative-editing');
-		default:
-			return __('Working…', 'claudaborative-editing');
-	}
-}
 
 /**
  * QuickActions component.
@@ -69,7 +50,7 @@ export default function QuickActions({ onClose }) {
 		(select) => select(STORE_NAME).getCommandError(),
 		[]
 	);
-	const { submitCommand, cancelCommand } = useDispatch(STORE_NAME);
+	const { submitCommand } = useDispatch(STORE_NAME);
 
 	const hasNotes = useSelect(
 		(select) => {
@@ -111,11 +92,6 @@ export default function QuickActions({ onClose }) {
 		isSubmitting ||
 		activeCommand !== null ||
 		isEditingOtherPost;
-
-	const isCancellable =
-		activeCommand &&
-		(activeCommand.status === 'pending' ||
-			activeCommand.status === 'claimed');
 
 	const handleSubmit = (prompt) => {
 		submitCommand(prompt, postId);
@@ -160,23 +136,6 @@ export default function QuickActions({ onClose }) {
 					</MenuItem>
 				)}
 			</MenuGroup>
-
-			{activeCommand && (
-				<MenuGroup>
-					<div className="wpce-command-status">
-						<Spinner />
-						<span>{getStatusLabel(activeCommand.prompt)}</span>
-						{isCancellable && (
-							<MenuItem
-								variant="tertiary"
-								onClick={() => cancelCommand(activeCommand.id)}
-							>
-								{__('Cancel', 'claudaborative-editing')}
-							</MenuItem>
-						)}
-					</div>
-				</MenuGroup>
-			)}
 
 			{error && (
 				<MenuGroup>

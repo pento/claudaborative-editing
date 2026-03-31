@@ -1,14 +1,10 @@
 const mockSubmitCommand = jest.fn();
-const mockCancelCommand = jest.fn();
 
 jest.mock('@wordpress/data', () => ({
 	useSelect: jest.fn(),
 	useDispatch: jest.fn((storeName) => {
 		if (storeName === 'wpce/ai-actions') {
-			return {
-				submitCommand: mockSubmitCommand,
-				cancelCommand: mockCancelCommand,
-			};
+			return { submitCommand: mockSubmitCommand };
 		}
 		return { invalidateResolution: jest.fn() };
 	}),
@@ -26,7 +22,6 @@ jest.mock('@wordpress/components', () => {
 				children,
 				info && createElement('span', { className: 'info' }, info)
 			),
-		Spinner: () => createElement('div', { 'data-testid': 'spinner' }),
 	};
 });
 
@@ -144,70 +139,6 @@ describe('QuickActions', () => {
 		expect(screen.getByText('Respond to Notes')).toBeTruthy();
 	});
 
-	it('shows spinner when command active', () => {
-		mockUseSelect(
-			defaultStores({
-				'wpce/ai-actions': {
-					getActiveCommand: () => ({
-						id: 42,
-						prompt: 'proofread',
-						status: 'running',
-						post_id: 123,
-					}),
-					isSubmitting: () => false,
-					getCommandError: () => null,
-				},
-			})
-		);
-
-		render(<QuickActions />);
-
-		expect(screen.getByTestId('spinner')).toBeTruthy();
-		expect(screen.getByText('Proofreading\u2026')).toBeTruthy();
-	});
-
-	it('shows cancel when command is pending', () => {
-		mockUseSelect(
-			defaultStores({
-				'wpce/ai-actions': {
-					getActiveCommand: () => ({
-						id: 42,
-						prompt: 'review',
-						status: 'pending',
-						post_id: 123,
-					}),
-					isSubmitting: () => false,
-					getCommandError: () => null,
-				},
-			})
-		);
-
-		render(<QuickActions />);
-
-		expect(screen.getByText('Cancel')).toBeTruthy();
-	});
-
-	it('does not show cancel when command is running', () => {
-		mockUseSelect(
-			defaultStores({
-				'wpce/ai-actions': {
-					getActiveCommand: () => ({
-						id: 42,
-						prompt: 'review',
-						status: 'running',
-						post_id: 123,
-					}),
-					isSubmitting: () => false,
-					getCommandError: () => null,
-				},
-			})
-		);
-
-		render(<QuickActions />);
-
-		expect(screen.queryByText('Cancel')).toBeNull();
-	});
-
 	it('click Proofread calls submitCommand and onClose', () => {
 		const onClose = jest.fn();
 		render(<QuickActions onClose={onClose} />);
@@ -226,29 +157,6 @@ describe('QuickActions', () => {
 
 		expect(mockSubmitCommand).toHaveBeenCalledWith('review', 123);
 		expect(onClose).toHaveBeenCalled();
-	});
-
-	it('click Cancel calls cancelCommand with command id', () => {
-		mockUseSelect(
-			defaultStores({
-				'wpce/ai-actions': {
-					getActiveCommand: () => ({
-						id: 42,
-						prompt: 'review',
-						status: 'pending',
-						post_id: 123,
-					}),
-					isSubmitting: () => false,
-					getCommandError: () => null,
-				},
-			})
-		);
-
-		render(<QuickActions />);
-
-		fireEvent.click(screen.getByText('Cancel'));
-
-		expect(mockCancelCommand).toHaveBeenCalledWith(42);
 	});
 
 	it('shows error message when error exists', () => {
@@ -347,68 +255,5 @@ describe('QuickActions', () => {
 		fireEvent.click(screen.getByText('Respond to Notes'));
 
 		expect(mockSubmitCommand).toHaveBeenCalledWith('respond-to-notes', 123);
-	});
-
-	it('shows status label for review prompt', () => {
-		mockUseSelect(
-			defaultStores({
-				'wpce/ai-actions': {
-					getActiveCommand: () => ({
-						id: 42,
-						prompt: 'review',
-						status: 'running',
-						post_id: 123,
-					}),
-					isSubmitting: () => false,
-					getCommandError: () => null,
-				},
-			})
-		);
-
-		render(<QuickActions />);
-
-		expect(screen.getByText('Reviewing\u2026')).toBeTruthy();
-	});
-
-	it('shows status label for respond-to-notes prompt', () => {
-		mockUseSelect(
-			defaultStores({
-				'wpce/ai-actions': {
-					getActiveCommand: () => ({
-						id: 42,
-						prompt: 'respond-to-notes',
-						status: 'running',
-						post_id: 123,
-					}),
-					isSubmitting: () => false,
-					getCommandError: () => null,
-				},
-			})
-		);
-
-		render(<QuickActions />);
-
-		expect(screen.getByText('Responding to notes\u2026')).toBeTruthy();
-	});
-
-	it('shows generic status label for unknown prompt', () => {
-		mockUseSelect(
-			defaultStores({
-				'wpce/ai-actions': {
-					getActiveCommand: () => ({
-						id: 42,
-						prompt: 'translate',
-						status: 'running',
-						post_id: 123,
-					}),
-					isSubmitting: () => false,
-					getCommandError: () => null,
-				},
-			})
-		);
-
-		render(<QuickActions />);
-
-		expect(screen.getByText('Working\u2026')).toBeTruthy();
 	});
 });

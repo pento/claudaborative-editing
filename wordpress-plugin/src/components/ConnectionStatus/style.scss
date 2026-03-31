@@ -18,6 +18,7 @@
 	font-size: 12px;
 	line-height: 1.6;
 	white-space: nowrap;
+	min-width: 200px;
 }
 
 .wpce-footer-status__title {
@@ -27,6 +28,15 @@
 
 .wpce-footer-status__line {
 	color: #757575;
+}
+
+.wpce-footer-status__cancel {
+	display: inline;
+	font-size: 12px;
+	padding: 0;
+	min-height: 0;
+	height: auto;
+	vertical-align: baseline;
 }
 
 // Extra sparkles hidden by default

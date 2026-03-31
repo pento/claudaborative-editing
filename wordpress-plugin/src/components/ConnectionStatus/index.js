@@ -10,7 +10,7 @@
  * WordPress dependencies
  */
 import { __, sprintf } from '@wordpress/i18n';
-import { Popover } from '@wordpress/components';
+import { Button, Popover } from '@wordpress/components';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { useState, useEffect, useRef, createPortal } from '@wordpress/element';
 
@@ -100,7 +100,7 @@ export default function ConnectionStatus() {
 	);
 
 	// Command polling — runs continuously regardless of footer visibility.
-	const { activeCommand, history } = useCommands(currentPostId);
+	const { activeCommand, history, cancel } = useCommands(currentPostId);
 
 	// Toast notifications on command completion/failure.
 	const { createNotice } = useDispatch('core/notices');
@@ -195,15 +195,32 @@ export default function ConnectionStatus() {
 		}
 
 		if (activeCommand) {
-			statusLines.push(
-				sprintf(
-					/* translators: %s: Command status string. */
-					__('Command: %s', 'claudaborative-editing'),
-					activeCommand.status
-				)
-			);
+			switch (activeCommand.prompt) {
+				case 'proofread':
+					statusLines.push(
+						__('Proofreading…', 'claudaborative-editing')
+					);
+					break;
+				case 'review':
+					statusLines.push(
+						__('Reviewing…', 'claudaborative-editing')
+					);
+					break;
+				case 'respond-to-notes':
+					statusLines.push(
+						__('Responding to notes…', 'claudaborative-editing')
+					);
+					break;
+				default:
+					statusLines.push(__('Working…', 'claudaborative-editing'));
+			}
 		}
 	}
+
+	const isCancellable =
+		activeCommand &&
+		(activeCommand.status === 'pending' ||
+			activeCommand.status === 'claimed');
 
 	if (!footerEl) {
 		return null;
@@ -236,6 +253,25 @@ export default function ConnectionStatus() {
 						{statusLines.map((line, i) => (
 							<div key={i} className="wpce-footer-status__line">
 								{line}
+								{i === statusLines.length - 1 &&
+									isCancellable && (
+										<>
+											{' '}
+											<Button
+												className="wpce-footer-status__cancel"
+												variant="link"
+												isDestructive
+												onClick={() =>
+													cancel(activeCommand.id)
+												}
+											>
+												{__(
+													'(cancel)',
+													'claudaborative-editing'
+												)}
+											</Button>
+										</>
+									)}
 							</div>
 						))}
 					</div>
