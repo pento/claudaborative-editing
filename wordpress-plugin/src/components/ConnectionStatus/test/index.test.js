@@ -1,5 +1,13 @@
+const mockCreateNotice = jest.fn();
+
 jest.mock('@wordpress/data', () => ({
 	useSelect: jest.fn(),
+	useDispatch: jest.fn((storeName) => {
+		if (storeName === 'core/notices') {
+			return { createNotice: mockCreateNotice };
+		}
+		return {};
+	}),
 }));
 
 jest.mock('@wordpress/components', () => {
@@ -18,11 +26,16 @@ jest.mock('../../../hooks/use-mcp-status', () => ({
 	useMcpStatus: jest.fn(),
 }));
 
+jest.mock('../../../hooks/use-commands', () => ({
+	useCommands: jest.fn(),
+}));
+
 jest.mock('../../../store', () => ({ STORE_NAME: 'wpce/ai-actions' }));
 
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { useSelect } from '@wordpress/data';
 import { useMcpStatus } from '../../../hooks/use-mcp-status';
+import { useCommands } from '../../../hooks/use-commands';
 import ConnectionStatus from '..';
 
 // MutationObserver stub for jsdom — no-op, footer element is
@@ -55,6 +68,15 @@ describe('ConnectionStatus', () => {
 			mcpLastSeenAt: null,
 			isLoading: false,
 			error: null,
+		});
+
+		useCommands.mockReturnValue({
+			activeCommand: null,
+			isSubmitting: false,
+			error: null,
+			history: [],
+			submit: jest.fn(),
+			cancel: jest.fn(),
 		});
 
 		mockUseSelect({
@@ -151,6 +173,15 @@ describe('ConnectionStatus', () => {
 			error: null,
 		});
 
+		useCommands.mockReturnValue({
+			activeCommand: { id: 1, post_id: 999, status: 'running' },
+			isSubmitting: false,
+			error: null,
+			history: [],
+			submit: jest.fn(),
+			cancel: jest.fn(),
+		});
+
 		mockUseSelect({
 			'wpce/ai-actions': {
 				getActiveCommand: () => ({
@@ -175,6 +206,88 @@ describe('ConnectionStatus', () => {
 		await act(async () => fireEvent.mouseEnter(statusEl));
 
 		expect(screen.getByText('Editing: My Other Post')).toBeTruthy();
+	});
+
+	it('shows success snackbar when command completes', async () => {
+		useCommands.mockReturnValue({
+			activeCommand: {
+				id: 42,
+				prompt: 'proofread',
+				status: 'running',
+				post_id: 100,
+			},
+			isSubmitting: false,
+			error: null,
+			history: [],
+			submit: jest.fn(),
+			cancel: jest.fn(),
+		});
+
+		const { rerender } = render(<ConnectionStatus />);
+
+		useCommands.mockReturnValue({
+			activeCommand: null,
+			isSubmitting: false,
+			error: null,
+			history: [
+				{
+					id: 42,
+					prompt: 'proofread',
+					status: 'completed',
+					message: 'All done!',
+					post_id: 100,
+				},
+			],
+			submit: jest.fn(),
+			cancel: jest.fn(),
+		});
+		rerender(<ConnectionStatus />);
+
+		expect(mockCreateNotice).toHaveBeenCalledWith('success', 'All done!', {
+			type: 'snackbar',
+		});
+	});
+
+	it('shows error snackbar when command fails', async () => {
+		useCommands.mockReturnValue({
+			activeCommand: {
+				id: 42,
+				prompt: 'proofread',
+				status: 'running',
+				post_id: 100,
+			},
+			isSubmitting: false,
+			error: null,
+			history: [],
+			submit: jest.fn(),
+			cancel: jest.fn(),
+		});
+
+		const { rerender } = render(<ConnectionStatus />);
+
+		useCommands.mockReturnValue({
+			activeCommand: null,
+			isSubmitting: false,
+			error: null,
+			history: [
+				{
+					id: 42,
+					prompt: 'proofread',
+					status: 'failed',
+					message: null,
+					post_id: 100,
+				},
+			],
+			submit: jest.fn(),
+			cancel: jest.fn(),
+		});
+		rerender(<ConnectionStatus />);
+
+		expect(mockCreateNotice).toHaveBeenCalledWith(
+			'error',
+			'Command failed.',
+			{ type: 'snackbar' }
+		);
 	});
 
 	it('returns null when footer element is not found', async () => {

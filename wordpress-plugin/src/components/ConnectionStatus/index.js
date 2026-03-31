@@ -11,14 +11,14 @@
  */
 import { __, sprintf } from '@wordpress/i18n';
 import { Popover } from '@wordpress/components';
-import { useSelect } from '@wordpress/data';
-import { useState, useEffect, createPortal } from '@wordpress/element';
+import { useSelect, useDispatch } from '@wordpress/data';
+import { useState, useEffect, useRef, createPortal } from '@wordpress/element';
 
 /**
  * Internal dependencies
  */
 import { useMcpStatus } from '../../hooks/use-mcp-status';
-import { STORE_NAME } from '../../store';
+import { useCommands } from '../../hooks/use-commands';
 
 import './style.scss';
 
@@ -94,15 +94,41 @@ function SparkleIcon({ active, processing }) {
 export default function ConnectionStatus() {
 	const { mcpConnected } = useMcpStatus();
 
-	const activeCommand = useSelect(
-		(select) => select(STORE_NAME).getActiveCommand(),
-		[]
-	);
-
 	const currentPostId = useSelect(
 		(select) => select('core/editor').getCurrentPostId(),
 		[]
 	);
+
+	// Command polling — runs continuously regardless of footer visibility.
+	const { activeCommand, history } = useCommands(currentPostId);
+
+	// Toast notifications on command completion/failure.
+	const { createNotice } = useDispatch('core/notices');
+	const prevActiveRef = useRef(activeCommand);
+
+	useEffect(() => {
+		const wasActive = prevActiveRef.current;
+		prevActiveRef.current = activeCommand;
+
+		if (wasActive && activeCommand === null && history.length > 0) {
+			const latest = history[0];
+
+			if (latest.status === 'completed') {
+				createNotice(
+					'success',
+					latest.message || __('Done!', 'claudaborative-editing'),
+					{ type: 'snackbar' }
+				);
+			} else if (latest.status === 'failed') {
+				createNotice(
+					'error',
+					latest.message ||
+						__('Command failed.', 'claudaborative-editing'),
+					{ type: 'snackbar' }
+				);
+			}
+		}
+	}, [activeCommand, history, createNotice]);
 
 	const isEditingOtherPost =
 		activeCommand !== null && activeCommand.post_id !== currentPostId;
@@ -146,10 +172,7 @@ export default function ConnectionStatus() {
 		return () => observer.disconnect();
 	}, []);
 
-	if (!footerEl) {
-		return null;
-	}
-
+	// Build tooltip content (computed every render, no early return above).
 	const statusLines = [];
 
 	statusLines.push(
@@ -180,6 +203,10 @@ export default function ConnectionStatus() {
 				)
 			);
 		}
+	}
+
+	if (!footerEl) {
+		return null;
 	}
 
 	return createPortal(

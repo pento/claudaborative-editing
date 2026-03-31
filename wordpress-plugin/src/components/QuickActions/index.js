@@ -11,13 +11,12 @@
 import { __ } from '@wordpress/i18n';
 import { MenuGroup, MenuItem, Spinner } from '@wordpress/components';
 import { useSelect, useDispatch } from '@wordpress/data';
-import { useEffect, useRef } from '@wordpress/element';
+import { useEffect } from '@wordpress/element';
 
 /**
  * Internal dependencies
  */
 import { useMcpStatus } from '../../hooks/use-mcp-status';
-import { useCommands } from '../../hooks/use-commands';
 import { STORE_NAME } from '../../store';
 
 import './style.scss';
@@ -56,8 +55,21 @@ export default function QuickActions({ onClose }) {
 		[]
 	);
 
-	const { activeCommand, isSubmitting, error, history, submit, cancel } =
-		useCommands(postId);
+	// Read command state from the store. Polling is handled by
+	// ConnectionStatus which is always mounted.
+	const activeCommand = useSelect(
+		(select) => select(STORE_NAME).getActiveCommand(),
+		[]
+	);
+	const isSubmitting = useSelect(
+		(select) => select(STORE_NAME).isSubmitting(),
+		[]
+	);
+	const error = useSelect(
+		(select) => select(STORE_NAME).getCommandError(),
+		[]
+	);
+	const { submitCommand, cancelCommand } = useDispatch(STORE_NAME);
 
 	const hasNotes = useSelect(
 		(select) => {
@@ -100,42 +112,13 @@ export default function QuickActions({ onClose }) {
 		activeCommand !== null ||
 		isEditingOtherPost;
 
-	const prevActiveRef = useRef(activeCommand);
-	const { createNotice } = useDispatch('core/notices');
-
-	useEffect(() => {
-		const wasActive = prevActiveRef.current;
-		prevActiveRef.current = activeCommand;
-
-		// When activeCommand transitions from non-null to null, check history
-		// for the completed/failed entry and show a snackbar toast.
-		if (wasActive && activeCommand === null && history.length > 0) {
-			const latest = history[0];
-
-			if (latest.status === 'completed') {
-				createNotice(
-					'success',
-					latest.message || __('Done!', 'claudaborative-editing'),
-					{ type: 'snackbar' }
-				);
-			} else if (latest.status === 'failed') {
-				createNotice(
-					'error',
-					latest.message ||
-						__('Command failed.', 'claudaborative-editing'),
-					{ type: 'snackbar' }
-				);
-			}
-		}
-	}, [activeCommand, history, createNotice]);
-
 	const isCancellable =
 		activeCommand &&
 		(activeCommand.status === 'pending' ||
 			activeCommand.status === 'claimed');
 
 	const handleSubmit = (prompt) => {
-		submit(prompt);
+		submitCommand(prompt, postId);
 		if (onClose) {
 			onClose();
 		}
@@ -186,7 +169,7 @@ export default function QuickActions({ onClose }) {
 						{isCancellable && (
 							<MenuItem
 								variant="tertiary"
-								onClick={() => cancel(activeCommand.id)}
+								onClick={() => cancelCommand(activeCommand.id)}
 							>
 								{__('Cancel', 'claudaborative-editing')}
 							</MenuItem>

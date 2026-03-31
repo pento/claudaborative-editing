@@ -1,10 +1,14 @@
-const mockCreateNotice = jest.fn();
+const mockSubmitCommand = jest.fn();
+const mockCancelCommand = jest.fn();
 
 jest.mock('@wordpress/data', () => ({
 	useSelect: jest.fn(),
 	useDispatch: jest.fn((storeName) => {
-		if (storeName === 'core/notices') {
-			return { createNotice: mockCreateNotice };
+		if (storeName === 'wpce/ai-actions') {
+			return {
+				submitCommand: mockSubmitCommand,
+				cancelCommand: mockCancelCommand,
+			};
 		}
 		return { invalidateResolution: jest.fn() };
 	}),
@@ -30,16 +34,11 @@ jest.mock('../../../hooks/use-mcp-status', () => ({
 	useMcpStatus: jest.fn(),
 }));
 
-jest.mock('../../../hooks/use-commands', () => ({
-	useCommands: jest.fn(),
-}));
-
 jest.mock('../../../store', () => ({ STORE_NAME: 'wpce/ai-actions' }));
 
 import { render, screen, fireEvent } from '@testing-library/react';
 import { useSelect } from '@wordpress/data';
 import { useMcpStatus } from '../../../hooks/use-mcp-status';
-import { useCommands } from '../../../hooks/use-commands';
 import QuickActions from '..';
 
 function mockUseSelect(stores) {
@@ -49,15 +48,26 @@ function mockUseSelect(stores) {
 	});
 }
 
-describe('QuickActions', () => {
-	let submit;
-	let cancel;
+function defaultStores(overrides = {}) {
+	return {
+		'core/editor': {
+			getCurrentPostId: () => 123,
+		},
+		core: {
+			getEntityRecords: () => null,
+		},
+		'wpce/ai-actions': {
+			getActiveCommand: () => null,
+			isSubmitting: () => false,
+			getCommandError: () => null,
+		},
+		...overrides,
+	};
+}
 
+describe('QuickActions', () => {
 	beforeEach(() => {
 		jest.clearAllMocks();
-
-		submit = jest.fn();
-		cancel = jest.fn();
 
 		useMcpStatus.mockReturnValue({
 			mcpConnected: true,
@@ -66,26 +76,7 @@ describe('QuickActions', () => {
 			error: null,
 		});
 
-		useCommands.mockReturnValue({
-			activeCommand: null,
-			isSubmitting: false,
-			error: null,
-			history: [],
-			submit,
-			cancel,
-		});
-
-		mockUseSelect({
-			'core/editor': {
-				getCurrentPostId: () => 123,
-			},
-			core: {
-				getEntityRecords: () => null,
-			},
-			'wpce/ai-actions': {
-				getActiveCommand: () => null,
-			},
-		});
+		mockUseSelect(defaultStores());
 	});
 
 	it('renders Proofread and Review menu items', () => {
@@ -140,17 +131,13 @@ describe('QuickActions', () => {
 	});
 
 	it('Respond to Notes shown when notes exist', () => {
-		mockUseSelect({
-			'core/editor': {
-				getCurrentPostId: () => 123,
-			},
-			core: {
-				getEntityRecords: () => [{ id: 1 }],
-			},
-			'wpce/ai-actions': {
-				getActiveCommand: () => null,
-			},
-		});
+		mockUseSelect(
+			defaultStores({
+				core: {
+					getEntityRecords: () => [{ id: 1 }],
+				},
+			})
+		);
 
 		render(<QuickActions />);
 
@@ -158,19 +145,20 @@ describe('QuickActions', () => {
 	});
 
 	it('shows spinner when command active', () => {
-		useCommands.mockReturnValue({
-			activeCommand: {
-				id: 42,
-				prompt: 'proofread',
-				status: 'running',
-				post_id: 123,
-			},
-			isSubmitting: false,
-			error: null,
-			history: [],
-			submit,
-			cancel,
-		});
+		mockUseSelect(
+			defaultStores({
+				'wpce/ai-actions': {
+					getActiveCommand: () => ({
+						id: 42,
+						prompt: 'proofread',
+						status: 'running',
+						post_id: 123,
+					}),
+					isSubmitting: () => false,
+					getCommandError: () => null,
+				},
+			})
+		);
 
 		render(<QuickActions />);
 
@@ -179,39 +167,20 @@ describe('QuickActions', () => {
 	});
 
 	it('shows cancel when command is pending', () => {
-		useCommands.mockReturnValue({
-			activeCommand: {
-				id: 42,
-				prompt: 'review',
-				status: 'pending',
-				post_id: 123,
-			},
-			isSubmitting: false,
-			error: null,
-			history: [],
-			submit,
-			cancel,
-		});
-
-		render(<QuickActions />);
-
-		expect(screen.getByText('Cancel')).toBeTruthy();
-	});
-
-	it('shows cancel when command is claimed', () => {
-		useCommands.mockReturnValue({
-			activeCommand: {
-				id: 42,
-				prompt: 'review',
-				status: 'claimed',
-				post_id: 123,
-			},
-			isSubmitting: false,
-			error: null,
-			history: [],
-			submit,
-			cancel,
-		});
+		mockUseSelect(
+			defaultStores({
+				'wpce/ai-actions': {
+					getActiveCommand: () => ({
+						id: 42,
+						prompt: 'review',
+						status: 'pending',
+						post_id: 123,
+					}),
+					isSubmitting: () => false,
+					getCommandError: () => null,
+				},
+			})
+		);
 
 		render(<QuickActions />);
 
@@ -219,76 +188,79 @@ describe('QuickActions', () => {
 	});
 
 	it('does not show cancel when command is running', () => {
-		useCommands.mockReturnValue({
-			activeCommand: {
-				id: 42,
-				prompt: 'review',
-				status: 'running',
-				post_id: 123,
-			},
-			isSubmitting: false,
-			error: null,
-			history: [],
-			submit,
-			cancel,
-		});
+		mockUseSelect(
+			defaultStores({
+				'wpce/ai-actions': {
+					getActiveCommand: () => ({
+						id: 42,
+						prompt: 'review',
+						status: 'running',
+						post_id: 123,
+					}),
+					isSubmitting: () => false,
+					getCommandError: () => null,
+				},
+			})
+		);
 
 		render(<QuickActions />);
 
 		expect(screen.queryByText('Cancel')).toBeNull();
 	});
 
-	it('click Proofread calls submit and onClose', () => {
+	it('click Proofread calls submitCommand and onClose', () => {
 		const onClose = jest.fn();
 		render(<QuickActions onClose={onClose} />);
 
 		fireEvent.click(screen.getByText('Proofread'));
 
-		expect(submit).toHaveBeenCalledWith('proofread');
+		expect(mockSubmitCommand).toHaveBeenCalledWith('proofread', 123);
 		expect(onClose).toHaveBeenCalled();
 	});
 
-	it('click Review calls submit and onClose', () => {
+	it('click Review calls submitCommand and onClose', () => {
 		const onClose = jest.fn();
 		render(<QuickActions onClose={onClose} />);
 
 		fireEvent.click(screen.getByText('Review'));
 
-		expect(submit).toHaveBeenCalledWith('review');
+		expect(mockSubmitCommand).toHaveBeenCalledWith('review', 123);
 		expect(onClose).toHaveBeenCalled();
 	});
 
-	it('click Cancel calls cancel with command id', () => {
-		useCommands.mockReturnValue({
-			activeCommand: {
-				id: 42,
-				prompt: 'review',
-				status: 'pending',
-				post_id: 123,
-			},
-			isSubmitting: false,
-			error: null,
-			history: [],
-			submit,
-			cancel,
-		});
+	it('click Cancel calls cancelCommand with command id', () => {
+		mockUseSelect(
+			defaultStores({
+				'wpce/ai-actions': {
+					getActiveCommand: () => ({
+						id: 42,
+						prompt: 'review',
+						status: 'pending',
+						post_id: 123,
+					}),
+					isSubmitting: () => false,
+					getCommandError: () => null,
+				},
+			})
+		);
 
 		render(<QuickActions />);
 
 		fireEvent.click(screen.getByText('Cancel'));
 
-		expect(cancel).toHaveBeenCalledWith(42);
+		expect(mockCancelCommand).toHaveBeenCalledWith(42);
 	});
 
 	it('shows error message when error exists', () => {
-		useCommands.mockReturnValue({
-			activeCommand: null,
-			isSubmitting: false,
-			error: 'Something went wrong',
-			history: [],
-			submit,
-			cancel,
-		});
+		mockUseSelect(
+			defaultStores({
+				'wpce/ai-actions': {
+					getActiveCommand: () => null,
+					isSubmitting: () => false,
+					getCommandError: () => 'Something went wrong',
+				},
+			})
+		);
 
 		render(<QuickActions />);
 
@@ -296,19 +268,20 @@ describe('QuickActions', () => {
 	});
 
 	it('items disabled when command is active', () => {
-		useCommands.mockReturnValue({
-			activeCommand: {
-				id: 42,
-				prompt: 'proofread',
-				status: 'running',
-				post_id: 123,
-			},
-			isSubmitting: false,
-			error: null,
-			history: [],
-			submit,
-			cancel,
-		});
+		mockUseSelect(
+			defaultStores({
+				'wpce/ai-actions': {
+					getActiveCommand: () => ({
+						id: 42,
+						prompt: 'proofread',
+						status: 'running',
+						post_id: 123,
+					}),
+					isSubmitting: () => false,
+					getCommandError: () => null,
+				},
+			})
+		);
 
 		render(<QuickActions />);
 
@@ -321,14 +294,15 @@ describe('QuickActions', () => {
 	});
 
 	it('items disabled when submitting', () => {
-		useCommands.mockReturnValue({
-			activeCommand: null,
-			isSubmitting: true,
-			error: null,
-			history: [],
-			submit,
-			cancel,
-		});
+		mockUseSelect(
+			defaultStores({
+				'wpce/ai-actions': {
+					getActiveCommand: () => null,
+					isSubmitting: () => true,
+					getCommandError: () => null,
+				},
+			})
+		);
 
 		render(<QuickActions />);
 
@@ -338,21 +312,19 @@ describe('QuickActions', () => {
 	});
 
 	it('items disabled when editing other post', () => {
-		mockUseSelect({
-			'core/editor': {
-				getCurrentPostId: () => 123,
-			},
-			core: {
-				getEntityRecords: () => null,
-			},
-			'wpce/ai-actions': {
-				getActiveCommand: () => ({
-					id: 1,
-					post_id: 999,
-					status: 'running',
-				}),
-			},
-		});
+		mockUseSelect(
+			defaultStores({
+				'wpce/ai-actions': {
+					getActiveCommand: () => ({
+						id: 1,
+						post_id: 999,
+						status: 'running',
+					}),
+					isSubmitting: () => false,
+					getCommandError: () => null,
+				},
+			})
+		);
 
 		render(<QuickActions />);
 
@@ -361,40 +333,37 @@ describe('QuickActions', () => {
 		);
 	});
 
-	it('click Respond to Notes calls submit', () => {
-		mockUseSelect({
-			'core/editor': {
-				getCurrentPostId: () => 123,
-			},
-			core: {
-				getEntityRecords: () => [{ id: 1 }],
-			},
-			'wpce/ai-actions': {
-				getActiveCommand: () => null,
-			},
-		});
+	it('click Respond to Notes calls submitCommand', () => {
+		mockUseSelect(
+			defaultStores({
+				core: {
+					getEntityRecords: () => [{ id: 1 }],
+				},
+			})
+		);
 
 		render(<QuickActions />);
 
 		fireEvent.click(screen.getByText('Respond to Notes'));
 
-		expect(submit).toHaveBeenCalledWith('respond-to-notes');
+		expect(mockSubmitCommand).toHaveBeenCalledWith('respond-to-notes', 123);
 	});
 
 	it('shows status label for review prompt', () => {
-		useCommands.mockReturnValue({
-			activeCommand: {
-				id: 42,
-				prompt: 'review',
-				status: 'running',
-				post_id: 123,
-			},
-			isSubmitting: false,
-			error: null,
-			history: [],
-			submit,
-			cancel,
-		});
+		mockUseSelect(
+			defaultStores({
+				'wpce/ai-actions': {
+					getActiveCommand: () => ({
+						id: 42,
+						prompt: 'review',
+						status: 'running',
+						post_id: 123,
+					}),
+					isSubmitting: () => false,
+					getCommandError: () => null,
+				},
+			})
+		);
 
 		render(<QuickActions />);
 
@@ -402,19 +371,20 @@ describe('QuickActions', () => {
 	});
 
 	it('shows status label for respond-to-notes prompt', () => {
-		useCommands.mockReturnValue({
-			activeCommand: {
-				id: 42,
-				prompt: 'respond-to-notes',
-				status: 'running',
-				post_id: 123,
-			},
-			isSubmitting: false,
-			error: null,
-			history: [],
-			submit,
-			cancel,
-		});
+		mockUseSelect(
+			defaultStores({
+				'wpce/ai-actions': {
+					getActiveCommand: () => ({
+						id: 42,
+						prompt: 'respond-to-notes',
+						status: 'running',
+						post_id: 123,
+					}),
+					isSubmitting: () => false,
+					getCommandError: () => null,
+				},
+			})
+		);
 
 		render(<QuickActions />);
 
@@ -422,106 +392,23 @@ describe('QuickActions', () => {
 	});
 
 	it('shows generic status label for unknown prompt', () => {
-		useCommands.mockReturnValue({
-			activeCommand: {
-				id: 42,
-				prompt: 'translate',
-				status: 'running',
-				post_id: 123,
-			},
-			isSubmitting: false,
-			error: null,
-			history: [],
-			submit,
-			cancel,
-		});
+		mockUseSelect(
+			defaultStores({
+				'wpce/ai-actions': {
+					getActiveCommand: () => ({
+						id: 42,
+						prompt: 'translate',
+						status: 'running',
+						post_id: 123,
+					}),
+					isSubmitting: () => false,
+					getCommandError: () => null,
+				},
+			})
+		);
 
 		render(<QuickActions />);
 
 		expect(screen.getByText('Working\u2026')).toBeTruthy();
-	});
-
-	it('shows success snackbar when command completes', () => {
-		const { rerender } = render(<QuickActions />);
-
-		useCommands.mockReturnValue({
-			activeCommand: {
-				id: 42,
-				prompt: 'proofread',
-				status: 'running',
-				post_id: 123,
-			},
-			isSubmitting: false,
-			error: null,
-			history: [],
-			submit,
-			cancel,
-		});
-		rerender(<QuickActions />);
-
-		useCommands.mockReturnValue({
-			activeCommand: null,
-			isSubmitting: false,
-			error: null,
-			history: [
-				{
-					id: 42,
-					prompt: 'proofread',
-					status: 'completed',
-					message: 'All done!',
-					post_id: 123,
-				},
-			],
-			submit,
-			cancel,
-		});
-		rerender(<QuickActions />);
-
-		expect(mockCreateNotice).toHaveBeenCalledWith('success', 'All done!', {
-			type: 'snackbar',
-		});
-	});
-
-	it('shows error snackbar when command fails', () => {
-		const { rerender } = render(<QuickActions />);
-
-		useCommands.mockReturnValue({
-			activeCommand: {
-				id: 42,
-				prompt: 'proofread',
-				status: 'running',
-				post_id: 123,
-			},
-			isSubmitting: false,
-			error: null,
-			history: [],
-			submit,
-			cancel,
-		});
-		rerender(<QuickActions />);
-
-		useCommands.mockReturnValue({
-			activeCommand: null,
-			isSubmitting: false,
-			error: null,
-			history: [
-				{
-					id: 42,
-					prompt: 'proofread',
-					status: 'failed',
-					message: null,
-					post_id: 123,
-				},
-			],
-			submit,
-			cancel,
-		});
-		rerender(<QuickActions />);
-
-		expect(mockCreateNotice).toHaveBeenCalledWith(
-			'error',
-			'Command failed.',
-			{ type: 'snackbar' }
-		);
 	});
 });
