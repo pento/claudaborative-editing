@@ -22,21 +22,21 @@ jest.mock('@wordpress/components', () => {
 	};
 });
 
-jest.mock('../../hooks/use-mcp-status', () => ({
+jest.mock('../../../hooks/use-mcp-status', () => ({
 	useMcpStatus: jest.fn(),
 }));
 
-jest.mock('../../hooks/use-commands', () => ({
+jest.mock('../../../hooks/use-commands', () => ({
 	useCommands: jest.fn(),
 }));
 
-jest.mock('../../store', () => ({ STORE_NAME: 'wpce/ai-actions' }));
+jest.mock('../../../store', () => ({ STORE_NAME: 'wpce/ai-actions' }));
 
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { useSelect } from '@wordpress/data';
-import { useMcpStatus } from '../../hooks/use-mcp-status';
-import { useCommands } from '../../hooks/use-commands';
-import QuickActions from '../QuickActions';
+import { useMcpStatus } from '../../../hooks/use-mcp-status';
+import { useCommands } from '../../../hooks/use-commands';
+import QuickActions from '..';
 
 function mockUseSelect(stores) {
 	useSelect.mockImplementation((selector) => {

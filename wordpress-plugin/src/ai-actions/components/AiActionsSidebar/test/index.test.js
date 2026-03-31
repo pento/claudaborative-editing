@@ -11,20 +11,20 @@ jest.mock('@wordpress/components', () => ({
 	PanelBody: ({ children }) => <div>{children}</div>,
 }));
 
-jest.mock('../ConnectionStatus', () => {
+jest.mock('../../ConnectionStatus', () => {
 	const Component = () => <div data-testid="connection-status" />;
 	Component.displayName = 'ConnectionStatus';
 	return { __esModule: true, default: Component };
 });
 
-jest.mock('../QuickActions', () => {
+jest.mock('../../QuickActions', () => {
 	const Component = () => <div data-testid="quick-actions" />;
 	Component.displayName = 'QuickActions';
 	return { __esModule: true, default: Component };
 });
 
 import { render, screen } from '@testing-library/react';
-import AiActionsSidebar from '../AiActionsSidebar';
+import AiActionsSidebar from '..';
 
 describe('AiActionsSidebar', () => {
 	beforeEach(() => {

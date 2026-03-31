@@ -16,8 +16,10 @@ import { useSelect } from '@wordpress/data';
 /**
  * Internal dependencies
  */
-import { useMcpStatus } from '../hooks/use-mcp-status';
-import { STORE_NAME } from '../store';
+import { useMcpStatus } from '../../hooks/use-mcp-status';
+import { STORE_NAME } from '../../store';
+
+import './style.scss';
 
 /**
  * ConnectionStatus component.

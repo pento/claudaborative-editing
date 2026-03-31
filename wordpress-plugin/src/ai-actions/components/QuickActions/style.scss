@@ -1,0 +1,30 @@
+.wpce-quick-actions .components-button {
+	width: 100%;
+	justify-content: center;
+	margin-bottom: 8px;
+
+	&:last-child {
+		margin-bottom: 0;
+	}
+}
+
+.wpce-command-status {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 12px 0;
+	font-size: 13px;
+	color: #757575;
+
+	.components-spinner {
+		margin: 0;
+	}
+}
+
+.wpce-command-notice {
+	margin: 8px 0 0;
+
+	.components-notice {
+		margin: 0;
+	}
+}

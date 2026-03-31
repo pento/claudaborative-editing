@@ -67,12 +67,12 @@ class Claudaborative_Editing {
 			true
 		);
 
-		$style_path = __DIR__ . '/build/ai-actions/index.css';
+		$style_path = __DIR__ . '/build/ai-actions/style-index.css';
 
 		if ( file_exists( $style_path ) ) {
 			wp_enqueue_style(
 				'claudaborative-editing-ai-actions',
-				plugins_url( 'build/ai-actions/index.css', __FILE__ ),
+				plugins_url( 'build/ai-actions/style-index.css', __FILE__ ),
 				[],
 				$asset['version']
 			);

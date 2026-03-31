@@ -15,8 +15,8 @@ import { PanelBody } from '@wordpress/components';
 /**
  * Internal dependencies
  */
-import ConnectionStatus from './ConnectionStatus';
-import QuickActions from './QuickActions';
+import ConnectionStatus from '../ConnectionStatus';
+import QuickActions from '../QuickActions';
 
 /**
  * Custom icon for the AI Actions sidebar.

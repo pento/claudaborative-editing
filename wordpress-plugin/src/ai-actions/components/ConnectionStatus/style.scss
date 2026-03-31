@@ -1,0 +1,33 @@
+.wpce-connection-status {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 8px;
+
+	&__dot {
+		display: inline-block;
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+		flex-shrink: 0;
+
+		&--connected {
+			background-color: #00a32a;
+		}
+
+		&--disconnected {
+			background-color: #949494;
+		}
+	}
+
+	&__text {
+		font-size: 13px;
+		color: #1e1e1e;
+
+		&--editing-other {
+			font-size: 12px;
+			color: #757575;
+			font-style: italic;
+		}
+	}
+}

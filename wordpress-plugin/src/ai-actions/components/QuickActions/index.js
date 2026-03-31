@@ -16,9 +16,11 @@ import { useState, useEffect, useCallback, useRef } from '@wordpress/element';
 /**
  * Internal dependencies
  */
-import { useMcpStatus } from '../hooks/use-mcp-status';
-import { useCommands } from '../hooks/use-commands';
-import { STORE_NAME } from '../store';
+import { useMcpStatus } from '../../hooks/use-mcp-status';
+import { useCommands } from '../../hooks/use-commands';
+import { STORE_NAME } from '../../store';
+
+import './style.scss';
 
 /**
  * Maps a command prompt identifier to a human-readable status label.
