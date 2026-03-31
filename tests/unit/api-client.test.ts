@@ -856,8 +856,8 @@ describe('WordPressApiClient', () => {
 				expect(body.post).toBe(42);
 				expect(body.content).toBe('A note');
 				expect(body.type).toBe('note');
-				expect(body.status).toBe('approved');
-				expect(body.parent).toBeUndefined();
+				expect(body.status).toBe('hold');
+				expect(body.parent).toBe(0);
 				expect(result).toEqual(fakeNote);
 			});
 
@@ -881,7 +881,7 @@ describe('WordPressApiClient', () => {
 				expect(result).toEqual(replyNote);
 			});
 
-			it('does not include parent when not provided', async () => {
+			it('defaults parent to 0 when not provided', async () => {
 				fetchMock.mockResolvedValue(mockResponse(fakeNote));
 				const client = createClient();
 				await client.createNote({ post: 42, content: 'No parent' });
@@ -891,7 +891,7 @@ describe('WordPressApiClient', () => {
 					string,
 					unknown
 				>;
-				expect(body).not.toHaveProperty('parent');
+				expect(body.parent).toBe(0);
 			});
 		});
 

@@ -8,6 +8,11 @@ vi.mock('child_process', () => ({
 
 vi.mock('fs', () => ({
 	existsSync: vi.fn(),
+	readFileSync: vi.fn(),
+	writeFileSync: vi.fn(),
+	mkdirSync: vi.fn(),
+	renameSync: vi.fn(),
+	unlinkSync: vi.fn(),
 }));
 
 vi.mock('os', () => ({
@@ -16,7 +21,7 @@ vi.mock('os', () => ({
 }));
 
 const { execSync, execFileSync } = await import('child_process');
-const { existsSync } = await import('fs');
+const { existsSync, readFileSync } = await import('fs');
 const { homedir, platform } = await import('os');
 
 const { MCP_CLIENTS, detectInstalledClients, SERVER_NAME } =
@@ -25,6 +30,7 @@ const { MCP_CLIENTS, detectInstalledClients, SERVER_NAME } =
 const execSyncMock = vi.mocked(execSync);
 const execFileSyncMock = vi.mocked(execFileSync);
 const existsSyncMock = vi.mocked(existsSync);
+const readFileSyncMock = vi.mocked(readFileSync);
 const homedirMock = vi.mocked(homedir);
 const platformMock = vi.mocked(platform);
 
@@ -33,6 +39,12 @@ describe('clients registry', () => {
 		vi.clearAllMocks();
 		homedirMock.mockReturnValue('/mock/home');
 		platformMock.mockReturnValue('darwin');
+		// Default: settings file doesn't exist (readJsonConfig returns {})
+		readFileSyncMock.mockImplementation(() => {
+			const err = new Error('ENOENT') as NodeJS.ErrnoException;
+			err.code = 'ENOENT';
+			throw err;
+		});
 	});
 
 	describe('SERVER_NAME', () => {
