@@ -5,6 +5,7 @@ import eslint from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import packageJson from 'eslint-plugin-package-json';
 import eslintConfigPrettier from 'eslint-config-prettier';
+import globals from 'globals';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const compat = new FlatCompat({ baseDirectory: __dirname });
@@ -123,26 +124,18 @@ export default [
 			files: ['wordpress-plugin/**/*.js'],
 		})),
 
-	// WordPress plugin test files: add Jest and CJS globals
+	// WordPress plugin test and mock files: Jest globals
 	{
 		files: [
 			'wordpress-plugin/src/**/test/**/*.js',
 			'wordpress-plugin/src/__mocks__/**/*.js',
 		],
 		languageOptions: {
-			globals: {
-				jest: 'readonly',
-				describe: 'readonly',
-				it: 'readonly',
-				expect: 'readonly',
-				beforeEach: 'readonly',
-				afterEach: 'readonly',
-				beforeAll: 'readonly',
-				afterAll: 'readonly',
-				module: 'readonly',
-				require: 'readonly',
-			},
+			globals: globals.jest,
 		},
+	},
+	{
+		files: ['wordpress-plugin/src/**/test/**/*.js'],
 		rules: {
 			'@wordpress/i18n-no-variables': 'off',
 			'@wordpress/i18n-text-domain': 'off',
