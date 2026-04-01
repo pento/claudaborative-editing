@@ -64,12 +64,20 @@ export default function NotesIntegration() {
 	const isDisabled = !mcpConnected || !postId || activeCommand !== null;
 	const isProcessing = activeCommand !== null;
 
-	// Track DOM elements for portals. A revision counter forces
-	// re-renders when sidebar DOM changes (e.g., a thread expands
-	// and its comment-status element appears).
+	// Track sidebar panel elements and a revision counter that
+	// forces re-scanning when DOM changes within existing panels
+	// (e.g., a thread expands and its status HStack appears).
 	const [panelEls, setPanelEls] = useState([]);
-	const [, setRevision] = useState(0);
+	const [revision, setRevision] = useState(0);
 
+	// Portal containers created by effects (not during render,
+	// since Gutenberg DOM is React-managed).
+	const [containers, setContainers] = useState({
+		panels: [],
+		threads: [],
+	});
+
+	// Observe DOM for sidebar panel elements.
 	useEffect(() => {
 		const arraysEqual = (a, b) =>
 			a.length === b.length && a.every((el, i) => el === b[i]);
@@ -80,10 +88,7 @@ export default function NotesIntegration() {
 			);
 			setPanelEls((prev) => (arraysEqual(prev, panels) ? prev : panels));
 
-			// Bump revision so the render loop re-checks thread elements
-			// even when the thread list itself hasn't changed (e.g., a
-			// thread expanded and its status HStack appeared).
-			// Only bump when the notes sidebar is open to avoid
+			// Only bump revision when the notes sidebar is open to avoid
 			// unnecessary re-renders from unrelated DOM mutations.
 			if (panels.length > 0) {
 				setRevision((r) => r + 1);
@@ -98,17 +103,60 @@ export default function NotesIntegration() {
 		return () => observer.disconnect();
 	}, []);
 
-	const portals = [];
+	// Create/find portal containers when sidebar DOM changes.
+	// Runs as an effect (not during render) because we're injecting
+	// into React-managed DOM owned by Gutenberg.
+	useEffect(() => {
+		// Panel containers for "Address All Notes" buttons
+		const panelResults = panelEls.map((panel) => {
+			let container = panel.querySelector('.wpce-notes-respond-all');
+			if (!container) {
+				container = document.createElement('div');
+				container.className = 'wpce-notes-respond-all';
+				panel.prepend(container);
+			}
+			return container;
+		});
 
-	// "Respond to All Notes" button pinned at the top of each panel
-	for (const panel of panelEls) {
-		let container = panel.querySelector('.wpce-notes-respond-all');
-		if (!container) {
-			container = document.createElement('div');
-			container.className = 'wpce-notes-respond-all';
-			panel.prepend(container);
+		// Thread containers for per-note sparkle buttons
+		const threadResults = [];
+		const threadEls = document.querySelectorAll(
+			'.editor-collab-sidebar-panel > .editor-collab-sidebar-panel__thread'
+		);
+		for (const threadEl of threadEls) {
+			const noteId = getThreadNoteId(threadEl);
+			if (!noteId) {
+				continue;
+			}
+
+			const statusEl = threadEl.querySelector(
+				'.editor-collab-sidebar-panel__comment-status'
+			);
+			if (!statusEl) {
+				continue;
+			}
+
+			const hstack = statusEl.firstElementChild;
+			if (!hstack) {
+				continue;
+			}
+
+			let container = hstack.querySelector('.wpce-notes-ask-claude');
+			if (!container) {
+				container = document.createElement('div');
+				container.className = 'wpce-notes-ask-claude';
+				hstack.prepend(container);
+			}
+			threadResults.push({ noteId, container });
 		}
 
+		setContainers({ panels: panelResults, threads: threadResults });
+	}, [panelEls, revision]);
+
+	// Build portals from containers created by effects.
+	const portals = [];
+
+	for (const container of containers.panels) {
 		portals.push(
 			createPortal(
 				<Button
@@ -125,39 +173,7 @@ export default function NotesIntegration() {
 		);
 	}
 
-	// Per-note sparkle button on each root thread.
-	// Queried fresh each render (driven by revision counter) so we
-	// pick up threads that have just expanded their status HStack.
-	const threadEls = document.querySelectorAll(
-		'.editor-collab-sidebar-panel > .editor-collab-sidebar-panel__thread'
-	);
-	for (const threadEl of threadEls) {
-		const noteId = getThreadNoteId(threadEl);
-		if (!noteId) {
-			continue;
-		}
-
-		// Find the inner HStack inside the first comment-status
-		const statusEl = threadEl.querySelector(
-			'.editor-collab-sidebar-panel__comment-status'
-		);
-		if (!statusEl) {
-			continue;
-		}
-
-		// The HStack is the first child element of the comment-status FlexItem
-		const hstack = statusEl.firstElementChild;
-		if (!hstack) {
-			continue;
-		}
-
-		let container = hstack.querySelector('.wpce-notes-ask-claude');
-		if (!container) {
-			container = document.createElement('div');
-			container.className = 'wpce-notes-ask-claude';
-			hstack.prepend(container);
-		}
-
+	for (const { noteId, container } of containers.threads) {
 		portals.push(
 			createPortal(
 				<Button
