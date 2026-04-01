@@ -17,11 +17,16 @@ jest.mock('@wordpress/components', () => {
 			children,
 			onClick,
 			className,
+			label,
 			isDestructive: _,
 			variant: _v,
 			...props
 		}) =>
-			createElement('button', { onClick, className, ...props }, children),
+			createElement(
+				'button',
+				{ onClick, className, 'aria-label': label, ...props },
+				children
+			),
 		Popover: ({ children, className }) =>
 			createElement(
 				'div',
@@ -137,17 +142,17 @@ describe('ConnectionStatus', () => {
 		}
 	});
 
-	it('shows popover with "Status: disconnected" on hover', async () => {
+	it('shows popover with "Status: disconnected" on click', async () => {
 		await act(async () => render(<ConnectionStatus />));
 
-		const statusEl = footerEl.querySelector('.wpce-footer-status');
-		await act(async () => fireEvent.mouseEnter(statusEl));
+		const toggle = footerEl.querySelector('.wpce-footer-status-toggle');
+		await act(async () => fireEvent.click(toggle));
 
 		expect(screen.getByText('Status: disconnected')).toBeTruthy();
 		expect(screen.getByText('Claudaborative Editing')).toBeTruthy();
 	});
 
-	it('shows popover with "Status: connected" on hover when connected', async () => {
+	it('shows popover with "Status: connected" on click when connected', async () => {
 		useMcpStatus.mockReturnValue({
 			mcpConnected: true,
 			mcpLastSeenAt: '2026-03-30T12:00:00Z',
@@ -157,91 +162,30 @@ describe('ConnectionStatus', () => {
 
 		await act(async () => render(<ConnectionStatus />));
 
-		const statusEl = footerEl.querySelector('.wpce-footer-status');
-		await act(async () => fireEvent.mouseEnter(statusEl));
+		const toggle = footerEl.querySelector('.wpce-footer-status-toggle');
+		await act(async () => fireEvent.click(toggle));
 
 		expect(screen.getByText('Status: connected')).toBeTruthy();
 	});
 
-	it('shows popover on keyboard focus', async () => {
+	it('hides popover on second click', async () => {
 		await act(async () => render(<ConnectionStatus />));
 
-		const statusEl = footerEl.querySelector('.wpce-footer-status');
-		await act(async () => fireEvent.focus(statusEl));
-
-		expect(screen.getByText('Status: disconnected')).toBeTruthy();
-	});
-
-	it('hides popover on blur when focus leaves subtree', async () => {
-		await act(async () => render(<ConnectionStatus />));
-
-		const statusEl = footerEl.querySelector('.wpce-footer-status');
-		await act(async () => fireEvent.focus(statusEl));
+		const toggle = footerEl.querySelector('.wpce-footer-status-toggle');
+		await act(async () => fireEvent.click(toggle));
 		expect(screen.getByText('Status: disconnected')).toBeTruthy();
 
-		// Focus moves outside the status container
-		await act(async () =>
-			fireEvent.blur(statusEl, { relatedTarget: document.body })
-		);
+		await act(async () => fireEvent.click(toggle));
 		expect(screen.queryByText('Status: disconnected')).toBeNull();
 	});
 
-	it('keeps popover open when focus moves within subtree', async () => {
-		useMcpStatus.mockReturnValue({
-			mcpConnected: true,
-			mcpLastSeenAt: '2026-03-30T12:00:00Z',
-			isLoading: false,
-			error: null,
-		});
-
-		const cancel = jest.fn();
-		useCommands.mockReturnValue({
-			activeCommand: {
-				id: 42,
-				prompt: 'review',
-				status: 'pending',
-				post_id: 100,
-			},
-			isSubmitting: false,
-			error: null,
-			history: [],
-			submit: jest.fn(),
-			cancel,
-		});
-
+	it('toggle button has accessible label', async () => {
 		await act(async () => render(<ConnectionStatus />));
 
-		const statusEl = footerEl.querySelector('.wpce-footer-status');
-		await act(async () => fireEvent.focus(statusEl));
-
-		// Simulate focus moving to cancel button inside the popover
-		const cancelBtn = screen.getByText('(cancel)');
-		await act(async () =>
-			fireEvent.blur(statusEl, { relatedTarget: cancelBtn })
+		const toggle = footerEl.querySelector('.wpce-footer-status-toggle');
+		expect(toggle.getAttribute('aria-label')).toBe(
+			'Claudaborative Editing status'
 		);
-
-		// Popover should remain visible
-		expect(screen.getByText('(cancel)')).toBeTruthy();
-		expect(screen.getByText('Reviewing…')).toBeTruthy();
-	});
-
-	it('footer status element is keyboard focusable', async () => {
-		await act(async () => render(<ConnectionStatus />));
-
-		const statusEl = footerEl.querySelector('.wpce-footer-status');
-		expect(statusEl.getAttribute('tabindex')).toBe('0');
-		expect(statusEl.getAttribute('role')).toBe('status');
-	});
-
-	it('hides popover on mouse leave', async () => {
-		await act(async () => render(<ConnectionStatus />));
-
-		const statusEl = footerEl.querySelector('.wpce-footer-status');
-		await act(async () => fireEvent.mouseEnter(statusEl));
-		expect(screen.getByText('Status: disconnected')).toBeTruthy();
-
-		await act(async () => fireEvent.mouseLeave(statusEl));
-		expect(screen.queryByText('Status: disconnected')).toBeNull();
 	});
 
 	it('shows editing-other-post info in popover', async () => {
@@ -281,8 +225,8 @@ describe('ConnectionStatus', () => {
 
 		await act(async () => render(<ConnectionStatus />));
 
-		const statusEl = footerEl.querySelector('.wpce-footer-status');
-		await act(async () => fireEvent.mouseEnter(statusEl));
+		const toggle = footerEl.querySelector('.wpce-footer-status-toggle');
+		await act(async () => fireEvent.click(toggle));
 
 		expect(screen.getByText('Editing: My Other Post')).toBeTruthy();
 	});
@@ -393,8 +337,8 @@ describe('ConnectionStatus', () => {
 
 		await act(async () => render(<ConnectionStatus />));
 
-		const statusEl = footerEl.querySelector('.wpce-footer-status');
-		await act(async () => fireEvent.mouseEnter(statusEl));
+		const toggle = footerEl.querySelector('.wpce-footer-status-toggle');
+		await act(async () => fireEvent.click(toggle));
 
 		expect(screen.getByText(/Proofreading/)).toBeTruthy();
 	});
@@ -424,8 +368,8 @@ describe('ConnectionStatus', () => {
 
 		await act(async () => render(<ConnectionStatus />));
 
-		const statusEl = footerEl.querySelector('.wpce-footer-status');
-		await act(async () => fireEvent.mouseEnter(statusEl));
+		const toggle = footerEl.querySelector('.wpce-footer-status-toggle');
+		await act(async () => fireEvent.click(toggle));
 
 		const cancelBtn = screen.getByText('(cancel)');
 		expect(cancelBtn).toBeTruthy();
@@ -458,9 +402,33 @@ describe('ConnectionStatus', () => {
 
 		await act(async () => render(<ConnectionStatus />));
 
-		const statusEl = footerEl.querySelector('.wpce-footer-status');
-		await act(async () => fireEvent.mouseEnter(statusEl));
+		const toggle = footerEl.querySelector('.wpce-footer-status-toggle');
+		await act(async () => fireEvent.click(toggle));
 
+		expect(screen.queryByText('(cancel)')).toBeNull();
+	});
+
+	it('does not show cancel when disconnected', async () => {
+		useCommands.mockReturnValue({
+			activeCommand: {
+				id: 42,
+				prompt: 'review',
+				status: 'pending',
+				post_id: 100,
+			},
+			isSubmitting: false,
+			error: null,
+			history: [],
+			submit: jest.fn(),
+			cancel: jest.fn(),
+		});
+
+		await act(async () => render(<ConnectionStatus />));
+
+		const toggle = footerEl.querySelector('.wpce-footer-status-toggle');
+		await act(async () => fireEvent.click(toggle));
+
+		expect(screen.getByText('Status: disconnected')).toBeTruthy();
 		expect(screen.queryByText('(cancel)')).toBeNull();
 	});
 

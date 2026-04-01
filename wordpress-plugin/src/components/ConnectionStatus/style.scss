@@ -5,11 +5,22 @@
 	height: 100%;
 	display: flex;
 	align-items: center;
-	cursor: pointer;
+}
+
+.wpce-footer-status-toggle.components-button {
+	padding: 4px;
+	min-width: 0;
+	height: auto;
 
 	svg {
 		display: block;
 		overflow: visible;
+	}
+
+	&:focus {
+		box-shadow: none;
+		outline: 1px dotted;
+		outline-offset: -1px;
 	}
 }
 

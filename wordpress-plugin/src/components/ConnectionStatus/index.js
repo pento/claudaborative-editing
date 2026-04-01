@@ -3,7 +3,7 @@
  *
  * Renders a sparkle icon in the editor footer bar that indicates
  * MCP connection state. Orange sparkles when connected, grey when
- * disconnected. Hover tooltip shows detailed status information.
+ * disconnected. Click to toggle a popover with detailed status.
  */
 
 /**
@@ -12,7 +12,13 @@
 import { __, sprintf } from '@wordpress/i18n';
 import { Button, Popover } from '@wordpress/components';
 import { useSelect, useDispatch } from '@wordpress/data';
-import { useState, useEffect, useRef, createPortal } from '@wordpress/element';
+import {
+	useState,
+	useEffect,
+	useRef,
+	useCallback,
+	createPortal,
+} from '@wordpress/element';
 
 /**
  * Internal dependencies
@@ -26,8 +32,8 @@ import './style.scss';
 /**
  * ConnectionStatus component.
  *
- * Portals into the editor footer and renders a sparkle icon with a
- * hover popover showing connection details.
+ * Portals into the editor footer and renders a sparkle icon.
+ * Click to toggle a popover with connection details and cancel control.
  *
  * @return {import('react').ReactElement|null} Rendered component or null.
  */
@@ -158,46 +164,42 @@ export default function ConnectionStatus() {
 	}
 
 	const isCancellable =
+		mcpConnected &&
 		activeCommand &&
 		(activeCommand.status === 'pending' ||
 			activeCommand.status === 'claimed');
+
+	const togglePopover = useCallback(
+		() => setShowPopover((prev) => !prev),
+		[]
+	);
+	const closePopover = useCallback(() => setShowPopover(false), []);
 
 	if (!footerEl) {
 		return null;
 	}
 
-	const handleBlur = (event) => {
-		// Keep popover open when focus moves to an element within
-		// the status container (e.g., the cancel button inside the
-		// popover). Only close when focus leaves the entire subtree.
-		if (
-			event.relatedTarget &&
-			event.currentTarget.contains(event.relatedTarget)
-		) {
-			return;
-		}
-		setShowPopover(false);
-	};
-
 	return createPortal(
-		<div
-			className="wpce-footer-status"
-			tabIndex={0}
-			role="status"
-			onMouseEnter={() => setShowPopover(true)}
-			onMouseLeave={() => setShowPopover(false)}
-			onFocus={() => setShowPopover(true)}
-			onBlur={handleBlur}
-		>
-			<SparkleIcon
-				active={mcpConnected}
-				processing={activeCommand !== null}
-			/>
+		<div className="wpce-footer-status">
+			<Button
+				className="wpce-footer-status-toggle"
+				onClick={togglePopover}
+				label={__(
+					'Claudaborative Editing status',
+					'claudaborative-editing'
+				)}
+			>
+				<SparkleIcon
+					active={mcpConnected}
+					processing={activeCommand !== null}
+				/>
+			</Button>
 			{showPopover && (
 				<Popover
 					placement="top-end"
 					noArrow={false}
-					focusOnMount={false}
+					onClose={closePopover}
+					constrainTabbing={false}
 					className="wpce-footer-status-popover"
 				>
 					<div className="wpce-footer-status-tooltip">
