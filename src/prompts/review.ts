@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { SessionManager } from '../session/session-manager.js';
 import type { WPNote } from '../wordpress/types.js';
@@ -260,6 +261,133 @@ Instructions:
 - Write all replies in the same language as the post content.
 - Use wp_read_post to verify your changes after editing.
 - After addressing all notes, use wp_save to save the post.`,
+						},
+					},
+				],
+			};
+		}
+	);
+
+	server.registerPrompt(
+		'respond-to-note',
+		{
+			description:
+				'Address a single editorial note on a WordPress post — read it, make the requested changes, and resolve when done.',
+			argsSchema: {
+				noteId: z.string().describe('The ID of the note to address.'),
+			},
+		},
+		async ({ noteId: noteIdStr }) => {
+			const state = session.getState();
+
+			if (state === 'disconnected') {
+				return {
+					description: 'Respond to a note',
+					messages: [
+						{
+							role: 'user' as const,
+							content: {
+								type: 'text' as const,
+								text: 'I want to respond to an editorial note on a WordPress post. Please connect to WordPress first using wp_connect, then open a post with wp_open_post.',
+							},
+						},
+					],
+				};
+			}
+
+			if (state === 'connected') {
+				return {
+					description: 'Respond to a note',
+					messages: [
+						{
+							role: 'user' as const,
+							content: {
+								type: 'text' as const,
+								text: 'I want to respond to an editorial note on a WordPress post. Please open a post with wp_open_post first.',
+							},
+						},
+					],
+				};
+			}
+
+			// state === 'editing'
+			const notesSupported = session.getNotesSupported();
+
+			if (!notesSupported) {
+				return {
+					description: 'Respond to a note',
+					messages: [
+						{
+							role: 'user' as const,
+							content: {
+								type: 'text' as const,
+								text: 'This WordPress site does not support notes (requires WordPress 6.9+). There are no notes to respond to.',
+							},
+						},
+					],
+				};
+			}
+
+			const noteId = parseInt(noteIdStr, 10);
+			const postContent = session.readPost();
+			const { notes, noteBlockMap } = await session.listNotes();
+
+			// Find the target note and its replies
+			const targetNote = notes.find((n) => n.id === noteId);
+
+			if (!targetNote) {
+				return {
+					description: 'Respond to a note',
+					messages: [
+						{
+							role: 'user' as const,
+							content: {
+								type: 'text' as const,
+								text: `Note #${noteId} was not found on this post. It may have already been resolved. Use wp_list_notes to see current notes.`,
+							},
+						},
+					],
+				};
+			}
+
+			// Filter to just this note and its replies for formatting
+			const relevantNotes = notes.filter(
+				(n) => n.id === noteId || n.parent === noteId
+			);
+			const relevantMap: Partial<Record<number, string>> = {};
+			const blockIdx = noteBlockMap[noteId];
+			if (blockIdx !== undefined) {
+				relevantMap[noteId] = blockIdx;
+			}
+
+			const formattedNote = formatNotes(relevantNotes, relevantMap);
+
+			return {
+				description: `Respond to note #${noteId} on "${session.getTitle()}"`,
+				messages: [
+					{
+						role: 'user' as const,
+						content: {
+							type: 'text' as const,
+							text: `Address this specific editorial note on the WordPress post.
+
+Here is the current post content:
+
+${postContent}
+
+Here is the note to address:
+
+${formattedNote}
+
+Instructions:
+1. Read the feedback carefully.
+2. Use wp_update_block to make the requested changes to the referenced block.
+3. If the note requires a response or clarification, use wp_reply_to_note.
+4. Once the note is fully addressed, use wp_resolve_note to mark it done.
+- If the feedback doesn't apply or you disagree, use wp_reply_to_note to explain why, then move on without resolving.
+- Write all replies in the same language as the post content.
+- Use wp_read_post to verify your changes after editing.
+- After addressing the note, use wp_save to save the post.`,
 						},
 					},
 				],

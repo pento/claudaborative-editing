@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import type { WPNote } from '../../../src/wordpress/types.js';
 import {
 	createMockServer,
 	createMockSession,
@@ -205,7 +206,7 @@ describe('respond-to-notes', () => {
 		});
 
 		it('includes replies in formatted notes', async () => {
-			const replyNote = {
+			const replyNote: WPNote = {
 				...fakeNote,
 				id: 2,
 				parent: 1,
@@ -231,6 +232,149 @@ describe('respond-to-notes', () => {
 			expect(text).toContain('Reply #2');
 			expect(text).toContain('Alice');
 			expect(text).toContain('Reply text');
+		});
+	});
+});
+
+describe('respond-to-note', () => {
+	describe('when disconnected', () => {
+		it('instructs to connect first', async () => {
+			const server = createMockServer();
+			const session = createMockSession({ state: 'disconnected' });
+			registerReviewPrompts(server, session);
+
+			const prompt = server.registeredPrompts.get('respond-to-note');
+			assertDefined(prompt);
+			const result = await prompt.handler({ noteId: '1' });
+
+			const text = result.messages[0].content.text;
+			expect(text).toContain('wp_connect');
+		});
+	});
+
+	describe('when connected', () => {
+		it('instructs to open a post first', async () => {
+			const server = createMockServer();
+			const session = createMockSession({ state: 'connected' });
+			registerReviewPrompts(server, session);
+
+			const prompt = server.registeredPrompts.get('respond-to-note');
+			assertDefined(prompt);
+			const result = await prompt.handler({ noteId: '1' });
+
+			const text = result.messages[0].content.text;
+			expect(text).toContain('wp_open_post');
+		});
+	});
+
+	describe('when editing', () => {
+		it('reports notes not supported on older WordPress', async () => {
+			const server = createMockServer();
+			const session = createMockSession({
+				state: 'editing',
+				post: fakePost,
+			});
+			vi.mocked(session.getNotesSupported).mockReturnValue(false);
+			registerReviewPrompts(server, session);
+
+			const prompt = server.registeredPrompts.get('respond-to-note');
+			assertDefined(prompt);
+			const result = await prompt.handler({ noteId: '1' });
+
+			const text = result.messages[0].content.text;
+			expect(text).toContain('does not support notes');
+		});
+
+		it('reports note not found when ID does not match', async () => {
+			const server = createMockServer();
+			const session = createMockSession({
+				state: 'editing',
+				post: fakePost,
+			});
+			vi.mocked(session.listNotes).mockResolvedValue({
+				notes: [fakeNote],
+				noteBlockMap: { 1: '0' },
+			});
+			registerReviewPrompts(server, session);
+
+			const prompt = server.registeredPrompts.get('respond-to-note');
+			assertDefined(prompt);
+			const result = await prompt.handler({ noteId: '999' });
+
+			const text = result.messages[0].content.text;
+			expect(text).toContain('999');
+			expect(text).toContain('not found');
+		});
+
+		it('embeds only the targeted note and its replies', async () => {
+			const otherNote: WPNote = {
+				...fakeNote,
+				id: 10,
+				parent: 0,
+				author_name: 'Bob',
+				content: {
+					rendered: '<p>Other note</p>',
+					raw: 'Other note',
+				},
+			};
+			const replyNote: WPNote = {
+				...fakeNote,
+				id: 2,
+				parent: 1,
+				author_name: 'Alice',
+				content: { rendered: '<p>Reply text</p>', raw: 'Reply text' },
+			};
+			const server = createMockServer();
+			const session = createMockSession({
+				state: 'editing',
+				post: fakePost,
+			});
+			vi.mocked(session.listNotes).mockResolvedValue({
+				notes: [fakeNote, replyNote, otherNote],
+				noteBlockMap: { 1: '0', 10: '1' },
+			});
+			registerReviewPrompts(server, session);
+
+			const prompt = server.registeredPrompts.get('respond-to-note');
+			assertDefined(prompt);
+			const result = await prompt.handler({ noteId: '1' });
+
+			const text = result.messages[0].content.text;
+			// Should include the targeted note and its reply
+			expect(text).toContain('Note #1');
+			expect(text).toContain('Test note');
+			expect(text).toContain('Reply #2');
+			expect(text).toContain('Alice');
+			// Should NOT include the other note
+			expect(text).not.toContain('Note #10');
+			expect(text).not.toContain('Other note');
+			// Should include the post content
+			const postContent = session.readPost();
+			expect(text).toContain(postContent);
+			// Should include block mapping
+			expect(text).toContain('block [0]');
+			expect(result.description).toContain('#1');
+		});
+
+		it('includes wp_resolve_note instruction', async () => {
+			const server = createMockServer();
+			const session = createMockSession({
+				state: 'editing',
+				post: fakePost,
+			});
+			vi.mocked(session.listNotes).mockResolvedValue({
+				notes: [fakeNote],
+				noteBlockMap: { 1: '0' },
+			});
+			registerReviewPrompts(server, session);
+
+			const prompt = server.registeredPrompts.get('respond-to-note');
+			assertDefined(prompt);
+			const result = await prompt.handler({ noteId: '1' });
+
+			const text = result.messages[0].content.text;
+			expect(text).toContain('wp_resolve_note');
+			expect(text).toContain('wp_save');
 		});
 	});
 });
