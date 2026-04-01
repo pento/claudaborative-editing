@@ -160,7 +160,7 @@ function reducer(state = DEFAULT_STATE, action) {
 				...state,
 				commands: {
 					...state.commands,
-					history: action.history,
+					history: action.history.slice(0, MAX_HISTORY),
 				},
 			};
 

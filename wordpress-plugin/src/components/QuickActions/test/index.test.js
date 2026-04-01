@@ -201,6 +201,25 @@ describe('QuickActions', () => {
 		);
 	});
 
+	it('items disabled when postId is not available', () => {
+		mockUseSelect(
+			defaultStores({
+				'core/editor': {
+					getCurrentPostId: () => null,
+				},
+			})
+		);
+
+		render(<QuickActions />);
+
+		expect(screen.getByText('Proofread').closest('button').disabled).toBe(
+			true
+		);
+		expect(screen.getByText('Review').closest('button').disabled).toBe(
+			true
+		);
+	});
+
 	it('items disabled when editing other post', () => {
 		mockUseSelect(
 			defaultStores({

@@ -252,6 +252,20 @@ describe('AI Actions store', () => {
 			});
 			expect(state.commands.history).toEqual(history);
 		});
+
+		it('SET_COMMAND_HISTORY caps at MAX_HISTORY', () => {
+			const history = Array.from({ length: 15 }, (_, i) => ({
+				...MOCK_COMMAND,
+				id: i,
+			}));
+			const state = reducer(DEFAULT_STATE, {
+				type: 'SET_COMMAND_HISTORY',
+				history,
+			});
+			expect(state.commands.history).toHaveLength(10);
+			expect(state.commands.history[0].id).toBe(0);
+			expect(state.commands.history[9].id).toBe(9);
+		});
 	});
 
 	describe('selectors', () => {

@@ -61,7 +61,7 @@ export default function NotesIntegration() {
 
 	const { submitCommand } = useDispatch(STORE_NAME);
 
-	const isDisabled = !mcpConnected || activeCommand !== null;
+	const isDisabled = !mcpConnected || !postId || activeCommand !== null;
 	const isProcessing = activeCommand !== null;
 
 	// Track DOM elements for portals. A revision counter forces
@@ -83,7 +83,11 @@ export default function NotesIntegration() {
 			// Bump revision so the render loop re-checks thread elements
 			// even when the thread list itself hasn't changed (e.g., a
 			// thread expanded and its status HStack appeared).
-			setRevision((r) => r + 1);
+			// Only bump when the notes sidebar is open to avoid
+			// unnecessary re-renders from unrelated DOM mutations.
+			if (panels.length > 0) {
+				setRevision((r) => r + 1);
+			}
 		};
 
 		scan();

@@ -169,8 +169,12 @@ export default function ConnectionStatus() {
 	return createPortal(
 		<div
 			className="wpce-footer-status"
+			tabIndex={0}
+			role="status"
 			onMouseEnter={() => setShowPopover(true)}
 			onMouseLeave={() => setShowPopover(false)}
+			onFocus={() => setShowPopover(true)}
+			onBlur={() => setShowPopover(false)}
 		>
 			<SparkleIcon
 				active={mcpConnected}

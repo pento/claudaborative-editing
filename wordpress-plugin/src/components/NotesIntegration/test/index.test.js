@@ -200,6 +200,24 @@ describe('NotesIntegration', () => {
 		cleanup();
 	});
 
+	it('buttons disabled when postId is not available', async () => {
+		mockUseSelect({
+			'core/editor': { getCurrentPostId: () => null },
+			'wpce/ai-actions': { getActiveCommand: () => null },
+		});
+
+		const { cleanup } = createMockPanel([{ id: 42, hasStatus: true }]);
+
+		await act(async () => render(<NotesIntegration />));
+
+		expect(
+			screen.getByText('Address All Notes').closest('button').disabled
+		).toBe(true);
+		expect(screen.getByLabelText('Address This Note').disabled).toBe(true);
+
+		cleanup();
+	});
+
 	it('buttons disabled when not connected', async () => {
 		useMcpStatus.mockReturnValue({
 			mcpConnected: false,

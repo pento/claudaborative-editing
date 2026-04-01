@@ -61,6 +61,7 @@ export default function QuickActions({ onClose }) {
 
 	const itemsDisabled =
 		!mcpConnected ||
+		!postId ||
 		isSubmitting ||
 		activeCommand !== null ||
 		isEditingOtherPost;

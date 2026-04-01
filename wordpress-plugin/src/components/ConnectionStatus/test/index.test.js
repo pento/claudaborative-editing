@@ -163,6 +163,34 @@ describe('ConnectionStatus', () => {
 		expect(screen.getByText('Status: connected')).toBeTruthy();
 	});
 
+	it('shows popover on keyboard focus', async () => {
+		await act(async () => render(<ConnectionStatus />));
+
+		const statusEl = footerEl.querySelector('.wpce-footer-status');
+		await act(async () => fireEvent.focus(statusEl));
+
+		expect(screen.getByText('Status: disconnected')).toBeTruthy();
+	});
+
+	it('hides popover on blur', async () => {
+		await act(async () => render(<ConnectionStatus />));
+
+		const statusEl = footerEl.querySelector('.wpce-footer-status');
+		await act(async () => fireEvent.focus(statusEl));
+		expect(screen.getByText('Status: disconnected')).toBeTruthy();
+
+		await act(async () => fireEvent.blur(statusEl));
+		expect(screen.queryByText('Status: disconnected')).toBeNull();
+	});
+
+	it('footer status element is keyboard focusable', async () => {
+		await act(async () => render(<ConnectionStatus />));
+
+		const statusEl = footerEl.querySelector('.wpce-footer-status');
+		expect(statusEl.getAttribute('tabindex')).toBe('0');
+		expect(statusEl.getAttribute('role')).toBe('status');
+	});
+
 	it('hides popover on mouse leave', async () => {
 		await act(async () => render(<ConnectionStatus />));
 
