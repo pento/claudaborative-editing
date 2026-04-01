@@ -172,15 +172,57 @@ describe('ConnectionStatus', () => {
 		expect(screen.getByText('Status: disconnected')).toBeTruthy();
 	});
 
-	it('hides popover on blur', async () => {
+	it('hides popover on blur when focus leaves subtree', async () => {
 		await act(async () => render(<ConnectionStatus />));
 
 		const statusEl = footerEl.querySelector('.wpce-footer-status');
 		await act(async () => fireEvent.focus(statusEl));
 		expect(screen.getByText('Status: disconnected')).toBeTruthy();
 
-		await act(async () => fireEvent.blur(statusEl));
+		// Focus moves outside the status container
+		await act(async () =>
+			fireEvent.blur(statusEl, { relatedTarget: document.body })
+		);
 		expect(screen.queryByText('Status: disconnected')).toBeNull();
+	});
+
+	it('keeps popover open when focus moves within subtree', async () => {
+		useMcpStatus.mockReturnValue({
+			mcpConnected: true,
+			mcpLastSeenAt: '2026-03-30T12:00:00Z',
+			isLoading: false,
+			error: null,
+		});
+
+		const cancel = jest.fn();
+		useCommands.mockReturnValue({
+			activeCommand: {
+				id: 42,
+				prompt: 'review',
+				status: 'pending',
+				post_id: 100,
+			},
+			isSubmitting: false,
+			error: null,
+			history: [],
+			submit: jest.fn(),
+			cancel,
+		});
+
+		await act(async () => render(<ConnectionStatus />));
+
+		const statusEl = footerEl.querySelector('.wpce-footer-status');
+		await act(async () => fireEvent.focus(statusEl));
+
+		// Simulate focus moving to cancel button inside the popover
+		const cancelBtn = screen.getByText('(cancel)');
+		await act(async () =>
+			fireEvent.blur(statusEl, { relatedTarget: cancelBtn })
+		);
+
+		// Popover should remain visible
+		expect(screen.getByText('(cancel)')).toBeTruthy();
+		expect(screen.getByText('Reviewing…')).toBeTruthy();
 	});
 
 	it('footer status element is keyboard focusable', async () => {

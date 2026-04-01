@@ -4,12 +4,9 @@
  * Three sparkles (one large, two small) with optional processing
  * animation. When processing, the main sparkle pulses and small
  * sparkles twinkle in and out with staggered timing.
- *
- * Uses CSS classes defined in ConnectionStatus/style.scss:
- * - .wpce-sparkles / .wpce-sparkles-processing
- * - .wpce-sparkles-main
- * - .wpce-sparkles-small-{1..5}
  */
+
+import './style.scss';
 
 /**
  * Sparkle icon with optional processing animation.

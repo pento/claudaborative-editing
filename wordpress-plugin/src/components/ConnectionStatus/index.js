@@ -166,6 +166,19 @@ export default function ConnectionStatus() {
 		return null;
 	}
 
+	const handleBlur = (event) => {
+		// Keep popover open when focus moves to an element within
+		// the status container (e.g., the cancel button inside the
+		// popover). Only close when focus leaves the entire subtree.
+		if (
+			event.relatedTarget &&
+			event.currentTarget.contains(event.relatedTarget)
+		) {
+			return;
+		}
+		setShowPopover(false);
+	};
+
 	return createPortal(
 		<div
 			className="wpce-footer-status"
@@ -174,7 +187,7 @@ export default function ConnectionStatus() {
 			onMouseEnter={() => setShowPopover(true)}
 			onMouseLeave={() => setShowPopover(false)}
 			onFocus={() => setShowPopover(true)}
-			onBlur={() => setShowPopover(false)}
+			onBlur={handleBlur}
 		>
 			<SparkleIcon
 				active={mcpConnected}
