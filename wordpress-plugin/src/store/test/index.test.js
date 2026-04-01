@@ -420,8 +420,12 @@ describe('AI Actions store', () => {
 		});
 
 		describe('cancelCommand', () => {
-			it('cancels and dispatches clear', async () => {
-				apiFetch.mockResolvedValueOnce({});
+			it('cancels and dispatches clear with server response', async () => {
+				const cancelled = {
+					...MOCK_COMMAND,
+					status: 'cancelled',
+				};
+				apiFetch.mockResolvedValueOnce(cancelled);
 
 				await actions.cancelCommand(42)({ dispatch });
 
@@ -431,6 +435,7 @@ describe('AI Actions store', () => {
 				});
 				expect(dispatch).toHaveBeenCalledWith({
 					type: 'CLEAR_ACTIVE_COMMAND',
+					command: cancelled,
 				});
 			});
 

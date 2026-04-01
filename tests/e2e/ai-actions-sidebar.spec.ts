@@ -48,7 +48,10 @@ async function openEditor(
  * Returns the AI Actions dropdown toggle button in the toolbar.
  */
 function getDropdownToggle(page: Page) {
-	return page.getByRole('button', { name: 'Claudaborative Editing' });
+	return page.getByRole('button', {
+		name: 'Claudaborative Editing',
+		exact: true,
+	});
 }
 
 /**

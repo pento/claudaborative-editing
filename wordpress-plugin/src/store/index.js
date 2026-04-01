@@ -254,12 +254,12 @@ const actions = {
 		(id) =>
 		async ({ dispatch }) => {
 			try {
-				await apiFetch({
+				const command = await apiFetch({
 					path: `/wpce/v1/commands/${id}`,
 					method: 'DELETE',
 				});
 
-				dispatch({ type: 'CLEAR_ACTIVE_COMMAND' });
+				dispatch({ type: 'CLEAR_ACTIVE_COMMAND', command });
 			} catch (error) {
 				dispatch({
 					type: 'SUBMIT_COMMAND_ERROR',

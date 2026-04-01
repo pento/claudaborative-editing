@@ -1,3 +1,7 @@
+jest.mock('@wordpress/data', () => ({
+	useSelect: jest.fn(() => false),
+}));
+
 jest.mock('@wordpress/components', () => {
 	const { createElement } = require('react');
 	return {
@@ -26,6 +30,8 @@ jest.mock('../../QuickActions', () => {
 	Component.displayName = 'QuickActions';
 	return { __esModule: true, default: Component };
 });
+
+jest.mock('../../../store', () => ({ STORE_NAME: 'wpce/ai-actions' }));
 
 import { render, screen } from '@testing-library/react';
 import AiActionsMenu from '..';

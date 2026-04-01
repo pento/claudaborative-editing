@@ -245,7 +245,7 @@ describe('respond-to-note', () => {
 
 			const prompt = server.registeredPrompts.get('respond-to-note');
 			assertDefined(prompt);
-			const result = await prompt.handler({ noteId: '1' });
+			const result = await prompt.handler({ noteId: 1 });
 
 			const text = result.messages[0].content.text;
 			expect(text).toContain('wp_connect');
@@ -260,7 +260,7 @@ describe('respond-to-note', () => {
 
 			const prompt = server.registeredPrompts.get('respond-to-note');
 			assertDefined(prompt);
-			const result = await prompt.handler({ noteId: '1' });
+			const result = await prompt.handler({ noteId: 1 });
 
 			const text = result.messages[0].content.text;
 			expect(text).toContain('wp_open_post');
@@ -279,7 +279,7 @@ describe('respond-to-note', () => {
 
 			const prompt = server.registeredPrompts.get('respond-to-note');
 			assertDefined(prompt);
-			const result = await prompt.handler({ noteId: '1' });
+			const result = await prompt.handler({ noteId: 1 });
 
 			const text = result.messages[0].content.text;
 			expect(text).toContain('does not support notes');
@@ -299,7 +299,7 @@ describe('respond-to-note', () => {
 
 			const prompt = server.registeredPrompts.get('respond-to-note');
 			assertDefined(prompt);
-			const result = await prompt.handler({ noteId: '999' });
+			const result = await prompt.handler({ noteId: 999 });
 
 			const text = result.messages[0].content.text;
 			expect(text).toContain('999');
@@ -337,7 +337,7 @@ describe('respond-to-note', () => {
 
 			const prompt = server.registeredPrompts.get('respond-to-note');
 			assertDefined(prompt);
-			const result = await prompt.handler({ noteId: '1' });
+			const result = await prompt.handler({ noteId: 1 });
 
 			const text = result.messages[0].content.text;
 			// Should include the targeted note and its reply
@@ -370,7 +370,7 @@ describe('respond-to-note', () => {
 
 			const prompt = server.registeredPrompts.get('respond-to-note');
 			assertDefined(prompt);
-			const result = await prompt.handler({ noteId: '1' });
+			const result = await prompt.handler({ noteId: 1 });
 
 			const text = result.messages[0].content.text;
 			expect(text).toContain('wp_resolve_note');

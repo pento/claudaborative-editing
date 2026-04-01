@@ -274,10 +274,14 @@ Instructions:
 			description:
 				'Address a single editorial note on a WordPress post — read it, make the requested changes, and resolve when done.',
 			argsSchema: {
-				noteId: z.string().describe('The ID of the note to address.'),
+				noteId: z.coerce
+					.number()
+					.int()
+					.positive()
+					.describe('The ID of the note to address.'),
 			},
 		},
-		async ({ noteId: noteIdStr }) => {
+		async ({ noteId }) => {
 			const state = session.getState();
 
 			if (state === 'disconnected') {
@@ -328,7 +332,6 @@ Instructions:
 				};
 			}
 
-			const noteId = parseInt(noteIdStr, 10);
 			const postContent = session.readPost();
 			const { notes, noteBlockMap } = await session.listNotes();
 
