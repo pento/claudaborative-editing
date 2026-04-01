@@ -1,4 +1,6 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect } from './test';
+import type { Editor } from '@wordpress/e2e-test-utils-playwright';
+import type { Page } from '@playwright/test';
 import {
 	createMcpTestClient,
 	callToolOrThrow,
@@ -28,8 +30,16 @@ interface EditorBlock {
 	innerBlocks?: EditorBlock[];
 }
 
-async function openEditor(page: Page, postId: number): Promise<void> {
+async function openEditor(
+	page: Page,
+	editor: Editor,
+	postId: number
+): Promise<void> {
 	await page.goto(`/wp-admin/post.php?post=${postId}&action=edit`);
+	await editor.setPreferences('core/edit-post', {
+		welcomeGuide: false,
+		fullscreenMode: false,
+	});
 	await expect
 		.poll(async () => {
 			return page.evaluate(() => {
@@ -85,7 +95,7 @@ async function waitForQueueToDrain(
 }
 
 test.describe('block sync', () => {
-	test('MCP inserts blocks visible in browser', async ({ page }) => {
+	test('MCP inserts blocks visible in browser', async ({ page, editor }) => {
 		test.setTimeout(120_000);
 
 		const postId = await createDraftPost(
@@ -96,7 +106,7 @@ test.describe('block sync', () => {
 		const { client, close, stderr } = await createMcpTestClient();
 
 		try {
-			await openEditor(page, postId);
+			await openEditor(page, editor, postId);
 
 			// Verify initial content is loaded in the browser
 			await expect
@@ -200,7 +210,10 @@ test.describe('block sync', () => {
 		}
 	});
 
-	test('MCP edits block content visible in browser', async ({ page }) => {
+	test('MCP edits block content visible in browser', async ({
+		page,
+		editor,
+	}) => {
 		test.setTimeout(120_000);
 
 		const postId = await createDraftPost(
@@ -211,7 +224,7 @@ test.describe('block sync', () => {
 		const { client, close, stderr } = await createMcpTestClient();
 
 		try {
-			await openEditor(page, postId);
+			await openEditor(page, editor, postId);
 
 			// Verify initial heading is present
 			await expect
@@ -284,6 +297,7 @@ test.describe('block sync', () => {
 
 	test('MCP changes block attributes visible in browser', async ({
 		page,
+		editor,
 	}) => {
 		test.setTimeout(120_000);
 
@@ -295,7 +309,7 @@ test.describe('block sync', () => {
 		const { client, close, stderr } = await createMcpTestClient();
 
 		try {
-			await openEditor(page, postId);
+			await openEditor(page, editor, postId);
 
 			// Verify initial heading is level 2
 			await expect
@@ -360,7 +374,7 @@ test.describe('block sync', () => {
 		}
 	});
 
-	test('MCP removes blocks visible in browser', async ({ page }) => {
+	test('MCP removes blocks visible in browser', async ({ page, editor }) => {
 		test.setTimeout(120_000);
 
 		const postId = await createDraftPost(
@@ -371,7 +385,7 @@ test.describe('block sync', () => {
 		const { client, close, stderr } = await createMcpTestClient();
 
 		try {
-			await openEditor(page, postId);
+			await openEditor(page, editor, postId);
 
 			// Verify initial two paragraphs are present
 			await expect
@@ -466,7 +480,7 @@ test.describe('block sync', () => {
 		}
 	});
 
-	test('browser edits visible in MCP', async ({ page }) => {
+	test('browser edits visible in MCP', async ({ page, editor }) => {
 		test.setTimeout(120_000);
 
 		const initialContent =
@@ -479,7 +493,7 @@ test.describe('block sync', () => {
 		const { client, close, stderr } = await createMcpTestClient();
 
 		try {
-			await openEditor(page, postId);
+			await openEditor(page, editor, postId);
 
 			// Verify initial content in browser
 			await expect
@@ -571,7 +585,10 @@ test.describe('block sync', () => {
 		}
 	});
 
-	test('multiple sequential edits in a single session', async ({ page }) => {
+	test('multiple sequential edits in a single session', async ({
+		page,
+		editor,
+	}) => {
 		test.setTimeout(180_000);
 
 		const postId = await createDraftPost(
@@ -582,7 +599,7 @@ test.describe('block sync', () => {
 		const { client, close, stderr } = await createMcpTestClient();
 
 		try {
-			await openEditor(page, postId);
+			await openEditor(page, editor, postId);
 
 			await expect
 				.poll(() => getBrowserBlocks(page), {

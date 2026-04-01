@@ -1,4 +1,6 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect } from './test';
+import type { Editor } from '@wordpress/e2e-test-utils-playwright';
+import type { Page } from '@playwright/test';
 import { createMcpTestClient, callToolOrThrow } from './helpers/mcp';
 import {
 	WP_ADMIN_USER,
@@ -12,8 +14,16 @@ import {
 const PARAGRAPH_CONTENT =
 	'<!-- wp:paragraph --><p>Test paragraph for AI Actions</p><!-- /wp:paragraph -->';
 
-async function openEditor(page: Page, postId: number): Promise<void> {
+async function openEditor(
+	page: Page,
+	editor: Editor,
+	postId: number
+): Promise<void> {
 	await page.goto(`/wp-admin/post.php?post=${postId}&action=edit`);
+	await editor.setPreferences('core/edit-post', {
+		welcomeGuide: false,
+		fullscreenMode: false,
+	});
 	await expect
 		.poll(async () => {
 			return page.evaluate(() => {
@@ -46,7 +56,9 @@ function getDropdownToggle(page: Page) {
  */
 async function openDropdown(page: Page): Promise<void> {
 	await getDropdownToggle(page).click();
-	await expect(page.getByRole('menu')).toBeVisible();
+	await expect(
+		page.getByRole('menu', { name: 'Claudaborative Editing' })
+	).toBeVisible();
 }
 
 async function connectMcp(
@@ -82,7 +94,7 @@ async function waitForConnectedStatus(page: Page): Promise<void> {
 }
 
 test.describe('AI Actions', () => {
-	test('dropdown opens and closes', async ({ page }) => {
+	test('dropdown opens and closes', async ({ page, editor }) => {
 		test.setTimeout(120_000);
 
 		const postId = await createDraftPost(
@@ -91,14 +103,16 @@ test.describe('AI Actions', () => {
 		);
 
 		try {
-			await openEditor(page, postId);
+			await openEditor(page, editor, postId);
 
 			const toggle = getDropdownToggle(page);
 			await expect(toggle).toBeVisible();
 
 			// Open the dropdown
 			await toggle.click();
-			const menu = page.getByRole('menu');
+			const menu = page.getByRole('menu', {
+				name: 'Claudaborative Editing',
+			});
 			await expect(menu).toBeVisible();
 
 			// Verify Proofread and Review menu items appear
@@ -117,7 +131,10 @@ test.describe('AI Actions', () => {
 		}
 	});
 
-	test('footer shows disconnected status without MCP', async ({ page }) => {
+	test('footer shows disconnected status without MCP', async ({
+		page,
+		editor,
+	}) => {
 		test.setTimeout(120_000);
 
 		const postId = await createDraftPost(
@@ -126,19 +143,35 @@ test.describe('AI Actions', () => {
 		);
 
 		try {
-			await openEditor(page, postId);
+			await openEditor(page, editor, postId);
 
-			// Verify footer sparkle is grey (disconnected)
-			await expect(
-				getFooterStatus(page).locator('svg path').first()
-			).toHaveAttribute('fill', '#949494');
+			// Wait for footer sparkle to be grey (disconnected).
+			// Uses polling because a parallel test's MCP connection
+			// may briefly set the user-scoped mcp_connected transient
+			// (30s TTL) — we wait for it to expire.
+			await expect
+				.poll(
+					async () =>
+						getFooterStatus(page)
+							.locator('svg path')
+							.first()
+							.getAttribute('fill'),
+					{ timeout: 45_000, intervals: [1000] }
+				)
+				.toBe('#949494');
 
 			// Verify menu items are disabled in dropdown
 			await openDropdown(page);
 
-			await expect(
-				page.getByRole('menuitem', { name: /Proofread/ })
-			).toBeDisabled();
+			await expect
+				.poll(
+					async () =>
+						page
+							.getByRole('menuitem', { name: /Proofread/ })
+							.isDisabled(),
+					{ timeout: 10_000, intervals: [500] }
+				)
+				.toBe(true);
 			await expect(
 				page.getByRole('menuitem', { name: /Review/ })
 			).toBeDisabled();
@@ -147,7 +180,7 @@ test.describe('AI Actions', () => {
 		}
 	});
 
-	test('footer shows connected status with MCP', async ({ page }) => {
+	test('footer shows connected status with MCP', async ({ page, editor }) => {
 		test.setTimeout(120_000);
 
 		const postId = await createDraftPost(
@@ -158,12 +191,7 @@ test.describe('AI Actions', () => {
 		const { client, close, stderr } = await createMcpTestClient();
 
 		try {
-			await openEditor(page, postId);
-
-			// Initially disconnected (grey sparkle)
-			await expect(
-				getFooterStatus(page).locator('svg path').first()
-			).toHaveAttribute('fill', '#949494');
+			await openEditor(page, editor, postId);
 
 			// Connect MCP client
 			await connectMcp(client, appPassword);
@@ -200,7 +228,7 @@ test.describe('AI Actions', () => {
 		}
 	});
 
-	test('Proofread submits command', async ({ page }) => {
+	test('Proofread submits command', async ({ page, editor }) => {
 		test.setTimeout(120_000);
 
 		const postId = await createDraftPost(
@@ -211,7 +239,7 @@ test.describe('AI Actions', () => {
 		const { client, close, stderr } = await createMcpTestClient();
 
 		try {
-			await openEditor(page, postId);
+			await openEditor(page, editor, postId);
 
 			// Connect MCP client
 			await connectMcp(client, appPassword);
@@ -268,7 +296,7 @@ test.describe('AI Actions', () => {
 		}
 	});
 
-	test('Review submits command', async ({ page }) => {
+	test('Review submits command', async ({ page, editor }) => {
 		test.setTimeout(120_000);
 
 		const postId = await createDraftPost(
@@ -279,7 +307,7 @@ test.describe('AI Actions', () => {
 		const { client, close, stderr } = await createMcpTestClient();
 
 		try {
-			await openEditor(page, postId);
+			await openEditor(page, editor, postId);
 
 			// Connect MCP client
 			await connectMcp(client, appPassword);
@@ -336,7 +364,10 @@ test.describe('AI Actions', () => {
 		}
 	});
 
-	test('menu items disabled while command is active', async ({ page }) => {
+	test('menu items disabled while command is active', async ({
+		page,
+		editor,
+	}) => {
 		test.setTimeout(120_000);
 
 		const postId = await createDraftPost(
@@ -347,7 +378,7 @@ test.describe('AI Actions', () => {
 		const { client, close, stderr } = await createMcpTestClient();
 
 		try {
-			await openEditor(page, postId);
+			await openEditor(page, editor, postId);
 
 			// Connect MCP client
 			await connectMcp(client, appPassword);
@@ -373,7 +404,9 @@ test.describe('AI Actions', () => {
 			await page.getByRole('menuitem', { name: /Proofread/ }).click();
 
 			// Wait for dropdown to close
-			await expect(page.getByRole('menu')).not.toBeVisible();
+			await expect(
+				page.getByRole('menu', { name: 'Claudaborative Editing' })
+			).not.toBeVisible();
 
 			// Reopen dropdown to check disabled state
 			await openDropdown(page);
