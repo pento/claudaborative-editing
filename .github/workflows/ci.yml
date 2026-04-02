@@ -147,8 +147,8 @@ jobs:
                   coverage-label: plugin-php
                   github-token: ${{ secrets.GITHUB_TOKEN }}
 
-    plugin-test-js:
-        name: Plugin JS Tests
+    plugin-test-typescript:
+        name: Plugin TypeScript Tests
         runs-on: ubuntu-latest
 
         steps:
@@ -171,13 +171,15 @@ jobs:
               run: >-
                   sed -i
                   's|SF:src/|SF:wordpress-plugin/src/|g'
-                  wordpress-plugin/coverage/js/lcov.info
+                  wordpress-plugin/coverage/typescript/lcov.info
 
-            - name: Check JS coverage
+            - name: Check TypeScript coverage
               uses: pento/lcov-coverage-check@v3
               with:
-                  lcov-file: wordpress-plugin/coverage/js/lcov.info
+                  lcov-file: wordpress-plugin/coverage/typescript/lcov.info
                   path: wordpress-plugin/src/
-                  ignore-patterns: 'wordpress-plugin/src/**/*.test.{ts,tsx}'
+                  ignore-patterns: |
+                      wordpress-plugin/src/**/*.test.{ts,tsx}
+                      wordpress-plugin/src/**/types.ts
                   coverage-label: plugin-typescript
                   github-token: ${{ secrets.GITHUB_TOKEN }}

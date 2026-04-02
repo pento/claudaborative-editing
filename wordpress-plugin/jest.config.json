@@ -8,6 +8,6 @@
 		"!src/**/test/**",
 		"!src/types/**"
 	],
-	"coverageDirectory": "coverage/js",
+	"coverageDirectory": "coverage/typescript",
 	"coverageReporters": ["text", "lcov"]
 }
