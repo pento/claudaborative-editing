@@ -6,7 +6,8 @@
 	"collectCoverageFrom": [
 		"src/**/*.{ts,tsx}",
 		"!src/**/test/**",
-		"!src/types/**"
+		"!src/types/**",
+		"!src/**/types.ts"
 	],
 	"coverageDirectory": "coverage/typescript",
 	"coverageReporters": ["text", "lcov"]

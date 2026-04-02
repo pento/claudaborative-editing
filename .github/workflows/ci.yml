@@ -163,6 +163,10 @@ jobs:
               run: npm ci --no-audit
               working-directory: wordpress-plugin
 
+            - name: TypeScript type check
+              run: npm run typecheck
+              working-directory: wordpress-plugin
+
             - name: Run Jest with coverage
               run: npm run test:coverage
               working-directory: wordpress-plugin
