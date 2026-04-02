@@ -448,7 +448,7 @@ class REST_Controller extends WP_REST_Controller {
 			if ( ! $updated_rows ) {
 				return new WP_Error(
 					'rest_conflict',
-					__( 'This command has already been claimed.', 'claudaborative-editing' ),
+					__( 'This command is no longer pending.', 'claudaborative-editing' ),
 					[ 'status' => 409 ]
 				);
 			}
