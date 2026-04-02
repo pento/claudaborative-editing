@@ -51,7 +51,6 @@ function setupMockCommandClient(pluginStatusResult?: {
 		getPluginStatus: vi.fn<() => Promise<PluginStatus>>(),
 		start: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
 		stop: vi.fn(),
-		claimCommand: vi.fn<(id: number) => Promise<Command>>(),
 		updateCommandStatus: vi
 			.fn<
 				(
@@ -84,7 +83,7 @@ function setupMockCommandClient(pluginStatusResult?: {
 	/**
 	 * Dispatch a command through the captured onCommand callback and
 	 * flush microtasks so the async `handleCommand` promise chain
-	 * (claim → notify → catch) runs to completion before returning.
+	 * (notify → catch) runs to completion before returning.
 	 */
 	async function dispatchCommand(command: Command): Promise<void> {
 		if (!capturedOnCommand) {
@@ -201,16 +200,13 @@ describe('CommandHandler', () => {
 	});
 
 	// ---------------------------------------------------------------
-	// Command claim + notification
+	// Command notification
 	// ---------------------------------------------------------------
-	describe('command claim and notification', () => {
-		it('claims the command and sends notification', async () => {
-			const { instance, dispatchCommand } = setupMockCommandClient({
+	describe('command notification', () => {
+		it('sends notification for incoming command', async () => {
+			const { dispatchCommand } = setupMockCommandClient({
 				resolve: makePluginStatus(),
 			});
-			instance.claimCommand.mockResolvedValue(
-				makeCommand({ status: 'claimed' })
-			);
 
 			const notifier = vi
 				.fn<ChannelNotifier>()
@@ -225,7 +221,6 @@ describe('CommandHandler', () => {
 			});
 			await dispatchCommand(command);
 
-			expect(instance.claimCommand).toHaveBeenCalledWith(7);
 			expect(notifier).toHaveBeenCalledOnce();
 
 			const notification = notifier.mock.calls[0][0];
@@ -240,12 +235,9 @@ describe('CommandHandler', () => {
 		});
 
 		it('includes arguments description when command has arguments', async () => {
-			const { instance, dispatchCommand } = setupMockCommandClient({
+			const { dispatchCommand } = setupMockCommandClient({
 				resolve: makePluginStatus(),
 			});
-			instance.claimCommand.mockResolvedValue(
-				makeCommand({ status: 'claimed' })
-			);
 
 			const notifier = vi
 				.fn<ChannelNotifier>()
@@ -271,12 +263,9 @@ describe('CommandHandler', () => {
 		});
 
 		it('does not include arguments key in meta when no arguments', async () => {
-			const { instance, dispatchCommand } = setupMockCommandClient({
+			const { dispatchCommand } = setupMockCommandClient({
 				resolve: makePluginStatus(),
 			});
-			instance.claimCommand.mockResolvedValue(
-				makeCommand({ status: 'claimed' })
-			);
 
 			const notifier = vi
 				.fn<ChannelNotifier>()
@@ -292,87 +281,13 @@ describe('CommandHandler', () => {
 	});
 
 	// ---------------------------------------------------------------
-	// Claim conflict (409 / 404)
-	// ---------------------------------------------------------------
-	describe('claim conflict', () => {
-		it('skips silently on 409 conflict', async () => {
-			const { instance, dispatchCommand } = setupMockCommandClient({
-				resolve: makePluginStatus(),
-			});
-			instance.claimCommand.mockRejectedValue(
-				new WordPressApiError('Conflict', 409, '')
-			);
-
-			const notifier = vi
-				.fn<ChannelNotifier>()
-				.mockResolvedValue(undefined);
-			handler.setNotifier(notifier);
-			await handler.start(createMockApiClient());
-
-			await dispatchCommand(makeCommand());
-
-			expect(instance.claimCommand).toHaveBeenCalledOnce();
-			expect(notifier).not.toHaveBeenCalled();
-		});
-
-		it('skips silently on 404 (command gone)', async () => {
-			const { instance, dispatchCommand } = setupMockCommandClient({
-				resolve: makePluginStatus(),
-			});
-			instance.claimCommand.mockRejectedValue(
-				new WordPressApiError('Not Found', 404, '')
-			);
-
-			const notifier = vi
-				.fn<ChannelNotifier>()
-				.mockResolvedValue(undefined);
-			handler.setNotifier(notifier);
-			await handler.start(createMockApiClient());
-
-			await dispatchCommand(makeCommand());
-
-			expect(notifier).not.toHaveBeenCalled();
-		});
-
-		it('skips on other claim errors (logs to console)', async () => {
-			const { instance, dispatchCommand } = setupMockCommandClient({
-				resolve: makePluginStatus(),
-			});
-			instance.claimCommand.mockRejectedValue(
-				new Error('Network timeout')
-			);
-
-			const notifier = vi
-				.fn<ChannelNotifier>()
-				.mockResolvedValue(undefined);
-			handler.setNotifier(notifier);
-			const consoleSpy = vi
-				.spyOn(console, 'error')
-				.mockImplementation(() => {});
-
-			await handler.start(createMockApiClient());
-			await dispatchCommand(makeCommand({ id: 99 }));
-
-			expect(notifier).not.toHaveBeenCalled();
-			expect(consoleSpy).toHaveBeenCalledWith(
-				'Failed to claim command 99:',
-				expect.any(Error)
-			);
-			consoleSpy.mockRestore();
-		});
-	});
-
-	// ---------------------------------------------------------------
 	// Notification buffering
 	// ---------------------------------------------------------------
 	describe('notification buffering', () => {
 		it('buffers notifications when no notifier is set', async () => {
-			const { instance, dispatchCommand } = setupMockCommandClient({
+			const { dispatchCommand } = setupMockCommandClient({
 				resolve: makePluginStatus(),
 			});
-			instance.claimCommand.mockResolvedValue(
-				makeCommand({ status: 'claimed' })
-			);
 
 			// Start without setting a notifier
 			await handler.start(createMockApiClient());
@@ -395,12 +310,9 @@ describe('CommandHandler', () => {
 		});
 
 		it('buffers multiple notifications and flushes all on setNotifier', async () => {
-			const { instance, dispatchCommand } = setupMockCommandClient({
+			const { dispatchCommand } = setupMockCommandClient({
 				resolve: makePluginStatus(),
 			});
-			instance.claimCommand.mockResolvedValue(
-				makeCommand({ status: 'claimed' })
-			);
 
 			await handler.start(createMockApiClient());
 
@@ -427,12 +339,9 @@ describe('CommandHandler', () => {
 	// ---------------------------------------------------------------
 	describe('setNotifier()', () => {
 		it('flushes pending notifications on set', async () => {
-			const { instance, dispatchCommand } = setupMockCommandClient({
+			const { dispatchCommand } = setupMockCommandClient({
 				resolve: makePluginStatus(),
 			});
-			instance.claimCommand.mockResolvedValue(
-				makeCommand({ status: 'claimed' })
-			);
 
 			await handler.start(createMockApiClient());
 			await dispatchCommand(makeCommand({ id: 5 }));
@@ -447,12 +356,9 @@ describe('CommandHandler', () => {
 		});
 
 		it('sends subsequent commands directly to notifier', async () => {
-			const { instance, dispatchCommand } = setupMockCommandClient({
+			const { dispatchCommand } = setupMockCommandClient({
 				resolve: makePluginStatus(),
 			});
-			instance.claimCommand.mockResolvedValue(
-				makeCommand({ status: 'claimed' })
-			);
 
 			const notifier = vi
 				.fn<ChannelNotifier>()
@@ -471,12 +377,9 @@ describe('CommandHandler', () => {
 		});
 
 		it('handles notifier errors gracefully on flush', async () => {
-			const { instance, dispatchCommand } = setupMockCommandClient({
+			const { dispatchCommand } = setupMockCommandClient({
 				resolve: makePluginStatus(),
 			});
-			instance.claimCommand.mockResolvedValue(
-				makeCommand({ status: 'claimed' })
-			);
 
 			await handler.start(createMockApiClient());
 			await dispatchCommand(makeCommand({ id: 1 }));
@@ -493,12 +396,9 @@ describe('CommandHandler', () => {
 		});
 
 		it('handles notifier errors gracefully on direct send', async () => {
-			const { instance, dispatchCommand } = setupMockCommandClient({
+			const { dispatchCommand } = setupMockCommandClient({
 				resolve: makePluginStatus(),
 			});
-			instance.claimCommand.mockResolvedValue(
-				makeCommand({ status: 'claimed' })
-			);
 
 			const consoleSpy = vi
 				.spyOn(console, 'error')
@@ -511,7 +411,7 @@ describe('CommandHandler', () => {
 
 			// The onCommand callback uses `void this.handleCommand(command)`,
 			// so dispatchCommand flushes microtasks to let the async chain
-			// (claim -> notify -> catch) complete before we assert.
+			// (notify -> catch) complete before we assert.
 			await dispatchCommand(makeCommand({ id: 77 }));
 
 			expect(notifier).toHaveBeenCalledOnce();
@@ -556,13 +456,28 @@ describe('CommandHandler', () => {
 			expect(handler.getPluginStatus()).toBeNull();
 		});
 
-		it('clears pending notifications on stop', async () => {
-			const { instance, dispatchCommand } = setupMockCommandClient({
+		it('silently ignores commands dispatched after stop', async () => {
+			const { dispatchCommand } = setupMockCommandClient({
 				resolve: makePluginStatus(),
 			});
-			instance.claimCommand.mockResolvedValue(
-				makeCommand({ status: 'claimed' })
-			);
+
+			const notifier = vi
+				.fn<ChannelNotifier>()
+				.mockResolvedValue(undefined);
+			handler.setNotifier(notifier);
+			await handler.start(createMockApiClient());
+			handler.stop();
+
+			// Dispatch after stop — should be silently ignored
+			await dispatchCommand(makeCommand({ id: 99 }));
+
+			expect(notifier).not.toHaveBeenCalled();
+		});
+
+		it('clears pending notifications on stop', async () => {
+			const { dispatchCommand } = setupMockCommandClient({
+				resolve: makePluginStatus(),
+			});
 
 			await handler.start(createMockApiClient());
 			await dispatchCommand(makeCommand());

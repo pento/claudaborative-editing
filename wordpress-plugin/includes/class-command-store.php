@@ -125,7 +125,7 @@ class Command_Store {
 	}
 
 	/**
-	 * Transition expired pending/claimed commands to "expired" status.
+	 * Transition expired pending commands to "expired" status.
 	 *
 	 * Shared by both the REST controller and SSE handler to avoid logic
 	 * duplication.
@@ -148,8 +148,8 @@ class Command_Store {
 					'relation' => 'AND',
 					[
 						'key'     => 'wpce_command_status',
-						'value'   => [ 'pending', 'claimed' ],
-						'compare' => 'IN',
+						'value'   => 'pending',
+						'compare' => '=',
 					],
 					[
 						'key'     => 'wpce_expires_at',

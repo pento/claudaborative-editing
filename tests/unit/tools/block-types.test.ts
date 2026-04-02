@@ -225,6 +225,27 @@ describe('block-types tool', () => {
 			);
 		});
 
+		it('shows ancestor constraints', async () => {
+			server = createMockServer();
+			session = createSessionWithRegistry([
+				{
+					name: 'core/comment-content',
+					title: 'Comment Content',
+					attributes: {},
+					ancestor: ['core/comment-template'],
+				},
+			]);
+			registerBlockTypeTools(server as unknown as McpServer, session);
+
+			const tool = server.registeredTools.get('wp_block_types');
+			assertDefined(tool);
+
+			const result = await tool.handler({ name: 'core/comment-content' });
+			expect(result.content[0].text).toContain(
+				'Ancestor: core/comment-template'
+			);
+		});
+
 		it('shows default values', async () => {
 			const tool = server.registeredTools.get('wp_block_types');
 			assertDefined(tool);

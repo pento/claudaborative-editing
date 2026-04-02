@@ -38,8 +38,7 @@ class REST_Controller extends WP_REST_Controller {
 	 * Valid status transitions: current_status => [ allowed_next_statuses ].
 	 */
 	const VALID_TRANSITIONS = [
-		'pending' => [ 'claimed' ],
-		'claimed' => [ 'running' ],
+		'pending' => [ 'running' ],
 		'running' => [ 'completed', 'failed' ],
 	];
 
@@ -401,8 +400,8 @@ class REST_Controller extends WP_REST_Controller {
 		$current_status = get_post_meta( $command->ID, 'wpce_command_status', true );
 		$new_status     = $request->get_param( 'status' );
 
-		// Check if the command has expired (both pending and claimed are expirable).
-		if ( $this->is_expired( $command->ID ) && in_array( $current_status, [ 'pending', 'claimed' ], true ) ) {
+		// Check if the command has expired.
+		if ( $this->is_expired( $command->ID ) && 'pending' === $current_status ) {
 			update_post_meta( $command->ID, 'wpce_command_status', 'expired' );
 			wp_update_post( [ 'ID' => $command->ID ] );
 
@@ -427,16 +426,16 @@ class REST_Controller extends WP_REST_Controller {
 			);
 		}
 
-		// Atomic conditional update for the claim transition: only update the
-		// status if it is still "pending" at the database level. This prevents
-		// two concurrent requests from both reading "pending" and both writing
-		// "claimed".
-		if ( 'claimed' === $new_status ) {
+		// Atomic conditional update for transitions from "pending": only update
+		// the status if it is still "pending" at the database level. This
+		// prevents two concurrent requests from both reading "pending" and
+		// both succeeding.
+		if ( 'pending' === $current_status ) {
 			global $wpdb;
 
 			$updated_rows = $wpdb->update(
 				$wpdb->postmeta,
-				[ 'meta_value' => 'claimed' ],
+				[ 'meta_value' => $new_status ],
 				[
 					'post_id'    => $command->ID,
 					'meta_key'   => 'wpce_command_status',
@@ -446,10 +445,18 @@ class REST_Controller extends WP_REST_Controller {
 				[ '%d', '%s', '%s' ]
 			);
 
-			if ( ! $updated_rows ) {
+			if ( false === $updated_rows ) {
+				return new WP_Error(
+					'rest_update_failed',
+					__( 'Failed to update command status.', 'claudaborative-editing' ),
+					[ 'status' => 500 ]
+				);
+			}
+
+			if ( 0 === $updated_rows ) {
 				return new WP_Error(
 					'rest_conflict',
-					__( 'This command has already been claimed.', 'claudaborative-editing' ),
+					__( 'This command is no longer pending.', 'claudaborative-editing' ),
 					[ 'status' => 409 ]
 				);
 			}
@@ -465,7 +472,7 @@ class REST_Controller extends WP_REST_Controller {
 			update_post_meta( $command->ID, 'wpce_message', $message );
 		}
 
-		if ( 'claimed' === $new_status ) {
+		if ( 'running' === $new_status && 'pending' === $current_status ) {
 			update_post_meta( $command->ID, 'wpce_claimed_by', (string) get_current_user_id() );
 			$this->update_mcp_last_seen( get_current_user_id() );
 		}
@@ -489,7 +496,7 @@ class REST_Controller extends WP_REST_Controller {
 
 		$current_status = get_post_meta( $command->ID, 'wpce_command_status', true );
 
-		if ( ! in_array( $current_status, [ 'pending', 'claimed' ], true ) ) {
+		if ( 'pending' !== $current_status ) {
 			return new WP_Error(
 				'rest_invalid_transition',
 				sprintf(
@@ -501,7 +508,39 @@ class REST_Controller extends WP_REST_Controller {
 			);
 		}
 
-		update_post_meta( $command->ID, 'wpce_command_status', 'cancelled' );
+		// Atomic cancel: only update if still pending to prevent overwriting
+		// a concurrent pending → running transition.
+		global $wpdb;
+
+		$updated_rows = $wpdb->update(
+			$wpdb->postmeta,
+			[ 'meta_value' => 'cancelled' ],
+			[
+				'post_id'    => $command->ID,
+				'meta_key'   => 'wpce_command_status',
+				'meta_value' => 'pending',
+			],
+			[ '%s' ],
+			[ '%d', '%s', '%s' ]
+		);
+
+		if ( false === $updated_rows ) {
+			return new WP_Error(
+				'rest_update_failed',
+				__( 'Failed to cancel command.', 'claudaborative-editing' ),
+				[ 'status' => 500 ]
+			);
+		}
+
+		if ( 0 === $updated_rows ) {
+			return new WP_Error(
+				'rest_conflict',
+				__( 'This command is no longer pending.', 'claudaborative-editing' ),
+				[ 'status' => 409 ]
+			);
+		}
+
+		wp_cache_delete( $command->ID, 'post_meta' );
 
 		// Touch the post to update post_modified_gmt.
 		wp_update_post( [ 'ID' => $command->ID ] );
