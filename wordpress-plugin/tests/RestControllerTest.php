@@ -489,6 +489,25 @@ class RestControllerTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Cancelling a command that was concurrently transitioned to running
+	 * should return 409 (atomic cancel missed).
+	 */
+	public function test_cancel_after_concurrent_run_returns_conflict() {
+		$command_id = $this->create_command_directly();
+
+		// Simulate a concurrent pending → running transition
+		$run_request = new WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
+		$run_request->set_body_params( [ 'status' => 'running' ] );
+		rest_get_server()->dispatch( $run_request );
+
+		// Cancel should fail — command is no longer pending at DB level
+		$cancel_request = new WP_REST_Request( 'DELETE', '/wpce/v1/commands/' . $command_id );
+		$response       = rest_get_server()->dispatch( $cancel_request );
+
+		$this->assertSame( 409, $response->get_status() );
+	}
+
+	/**
 	 * Cancelling a running command should fail with 400.
 	 */
 	public function test_cancel_running_command_fails() {

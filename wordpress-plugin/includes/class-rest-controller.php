@@ -508,7 +508,31 @@ class REST_Controller extends WP_REST_Controller {
 			);
 		}
 
-		update_post_meta( $command->ID, 'wpce_command_status', 'cancelled' );
+		// Atomic cancel: only update if still pending to prevent overwriting
+		// a concurrent pending → running transition.
+		global $wpdb;
+
+		$updated_rows = $wpdb->update(
+			$wpdb->postmeta,
+			[ 'meta_value' => 'cancelled' ],
+			[
+				'post_id'    => $command->ID,
+				'meta_key'   => 'wpce_command_status',
+				'meta_value' => 'pending',
+			],
+			[ '%s' ],
+			[ '%d', '%s', '%s' ]
+		);
+
+		if ( ! $updated_rows ) {
+			return new WP_Error(
+				'rest_conflict',
+				__( 'This command is no longer pending.', 'claudaborative-editing' ),
+				[ 'status' => 409 ]
+			);
+		}
+
+		wp_cache_delete( $command->ID, 'post_meta' );
 
 		// Touch the post to update post_modified_gmt.
 		wp_update_post( [ 'ID' => $command->ID ] );
