@@ -55,13 +55,7 @@ export function useCommands(postId) {
 		pollActiveCommand,
 	} = useDispatch(STORE_NAME);
 
-	// Fetch any in-progress command on mount (across all posts to
-	// detect "editing other post" state after reload), and again
-	// with the specific postId when it becomes available.
-	useEffect(() => {
-		fetchActiveCommand();
-	}, [fetchActiveCommand]);
-
+	// Fetch any in-progress command when postId becomes available.
 	useEffect(() => {
 		if (postId) {
 			fetchActiveCommand(postId);

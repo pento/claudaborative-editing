@@ -79,20 +79,16 @@ describe('useCommands', () => {
 		expect(result.current.history).toHaveLength(1);
 	});
 
-	it('fetches all commands on mount and post-specific on postId', () => {
+	it('calls fetchActiveCommand with postId on mount', () => {
 		renderHook(() => useCommands(123));
 
-		// First call: no args (discover cross-post active command)
-		expect(fetchActiveCommand).toHaveBeenCalledWith();
-		// Second call: with postId (post-specific history)
 		expect(fetchActiveCommand).toHaveBeenCalledWith(123);
 	});
 
-	it('fetches all commands on mount even when postId is falsy', () => {
+	it('does not call fetchActiveCommand when postId is falsy', () => {
 		renderHook(() => useCommands(null));
 
-		expect(fetchActiveCommand).toHaveBeenCalledWith();
-		expect(fetchActiveCommand).not.toHaveBeenCalledWith(null);
+		expect(fetchActiveCommand).not.toHaveBeenCalled();
 	});
 
 	it('sets up polling when activeCommand is present', () => {
