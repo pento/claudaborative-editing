@@ -269,17 +269,22 @@ const actions = {
 		},
 
 	/**
-	 * Fetch commands for a post and detect any in-progress command.
+	 * Fetch commands and detect any in-progress command.
 	 *
-	 * @param {number} postId The post ID to fetch commands for.
+	 * When postId is provided, fetches commands for that post.
+	 * When omitted, fetches all commands for the current user
+	 * (needed to discover active commands on other posts after reload).
+	 *
+	 * @param {number} [postId] Optional post ID to filter by.
 	 * @return {Function} Thunk action.
 	 */
 	fetchActiveCommand:
 		(postId) =>
 		async ({ dispatch }) => {
 			try {
+				const query = postId ? `?post_id=${postId}` : '';
 				const commands = await apiFetch({
-					path: `/wpce/v1/commands?post_id=${postId}`,
+					path: `/wpce/v1/commands${query}`,
 				});
 
 				const active = commands.find((command) =>

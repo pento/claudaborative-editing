@@ -7,7 +7,13 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
 	ensureWpEnvRunning();
 
 	// Authenticate via the WordPress login page and save browser storage state.
-	const { storageState, baseURL } = config.projects[0].use;
+	const project = config.projects.find((p) => p.name === 'chromium');
+	if (!project) {
+		throw new Error(
+			'globalSetup: could not find the "chromium" project in playwright config'
+		);
+	}
+	const { storageState, baseURL } = project.use;
 	const storageStatePath =
 		typeof storageState === 'string' ? storageState : undefined;
 

@@ -472,6 +472,16 @@ describe('AI Actions store', () => {
 				});
 			});
 
+			it('fetches all commands when postId is omitted', async () => {
+				apiFetch.mockResolvedValueOnce([]);
+
+				await actions.fetchActiveCommand()({ dispatch });
+
+				expect(apiFetch).toHaveBeenCalledWith({
+					path: '/wpce/v1/commands',
+				});
+			});
+
 			it('does not set active when none found', async () => {
 				const completed = {
 					...MOCK_COMMAND,
