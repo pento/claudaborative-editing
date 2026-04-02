@@ -13,7 +13,6 @@ import { __ } from '@wordpress/i18n';
 import { DropdownMenu, MenuGroup, MenuItem } from '@wordpress/components';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { useEffect, useRef } from '@wordpress/element';
-import { store as editorStore } from '@wordpress/editor';
 import { store as noticesStore } from '@wordpress/notices';
 import { PinnedItems } from '@wordpress/interface';
 
@@ -38,27 +37,20 @@ import './style.scss';
 export default function AiActionsMenu() {
 	const { mcpConnected } = useMcpStatus();
 
-	const rawPostId = useSelect(
-		(select) => select(editorStore).getCurrentPostId(),
-		[]
-	);
-	const postId = typeof rawPostId === 'number' ? rawPostId : null;
-
-	const { activeCommand, isSubmitting, error, isEditingOtherPost } =
-		useSelect(
-			(select) => {
-				const s = select(aiActionsStore);
-				const active = s.getActiveCommand();
-				return {
-					activeCommand: active,
-					isSubmitting: s.isSubmitting(),
-					error: s.getCommandError(),
-					isEditingOtherPost:
-						active !== null && active.post_id !== postId,
-				};
-			},
-			[postId]
-		);
+	const { postId, activeCommand, isSubmitting, error, isEditingOtherPost } =
+		useSelect((select) => {
+			const s = select(aiActionsStore);
+			const currentPostId = s.getCurrentPostId();
+			const active = s.getActiveCommand();
+			return {
+				postId: currentPostId,
+				activeCommand: active,
+				isSubmitting: s.isSubmitting(),
+				error: s.getCommandError(),
+				isEditingOtherPost:
+					active !== null && active.post_id !== currentPostId,
+			};
+		}, []);
 
 	const { submitCommand } = useDispatch(aiActionsStore);
 	const { createNotice } = useDispatch(noticesStore);

@@ -7,6 +7,7 @@
 
 jest.mock('@wordpress/data', () => ({
 	createReduxStore: jest.fn((name, config) => ({ name, ...config })),
+	createRegistrySelector: jest.fn((fn) => fn(() => ({}))),
 	register: jest.fn(),
 }));
 
@@ -14,6 +15,8 @@ jest.mock('@wordpress/api-fetch', () => {
 	const fn = jest.fn();
 	return { __esModule: true, default: fn };
 });
+
+jest.mock('@wordpress/editor', () => ({ store: 'editor-store' }));
 
 import { createReduxStore } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';

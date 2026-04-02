@@ -19,7 +19,6 @@ import {
 	useCallback,
 	createPortal,
 } from '@wordpress/element';
-import { store as editorStore } from '@wordpress/editor';
 import { store as coreDataStore } from '@wordpress/core-data';
 import { store as noticesStore } from '@wordpress/notices';
 
@@ -28,6 +27,7 @@ import { store as noticesStore } from '@wordpress/notices';
  */
 import { useMcpStatus } from '../../hooks/use-mcp-status';
 import { useCommands } from '../../hooks/use-commands';
+import aiActionsStore from '../../store';
 import SparkleIcon from '../SparkleIcon';
 
 import './style.scss';
@@ -43,11 +43,10 @@ import './style.scss';
 export default function ConnectionStatus() {
 	const { mcpConnected } = useMcpStatus();
 
-	const rawPostId = useSelect(
-		(select) => select(editorStore).getCurrentPostId(),
+	const currentPostId = useSelect(
+		(select) => select(aiActionsStore).getCurrentPostId(),
 		[]
 	);
-	const currentPostId = typeof rawPostId === 'number' ? rawPostId : null;
 
 	// Command polling — runs continuously regardless of footer visibility.
 	const { activeCommand, history, cancel } = useCommands(currentPostId);

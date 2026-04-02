@@ -6,7 +6,6 @@ jest.mock('@wordpress/data', () => ({
 	useDispatch: jest.fn(() => ({})),
 }));
 
-jest.mock('@wordpress/editor', () => ({ store: 'editor-store' }));
 jest.mock('@wordpress/notices', () => ({ store: 'notices-store' }));
 
 jest.mock('@wordpress/components', () => {
@@ -52,7 +51,6 @@ jest.mock('../../../store', () => ({
 
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { useSelect, useDispatch } from '@wordpress/data';
-import { store as editorStore } from '@wordpress/editor';
 import { store as noticesStore } from '@wordpress/notices';
 import aiActionsStore from '../../../store';
 import { useMcpStatus } from '../../../hooks/use-mcp-status';
@@ -71,19 +69,18 @@ function mockUseSelect(
 	});
 }
 
+const DEFAULT_AI_STORE = {
+	getCurrentPostId: () => 123,
+	getActiveCommand: () => null,
+	isSubmitting: () => false,
+	getCommandError: () => null,
+};
+
 function defaultStores(
-	overrides: Record<string, Record<string, (...args: any[]) => any>> = {}
+	aiStoreOverrides: Record<string, (...args: any[]) => any> = {}
 ) {
 	return {
-		[editorStore]: {
-			getCurrentPostId: () => 123,
-		},
-		[aiActionsStore]: {
-			getActiveCommand: () => null,
-			isSubmitting: () => false,
-			getCommandError: () => null,
-		},
-		...overrides,
+		[aiActionsStore]: { ...DEFAULT_AI_STORE, ...aiStoreOverrides },
 	};
 }
 
@@ -132,16 +129,14 @@ describe('AiActionsMenu', () => {
 	it('renders SparkleIcon with processing when command is active', () => {
 		mockUseSelect(
 			defaultStores({
-				[aiActionsStore]: {
-					getActiveCommand: () => ({
-						id: 1,
-						prompt: 'proofread',
-						status: 'running',
-						post_id: 123,
-					}),
-					isSubmitting: () => false,
-					getCommandError: () => null,
-				},
+				getActiveCommand: () => ({
+					id: 1,
+					prompt: 'proofread',
+					status: 'running',
+					post_id: 123,
+				}),
+				isSubmitting: () => false,
+				getCommandError: () => null,
 			})
 		);
 
@@ -193,7 +188,10 @@ describe('AiActionsMenu', () => {
 	it('items disabled when postId is not available', () => {
 		mockUseSelect(
 			defaultStores({
-				[editorStore]: { getCurrentPostId: () => null },
+				getCurrentPostId: () => null,
+				getActiveCommand: () => null,
+				isSubmitting: () => false,
+				getCommandError: () => null,
 			})
 		);
 
@@ -206,16 +204,14 @@ describe('AiActionsMenu', () => {
 	it('items disabled when command is active', () => {
 		mockUseSelect(
 			defaultStores({
-				[aiActionsStore]: {
-					getActiveCommand: () => ({
-						id: 42,
-						prompt: 'proofread',
-						status: 'running',
-						post_id: 123,
-					}),
-					isSubmitting: () => false,
-					getCommandError: () => null,
-				},
+				getActiveCommand: () => ({
+					id: 42,
+					prompt: 'proofread',
+					status: 'running',
+					post_id: 123,
+				}),
+				isSubmitting: () => false,
+				getCommandError: () => null,
 			})
 		);
 
@@ -228,11 +224,9 @@ describe('AiActionsMenu', () => {
 	it('items disabled when submitting', () => {
 		mockUseSelect(
 			defaultStores({
-				[aiActionsStore]: {
-					getActiveCommand: () => null,
-					isSubmitting: () => true,
-					getCommandError: () => null,
-				},
+				getActiveCommand: () => null,
+				isSubmitting: () => true,
+				getCommandError: () => null,
 			})
 		);
 
@@ -245,15 +239,13 @@ describe('AiActionsMenu', () => {
 	it('items disabled when editing other post', () => {
 		mockUseSelect(
 			defaultStores({
-				[aiActionsStore]: {
-					getActiveCommand: () => ({
-						id: 1,
-						post_id: 999,
-						status: 'running',
-					}),
-					isSubmitting: () => false,
-					getCommandError: () => null,
-				},
+				getActiveCommand: () => ({
+					id: 1,
+					post_id: 999,
+					status: 'running',
+				}),
+				isSubmitting: () => false,
+				getCommandError: () => null,
 			})
 		);
 
@@ -282,11 +274,9 @@ describe('AiActionsMenu', () => {
 		// Simulate an error appearing after submission
 		mockUseSelect(
 			defaultStores({
-				[aiActionsStore]: {
-					getActiveCommand: () => null,
-					isSubmitting: () => false,
-					getCommandError: () => 'Something went wrong',
-				},
+				getActiveCommand: () => null,
+				isSubmitting: () => false,
+				getCommandError: () => 'Something went wrong',
 			})
 		);
 

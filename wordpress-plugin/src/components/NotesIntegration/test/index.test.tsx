@@ -5,8 +5,6 @@ jest.mock('@wordpress/data', () => ({
 	useDispatch: jest.fn(() => ({})),
 }));
 
-jest.mock('@wordpress/editor', () => ({ store: 'editor-store' }));
-
 jest.mock('@wordpress/components', () => {
 	const { createElement } = require('react');
 	return {
@@ -53,7 +51,6 @@ jest.mock('../../SparkleIcon', () => {
 
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { useSelect, useDispatch } from '@wordpress/data';
-import { store as editorStore } from '@wordpress/editor';
 import aiActionsStore from '../../../store';
 import { useMcpStatus } from '../../../hooks/use-mcp-status';
 import NotesIntegration from '..';
@@ -82,10 +79,16 @@ function mockUseSelect(
 	});
 }
 
-function defaultStores() {
+const DEFAULT_AI_STORE = {
+	getCurrentPostId: () => 100,
+	getActiveCommand: () => null,
+};
+
+function defaultStores(
+	aiStoreOverrides: Record<string, (...args: any[]) => any> = {}
+) {
 	return {
-		[editorStore]: { getCurrentPostId: () => 100 },
-		[aiActionsStore]: { getActiveCommand: () => null },
+		[aiActionsStore]: { ...DEFAULT_AI_STORE, ...aiStoreOverrides },
 	};
 }
 
@@ -226,10 +229,7 @@ describe('NotesIntegration', () => {
 	});
 
 	it('buttons disabled when postId is not available', async () => {
-		mockUseSelect({
-			[editorStore]: { getCurrentPostId: () => null },
-			[aiActionsStore]: { getActiveCommand: () => null },
-		});
+		mockUseSelect(defaultStores({ getCurrentPostId: () => null }));
 
 		const { cleanup } = createMockPanel([{ id: 42, hasStatus: true }]);
 
@@ -270,17 +270,16 @@ describe('NotesIntegration', () => {
 	});
 
 	it('buttons disabled when command is active', async () => {
-		mockUseSelect({
-			[editorStore]: { getCurrentPostId: () => 100 },
-			[aiActionsStore]: {
+		mockUseSelect(
+			defaultStores({
 				getActiveCommand: () => ({
 					id: 1,
 					prompt: 'proofread',
 					status: 'running',
 					post_id: 100,
 				}),
-			},
-		});
+			})
+		);
 
 		const { cleanup } = createMockPanel([{ id: 42, hasStatus: true }]);
 
@@ -298,17 +297,16 @@ describe('NotesIntegration', () => {
 	});
 
 	it('sparkle shows processing when command is active', async () => {
-		mockUseSelect({
-			[editorStore]: { getCurrentPostId: () => 100 },
-			[aiActionsStore]: {
+		mockUseSelect(
+			defaultStores({
 				getActiveCommand: () => ({
 					id: 1,
 					prompt: 'proofread',
 					status: 'running',
 					post_id: 100,
 				}),
-			},
-		});
+			})
+		);
 
 		const { cleanup } = createMockPanel();
 

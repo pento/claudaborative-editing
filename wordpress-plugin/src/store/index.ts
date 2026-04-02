@@ -8,8 +8,13 @@
 /**
  * WordPress dependencies
  */
-import { createReduxStore, register } from '@wordpress/data';
+import {
+	createReduxStore,
+	createRegistrySelector,
+	register,
+} from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
+import { store as editorStore } from '@wordpress/editor';
 
 /**
  * Internal dependencies
@@ -459,6 +464,19 @@ const selectors = {
 	getCommandError(state: StoreState) {
 		return state.commands.error;
 	},
+
+	/**
+	 * Get the current post ID from the editor, coerced to number | null.
+	 *
+	 * WordPress's getCurrentPostId() returns string | number | null.
+	 * This selector normalizes the value so consumers don't need to
+	 * handle the string case individually.
+	 */
+	getCurrentPostId: createRegistrySelector((select) => (): number | null => {
+		const id = select(editorStore).getCurrentPostId();
+		const num = Number(id);
+		return Number.isFinite(num) ? num : null;
+	}),
 };
 
 /**

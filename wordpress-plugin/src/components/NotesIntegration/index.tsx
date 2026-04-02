@@ -16,7 +16,6 @@ import { __ } from '@wordpress/i18n';
 import { Button } from '@wordpress/components';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { useState, useEffect, createPortal } from '@wordpress/element';
-import { store as editorStore } from '@wordpress/editor';
 import type { ReactPortal } from 'react';
 
 /**
@@ -56,16 +55,13 @@ interface ContainersState {
 export default function NotesIntegration() {
 	const { mcpConnected } = useMcpStatus();
 
-	const rawPostId = useSelect(
-		(select) => select(editorStore).getCurrentPostId(),
-		[]
-	);
-	const postId = typeof rawPostId === 'number' ? rawPostId : null;
-
-	const activeCommand = useSelect(
-		(select) => select(aiActionsStore).getActiveCommand(),
-		[]
-	);
+	const { postId, activeCommand } = useSelect((select) => {
+		const s = select(aiActionsStore);
+		return {
+			postId: s.getCurrentPostId(),
+			activeCommand: s.getActiveCommand(),
+		};
+	}, []);
 
 	const { submitCommand } = useDispatch(aiActionsStore);
 

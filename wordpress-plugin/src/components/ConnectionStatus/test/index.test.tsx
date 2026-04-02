@@ -5,9 +5,12 @@ jest.mock('@wordpress/data', () => ({
 	useDispatch: jest.fn(() => ({})),
 }));
 
-jest.mock('@wordpress/editor', () => ({ store: 'editor-store' }));
 jest.mock('@wordpress/core-data', () => ({ store: 'core-data-store' }));
 jest.mock('@wordpress/notices', () => ({ store: 'notices-store' }));
+jest.mock('../../../store', () => ({
+	__esModule: true,
+	default: 'ai-actions-store',
+}));
 
 jest.mock('@wordpress/components', () => {
 	const { createElement } = require('react');
@@ -45,9 +48,9 @@ jest.mock('../../../hooks/use-commands', () => ({
 
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { useSelect, useDispatch } from '@wordpress/data';
-import { store as editorStore } from '@wordpress/editor';
 import { store as coreDataStore } from '@wordpress/core-data';
 import { store as noticesStore } from '@wordpress/notices';
+import aiActionsStore from '../../../store';
 import { useMcpStatus } from '../../../hooks/use-mcp-status';
 import { useCommands } from '../../../hooks/use-commands';
 import ConnectionStatus from '..';
@@ -116,7 +119,7 @@ describe('ConnectionStatus', () => {
 		});
 
 		mockUseSelect({
-			[editorStore]: {
+			[aiActionsStore]: {
 				getCurrentPostId: () => 100,
 			},
 			[coreDataStore]: {
@@ -225,7 +228,7 @@ describe('ConnectionStatus', () => {
 		});
 
 		mockUseSelect({
-			[editorStore]: {
+			[aiActionsStore]: {
 				getCurrentPostId: () => 100,
 			},
 			[coreDataStore]: {
