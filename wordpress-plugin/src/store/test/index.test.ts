@@ -18,12 +18,13 @@ jest.mock('@wordpress/api-fetch', () => {
 
 jest.mock('@wordpress/editor', () => ({ store: 'editor-store' }));
 
-import { createReduxStore } from '@wordpress/data';
+import { createReduxStore, createRegistrySelector } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
 import { STORE_NAME } from '../index';
 import type { Command } from '../types';
 
 const mockedCreateReduxStore = createReduxStore as jest.Mock;
+const mockedCreateRegistrySelector = createRegistrySelector as jest.Mock;
 const mockedApiFetch = apiFetch as jest.Mock;
 
 const storeConfig = mockedCreateReduxStore.mock.calls[0][1] as any;
@@ -341,6 +342,40 @@ describe('AI Actions store', () => {
 
 		it('getCommandError returns error', () => {
 			expect(selectors.getCommandError(state)).toBe('some error');
+		});
+
+		describe('getCurrentPostId', () => {
+			// Extract the registry selector factory from the mock so we
+			// can invoke it with a controlled select() function.
+			const registryFactory =
+				mockedCreateRegistrySelector.mock.calls[0][0];
+
+			function callWithEditorPostId(
+				postId: string | number | null
+			): number | null {
+				const mockSelect = () => ({ getCurrentPostId: () => postId });
+				return registryFactory(mockSelect)();
+			}
+
+			it('passes through numeric post IDs', () => {
+				expect(callWithEditorPostId(123)).toBe(123);
+			});
+
+			it('coerces numeric string to number', () => {
+				expect(callWithEditorPostId('456')).toBe(456);
+			});
+
+			it('returns null for null', () => {
+				expect(callWithEditorPostId(null)).toBeNull();
+			});
+
+			it('returns null for non-numeric string', () => {
+				expect(callWithEditorPostId('abc')).toBeNull();
+			});
+
+			it('returns null for empty string', () => {
+				expect(callWithEditorPostId('')).toBeNull();
+			});
 		});
 	});
 

@@ -474,8 +474,14 @@ const selectors = {
 	 */
 	getCurrentPostId: createRegistrySelector((select) => (): number | null => {
 		const id = select(editorStore).getCurrentPostId();
-		const num = Number(id);
-		return Number.isFinite(num) ? num : null;
+		if (typeof id === 'number') {
+			return id;
+		}
+		if (typeof id === 'string' && id.length > 0) {
+			const num = Number(id);
+			return Number.isFinite(num) ? num : null;
+		}
+		return null;
 	}),
 };
 
