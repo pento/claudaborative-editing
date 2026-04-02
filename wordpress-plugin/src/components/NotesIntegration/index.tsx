@@ -16,12 +16,13 @@ import { __ } from '@wordpress/i18n';
 import { Button } from '@wordpress/components';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { useState, useEffect, createPortal } from '@wordpress/element';
+import type { ReactPortal } from 'react';
 
 /**
  * Internal dependencies
  */
 import { useMcpStatus } from '../../hooks/use-mcp-status';
-import { STORE_NAME } from '../../store';
+import aiActionsStore from '../../store';
 import SparkleIcon from '../SparkleIcon';
 
 import './style.scss';
@@ -30,12 +31,17 @@ import './style.scss';
  * Extract the numeric note/thread ID from a thread element's id attribute.
  * Thread elements have id="comment-thread-{noteId}".
  *
- * @param {Element} threadEl The thread DOM element.
- * @return {number|null} The note ID, or null if not found.
+ * @param threadEl The thread DOM element.
+ * @return The note ID, or null if not found.
  */
-function getThreadNoteId(threadEl) {
+function getThreadNoteId(threadEl: Element): number | null {
 	const match = /^comment-thread-(\d+)$/.exec(threadEl.id);
 	return match ? parseInt(match[1], 10) : null;
+}
+
+interface ContainersState {
+	panels: Element[];
+	threads: Array<{ noteId: number; container: Element }>;
 }
 
 /**
@@ -44,42 +50,41 @@ function getThreadNoteId(threadEl) {
  * Always mounted. Observes the DOM for Gutenberg's notes sidebar
  * panels and injects action buttons.
  *
- * @return {import('react').ReactElement|null} Portals or null.
+ * @return Portals or null.
  */
 export default function NotesIntegration() {
 	const { mcpConnected } = useMcpStatus();
 
-	const postId = useSelect(
-		(select) => select('core/editor').getCurrentPostId(),
-		[]
-	);
+	const { postId, activeCommand } = useSelect((select) => {
+		const s = select(aiActionsStore);
+		return {
+			postId: s.getCurrentPostId(),
+			activeCommand: s.getActiveCommand(),
+		};
+	}, []);
 
-	const activeCommand = useSelect(
-		(select) => select(STORE_NAME).getActiveCommand(),
-		[]
-	);
+	const { submitCommand } = useDispatch(aiActionsStore);
 
-	const { submitCommand } = useDispatch(STORE_NAME);
-
-	const isDisabled = !mcpConnected || !postId || activeCommand !== null;
+	const isDisabled =
+		!mcpConnected || postId === null || activeCommand !== null;
 	const isProcessing = activeCommand !== null;
 
 	// Track sidebar panel elements and a revision counter that
 	// forces re-scanning when DOM changes within existing panels
 	// (e.g., a thread expands and its status HStack appears).
-	const [panelEls, setPanelEls] = useState([]);
-	const [revision, setRevision] = useState(0);
+	const [panelEls, setPanelEls] = useState<Element[]>([]);
+	const [revision, setRevision] = useState<number>(0);
 
 	// Portal containers created by effects (not during render,
 	// since Gutenberg DOM is React-managed).
-	const [containers, setContainers] = useState({
+	const [containers, setContainers] = useState<ContainersState>({
 		panels: [],
 		threads: [],
 	});
 
 	// Observe DOM for sidebar panel elements.
 	useEffect(() => {
-		const arraysEqual = (a, b) =>
+		const arraysEqual = (a: Element[], b: Element[]): boolean =>
 			a.length === b.length && a.every((el, i) => el === b[i]);
 
 		const scan = () => {
@@ -119,7 +124,7 @@ export default function NotesIntegration() {
 		});
 
 		// Thread containers for per-note sparkle buttons
-		const threadResults = [];
+		const threadResults: Array<{ noteId: number; container: Element }> = [];
 		const threadEls = document.querySelectorAll(
 			'.editor-collab-sidebar-panel > .editor-collab-sidebar-panel__thread'
 		);
@@ -154,7 +159,7 @@ export default function NotesIntegration() {
 	}, [panelEls, revision]);
 
 	// Build portals from containers created by effects.
-	const portals = [];
+	const portals: ReactPortal[] = [];
 
 	for (const container of containers.panels) {
 		portals.push(
@@ -163,7 +168,11 @@ export default function NotesIntegration() {
 					className="wpce-notes-respond-all-button"
 					variant="secondary"
 					disabled={isDisabled}
-					onClick={() => submitCommand('respond-to-notes', postId)}
+					onClick={() => {
+						if (postId !== null) {
+							submitCommand('respond-to-notes', postId);
+						}
+					}}
 				>
 					<SparkleIcon size={18} processing={isProcessing} />
 					{__('Address All Notes', 'claudaborative-editing')}
@@ -181,9 +190,13 @@ export default function NotesIntegration() {
 					variant="tertiary"
 					size="small"
 					disabled={isDisabled}
-					onClick={() =>
-						submitCommand('respond-to-note', postId, { noteId })
-					}
+					onClick={() => {
+						if (postId !== null) {
+							submitCommand('respond-to-note', postId, {
+								noteId,
+							});
+						}
+					}}
 					label={__('Address This Note', 'claudaborative-editing')}
 				>
 					<SparkleIcon size={16} processing={isProcessing} />

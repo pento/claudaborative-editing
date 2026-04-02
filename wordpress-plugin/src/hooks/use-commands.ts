@@ -15,14 +15,25 @@ import { useSelect, useDispatch } from '@wordpress/data';
 /**
  * Internal dependencies
  */
-import { STORE_NAME } from '../store';
+import store from '../store';
+import type { Command, CommandPrompt } from '../store/types';
 
 /**
  * Polling interval for active command updates (milliseconds).
- *
- * @type {number}
  */
 const COMMAND_POLL_INTERVAL = 3000;
+
+/**
+ * Return type for the useCommands hook.
+ */
+export interface UseCommandsReturn {
+	activeCommand: Command | null;
+	isSubmitting: boolean;
+	error: string | null;
+	history: Command[];
+	submit: (prompt: CommandPrompt, args?: Record<string, unknown>) => void;
+	cancel: (id: number) => void;
+}
 
 /**
  * Hook that manages the command lifecycle for a given post.
@@ -30,19 +41,19 @@ const COMMAND_POLL_INTERVAL = 3000;
  * On mount, fetches any in-progress command for the post. While a
  * command is active, polls for status updates every 3 seconds.
  *
- * @param {number} postId The post ID to manage commands for.
- * @return {Object} Command state and actions: `activeCommand`, `isSubmitting`, `error`, `history`, `submit( prompt, args )`, and `cancel( id )`.
+ * @param postId The post ID to manage commands for.
+ * @return Command state and actions: `activeCommand`, `isSubmitting`, `error`, `history`, `submit( prompt, args )`, and `cancel( id )`.
  */
-export function useCommands(postId) {
+export function useCommands(postId: number | null): UseCommandsReturn {
 	const { activeCommand, isSubmitting, error, history } = useSelect(
 		(select) => {
-			const store = select(STORE_NAME);
+			const s = select(store);
 
 			return {
-				activeCommand: store.getActiveCommand(),
-				isSubmitting: store.isSubmitting(),
-				error: store.getCommandError(),
-				history: store.getCommandHistory(),
+				activeCommand: s.getActiveCommand(),
+				isSubmitting: s.isSubmitting(),
+				error: s.getCommandError(),
+				history: s.getCommandHistory(),
 			};
 		},
 		[]
@@ -53,11 +64,11 @@ export function useCommands(postId) {
 		cancelCommand,
 		fetchActiveCommand,
 		pollActiveCommand,
-	} = useDispatch(STORE_NAME);
+	} = useDispatch(store);
 
 	// Fetch any in-progress command when postId becomes available.
 	useEffect(() => {
-		if (postId) {
+		if (postId !== null) {
 			fetchActiveCommand(postId);
 		}
 	}, [postId, fetchActiveCommand]);
@@ -82,14 +93,16 @@ export function useCommands(postId) {
 	}, [hasActiveCommand, pollActiveCommand]);
 
 	const submit = useCallback(
-		(prompt, args) => {
-			submitCommand(prompt, postId, args);
+		(prompt: CommandPrompt, args?: Record<string, unknown>) => {
+			if (postId !== null) {
+				submitCommand(prompt, postId, args);
+			}
 		},
 		[submitCommand, postId]
 	);
 
 	const cancel = useCallback(
-		(id) => {
+		(id: number) => {
 			cancelCommand(id);
 		},
 		[cancelCommand]

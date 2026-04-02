@@ -319,12 +319,13 @@ The `wordpress-plugin/` directory contains a companion WordPress plugin that add
 cd wordpress-plugin
 npm install
 npm run build          # Build with @wordpress/scripts → build/
+npm run typecheck      # TypeScript type check (tsc --noEmit)
 composer install
 composer phpcs         # PHP CodeSniffer (WordPress-Extra)
 composer phpstan       # PHPStan static analysis (level 7)
 ```
 
-JS linting is handled by the root ESLint config (`eslint.config.mjs`) via `@wordpress/eslint-plugin` + FlatCompat. SCSS linting uses `@wordpress/stylelint-config/scss` with `stylelint-config-prettier-scss`. Run `npm run lint` from the repo root to lint everything (ESLint + stylelint + markdownlint + Prettier).
+JS/TS linting is handled by the root ESLint config (`eslint.config.mjs`) via `@wordpress/eslint-plugin` + FlatCompat, with `typescript-eslint` parser for `.ts/.tsx` files. SCSS linting uses `@wordpress/stylelint-config/scss` with `stylelint-config-prettier-scss`. Run `npm run lint` from the repo root to lint everything (ESLint + stylelint + markdownlint + Prettier).
 
 PHPUnit tests require wp-env:
 
@@ -340,10 +341,12 @@ cd wordpress-plugin && npm run test:php  # from plugin directory
 - `includes/class-command-formatter.php` — Converts `wpce_command` posts to REST API response shape
 - `includes/class-rest-controller.php` — `WP_REST_Controller` subclass for `wpce/v1` endpoints
 - `includes/class-sse-handler.php` — SSE streaming logic for real-time command delivery
-- `src/` — Gutenberg editor plugin source (compiled by `@wordpress/scripts`)
-- `src/store/index.js` — `@wordpress/data` store (`wpce/ai-actions`) for MCP status and command state
-- `src/hooks/use-mcp-status.js` — Hook for MCP connection status polling (5s interval)
-- `src/hooks/use-commands.js` — Hook for command lifecycle management (3s polling while active)
+- `src/` — Gutenberg editor plugin source (TypeScript, compiled by `@wordpress/scripts`)
+- `src/store/types.ts` — Shared TypeScript interfaces (`Command`, `McpStatus`, `StoreState`, etc.)
+- `src/store/index.ts` — `@wordpress/data` store (`wpce/ai-actions`) for MCP status and command state
+- `src/hooks/use-mcp-status.ts` — Hook for MCP connection status polling (5s interval)
+- `src/hooks/use-commands.ts` — Hook for command lifecycle management (3s polling while active)
+- `src/types/` — Type declarations for `@wordpress/interface` (no shipped types)
 - `src/components/AiActionsMenu/` — `DropdownMenu` in toolbar pinned items with Proofread/Review menu items
 - `src/components/ConnectionStatus/` — Footer sparkle icon indicating MCP connection and command state
 - `src/components/NotesIntegration/` — Injects "Address All Notes" and per-note buttons into the Gutenberg notes sidebar

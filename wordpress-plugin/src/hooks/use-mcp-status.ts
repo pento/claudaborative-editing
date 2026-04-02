@@ -14,12 +14,11 @@ import { useSelect, useDispatch } from '@wordpress/data';
 /**
  * Internal dependencies
  */
-import { STORE_NAME } from '../store';
+import store from '../store';
+import type { McpStatus } from '../store/types';
 
 /**
  * Polling interval for MCP status refresh (milliseconds).
- *
- * @type {number}
  */
 const STATUS_POLL_INTERVAL = 5000;
 
@@ -30,9 +29,9 @@ const STATUS_POLL_INTERVAL = 5000;
  * REST API. Subsequent updates are fetched every 5 seconds via
  * `setInterval`.
  *
- * @return {Object} Status object with `mcpConnected`, `mcpLastSeenAt`, `isLoading`, and `error` properties.
+ * @return Status object with `mcpConnected`, `mcpLastSeenAt`, `isLoading`, and `error` properties.
  */
-export function useMcpStatus() {
+export function useMcpStatus(): McpStatus {
 	const {
 		mcpConnected,
 		mcpLastSeenAt,
@@ -40,9 +39,9 @@ export function useMcpStatus() {
 		protocolVersion,
 		isLoading,
 		error,
-	} = useSelect((select) => select(STORE_NAME).getMcpStatus(), []);
+	} = useSelect((select) => select(store).getMcpStatus(), []);
 
-	const { refreshStatus } = useDispatch(STORE_NAME);
+	const { refreshStatus } = useDispatch(store);
 
 	useEffect(() => {
 		const intervalId = window.setInterval(() => {

@@ -3,21 +3,15 @@ const mockCreateNotice = jest.fn();
 
 jest.mock('@wordpress/data', () => ({
 	useSelect: jest.fn(),
-	useDispatch: jest.fn((storeName) => {
-		if (storeName === 'wpce/ai-actions') {
-			return { submitCommand: mockSubmitCommand };
-		}
-		if (storeName === 'core/notices') {
-			return { createNotice: mockCreateNotice };
-		}
-		return {};
-	}),
+	useDispatch: jest.fn(() => ({})),
 }));
+
+jest.mock('@wordpress/notices', () => ({ store: 'notices-store' }));
 
 jest.mock('@wordpress/components', () => {
 	const { createElement } = require('react');
 	return {
-		DropdownMenu: ({ children, icon, label }) =>
+		DropdownMenu: ({ children, icon, label }: any) =>
 			createElement(
 				'div',
 				{ 'data-testid': 'dropdown-menu', 'aria-label': label },
@@ -26,9 +20,9 @@ jest.mock('@wordpress/components', () => {
 					? children({ onClose: jest.fn() })
 					: children
 			),
-		MenuGroup: ({ children }) =>
+		MenuGroup: ({ children }: any) =>
 			createElement('div', { role: 'group' }, children),
-		MenuItem: ({ children, disabled, onClick, info, ...props }) =>
+		MenuItem: ({ children, disabled, onClick, info, ...props }: any) =>
 			createElement(
 				'button',
 				{ role: 'menuitem', disabled, onClick, ...props },
@@ -41,7 +35,7 @@ jest.mock('@wordpress/components', () => {
 jest.mock('@wordpress/interface', () => {
 	const { createElement } = require('react');
 	return {
-		PinnedItems: ({ children }) =>
+		PinnedItems: ({ children }: any) =>
 			createElement('div', { 'data-testid': 'pinned-items' }, children),
 	};
 });
@@ -50,31 +44,43 @@ jest.mock('../../../hooks/use-mcp-status', () => ({
 	useMcpStatus: jest.fn(),
 }));
 
-jest.mock('../../../store', () => ({ STORE_NAME: 'wpce/ai-actions' }));
+jest.mock('../../../store', () => ({
+	__esModule: true,
+	default: 'ai-actions-store',
+}));
 
 import { render, screen, fireEvent, act } from '@testing-library/react';
-import { useSelect } from '@wordpress/data';
+import { useSelect, useDispatch } from '@wordpress/data';
+import { store as noticesStore } from '@wordpress/notices';
+import aiActionsStore from '../../../store';
 import { useMcpStatus } from '../../../hooks/use-mcp-status';
 import AiActionsMenu from '..';
 
-function mockUseSelect(stores) {
-	useSelect.mockImplementation((selector) => {
-		const select = (storeName) => stores[storeName] || {};
+const mockedUseSelect = useSelect as jest.Mock;
+const mockedUseDispatch = useDispatch as jest.Mock;
+const mockedUseMcpStatus = useMcpStatus as jest.Mock;
+
+function mockUseSelect(
+	stores: Record<string, Record<string, (...args: any[]) => any>>
+) {
+	mockedUseSelect.mockImplementation((selector: any) => {
+		const select = (s: unknown) => stores[s as string] || {};
 		return selector(select);
 	});
 }
 
-function defaultStores(overrides = {}) {
+const DEFAULT_AI_STORE = {
+	getCurrentPostId: () => 123,
+	getActiveCommand: () => null,
+	isSubmitting: () => false,
+	getCommandError: () => null,
+};
+
+function defaultStores(
+	aiStoreOverrides: Record<string, (...args: any[]) => any> = {}
+) {
 	return {
-		'core/editor': {
-			getCurrentPostId: () => 123,
-		},
-		'wpce/ai-actions': {
-			getActiveCommand: () => null,
-			isSubmitting: () => false,
-			getCommandError: () => null,
-		},
-		...overrides,
+		[aiActionsStore]: { ...DEFAULT_AI_STORE, ...aiStoreOverrides },
 	};
 }
 
@@ -82,7 +88,17 @@ describe('AiActionsMenu', () => {
 	beforeEach(() => {
 		jest.clearAllMocks();
 
-		useMcpStatus.mockReturnValue({
+		mockedUseDispatch.mockImplementation((s: unknown) => {
+			if (s === aiActionsStore) {
+				return { submitCommand: mockSubmitCommand };
+			}
+			if (s === noticesStore) {
+				return { createNotice: mockCreateNotice };
+			}
+			return {};
+		});
+
+		mockedUseMcpStatus.mockReturnValue({
 			mcpConnected: true,
 			mcpLastSeenAt: '2026-03-30T12:00:00Z',
 			isLoading: false,
@@ -107,28 +123,26 @@ describe('AiActionsMenu', () => {
 		render(<AiActionsMenu />);
 		const svg = screen.getByTestId('menu-icon').querySelector('svg');
 		expect(svg).toBeTruthy();
-		expect(svg.classList.contains('wpce-sparkles-processing')).toBe(false);
+		expect(svg!.classList.contains('wpce-sparkles-processing')).toBe(false);
 	});
 
 	it('renders SparkleIcon with processing when command is active', () => {
 		mockUseSelect(
 			defaultStores({
-				'wpce/ai-actions': {
-					getActiveCommand: () => ({
-						id: 1,
-						prompt: 'proofread',
-						status: 'running',
-						post_id: 123,
-					}),
-					isSubmitting: () => false,
-					getCommandError: () => null,
-				},
+				getActiveCommand: () => ({
+					id: 1,
+					prompt: 'proofread',
+					status: 'running',
+					post_id: 123,
+				}),
+				isSubmitting: () => false,
+				getCommandError: () => null,
 			})
 		);
 
 		render(<AiActionsMenu />);
 		const svg = screen.getByTestId('menu-icon').querySelector('svg');
-		expect(svg.classList.contains('wpce-sparkles-processing')).toBe(true);
+		expect(svg!.classList.contains('wpce-sparkles-processing')).toBe(true);
 	});
 
 	it('renders Proofread and Review menu items', () => {
@@ -149,16 +163,16 @@ describe('AiActionsMenu', () => {
 
 	it('items enabled when connected with no active command', () => {
 		render(<AiActionsMenu />);
-		expect(screen.getByText('Proofread').closest('button').disabled).toBe(
+		expect(screen.getByText('Proofread').closest('button')!.disabled).toBe(
 			false
 		);
-		expect(screen.getByText('Review').closest('button').disabled).toBe(
+		expect(screen.getByText('Review').closest('button')!.disabled).toBe(
 			false
 		);
 	});
 
 	it('items disabled when not connected', () => {
-		useMcpStatus.mockReturnValue({
+		mockedUseMcpStatus.mockReturnValue({
 			mcpConnected: false,
 			mcpLastSeenAt: null,
 			isLoading: false,
@@ -166,7 +180,7 @@ describe('AiActionsMenu', () => {
 		});
 
 		render(<AiActionsMenu />);
-		expect(screen.getByText('Proofread').closest('button').disabled).toBe(
+		expect(screen.getByText('Proofread').closest('button')!.disabled).toBe(
 			true
 		);
 	});
@@ -174,12 +188,15 @@ describe('AiActionsMenu', () => {
 	it('items disabled when postId is not available', () => {
 		mockUseSelect(
 			defaultStores({
-				'core/editor': { getCurrentPostId: () => null },
+				getCurrentPostId: () => null,
+				getActiveCommand: () => null,
+				isSubmitting: () => false,
+				getCommandError: () => null,
 			})
 		);
 
 		render(<AiActionsMenu />);
-		expect(screen.getByText('Proofread').closest('button').disabled).toBe(
+		expect(screen.getByText('Proofread').closest('button')!.disabled).toBe(
 			true
 		);
 	});
@@ -187,21 +204,19 @@ describe('AiActionsMenu', () => {
 	it('items disabled when command is active', () => {
 		mockUseSelect(
 			defaultStores({
-				'wpce/ai-actions': {
-					getActiveCommand: () => ({
-						id: 42,
-						prompt: 'proofread',
-						status: 'running',
-						post_id: 123,
-					}),
-					isSubmitting: () => false,
-					getCommandError: () => null,
-				},
+				getActiveCommand: () => ({
+					id: 42,
+					prompt: 'proofread',
+					status: 'running',
+					post_id: 123,
+				}),
+				isSubmitting: () => false,
+				getCommandError: () => null,
 			})
 		);
 
 		render(<AiActionsMenu />);
-		expect(screen.getByText('Proofread').closest('button').disabled).toBe(
+		expect(screen.getByText('Proofread').closest('button')!.disabled).toBe(
 			true
 		);
 	});
@@ -209,16 +224,14 @@ describe('AiActionsMenu', () => {
 	it('items disabled when submitting', () => {
 		mockUseSelect(
 			defaultStores({
-				'wpce/ai-actions': {
-					getActiveCommand: () => null,
-					isSubmitting: () => true,
-					getCommandError: () => null,
-				},
+				getActiveCommand: () => null,
+				isSubmitting: () => true,
+				getCommandError: () => null,
 			})
 		);
 
 		render(<AiActionsMenu />);
-		expect(screen.getByText('Proofread').closest('button').disabled).toBe(
+		expect(screen.getByText('Proofread').closest('button')!.disabled).toBe(
 			true
 		);
 	});
@@ -226,20 +239,18 @@ describe('AiActionsMenu', () => {
 	it('items disabled when editing other post', () => {
 		mockUseSelect(
 			defaultStores({
-				'wpce/ai-actions': {
-					getActiveCommand: () => ({
-						id: 1,
-						post_id: 999,
-						status: 'running',
-					}),
-					isSubmitting: () => false,
-					getCommandError: () => null,
-				},
+				getActiveCommand: () => ({
+					id: 1,
+					post_id: 999,
+					status: 'running',
+				}),
+				isSubmitting: () => false,
+				getCommandError: () => null,
 			})
 		);
 
 		render(<AiActionsMenu />);
-		expect(screen.getByText('Proofread').closest('button').disabled).toBe(
+		expect(screen.getByText('Proofread').closest('button')!.disabled).toBe(
 			true
 		);
 	});
@@ -263,11 +274,9 @@ describe('AiActionsMenu', () => {
 		// Simulate an error appearing after submission
 		mockUseSelect(
 			defaultStores({
-				'wpce/ai-actions': {
-					getActiveCommand: () => null,
-					isSubmitting: () => false,
-					getCommandError: () => 'Something went wrong',
-				},
+				getActiveCommand: () => null,
+				isSubmitting: () => false,
+				getCommandError: () => 'Something went wrong',
 			})
 		);
 

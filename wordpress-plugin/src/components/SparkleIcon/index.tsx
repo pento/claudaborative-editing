@@ -8,20 +8,26 @@
 
 import './style.scss';
 
+interface SparkleIconProps {
+	size?: number;
+	active?: boolean;
+	processing?: boolean;
+}
+
 /**
  * Sparkle icon with optional processing animation.
  *
- * @param {Object}  props            Component props.
- * @param {number}  props.size       Icon size in pixels. Default 20.
- * @param {boolean} props.active     Whether to show active (orange) or inactive (grey) colour.
- * @param {boolean} props.processing Whether to animate sparkles (command in progress).
- * @return {import('react').ReactElement} SVG element.
+ * @param props            Component props.
+ * @param props.size       Icon size in pixels. Default 20.
+ * @param props.active     Whether to show active (orange) or inactive (grey) colour.
+ * @param props.processing Whether to animate sparkles (command in progress).
+ * @return SVG element.
  */
 export default function SparkleIcon({
 	size = 20,
 	active = true,
 	processing = false,
-}) {
+}: SparkleIconProps) {
 	const fill = active ? '#D97706' : '#949494';
 	const cls = processing
 		? 'wpce-sparkles wpce-sparkles-processing'

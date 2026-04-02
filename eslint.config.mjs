@@ -116,12 +116,47 @@ export default [
 		.extends('plugin:@wordpress/eslint-plugin/recommended-with-formatting')
 		.map((config) => ({
 			...config,
-			files: ['wordpress-plugin/**/*.js'],
+			files: ['wordpress-plugin/**/*.{js,ts,tsx}'],
 		})),
+
+	// WordPress plugin TypeScript files: use TS parser and disable rules
+	// that conflict with TypeScript (no-undef, no-unused-vars, jsdoc types).
+	// Keep @wordpress/eslint-plugin for WP-specific rules (i18n, etc.).
+	{
+		files: ['wordpress-plugin/**/*.{ts,tsx}'],
+		plugins: {
+			'@typescript-eslint': tseslint.plugin,
+		},
+		languageOptions: {
+			parser: tseslint.parser,
+		},
+		rules: {
+			// TypeScript handles these natively — replace with TS equivalents
+			'no-undef': 'off',
+			'no-unused-vars': 'off',
+			'@typescript-eslint/no-unused-vars': [
+				'error',
+				{ ignoreRestSiblings: true },
+			],
+			'no-redeclare': 'off',
+			'@typescript-eslint/no-redeclare': 'error',
+			// JSDoc types are redundant with TypeScript
+			'jsdoc/require-param-type': 'off',
+			'jsdoc/require-returns-type': 'off',
+			// snake_case in API response interfaces
+			camelcase: [
+				'error',
+				{
+					properties: 'never',
+					allow: ['^mcp_', '^protocol_', '^post_'],
+				},
+			],
+		},
+	},
 
 	// WordPress plugin test files: Jest globals
 	{
-		files: ['wordpress-plugin/src/**/test/**/*.js'],
+		files: ['wordpress-plugin/src/**/test/**/*.{js,ts,tsx}'],
 		languageOptions: {
 			globals: globals.jest,
 		},

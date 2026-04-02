@@ -19,12 +19,15 @@ import {
 	useCallback,
 	createPortal,
 } from '@wordpress/element';
+import { store as coreDataStore } from '@wordpress/core-data';
+import { store as noticesStore } from '@wordpress/notices';
 
 /**
  * Internal dependencies
  */
 import { useMcpStatus } from '../../hooks/use-mcp-status';
 import { useCommands } from '../../hooks/use-commands';
+import aiActionsStore from '../../store';
 import SparkleIcon from '../SparkleIcon';
 
 import './style.scss';
@@ -35,13 +38,13 @@ import './style.scss';
  * Portals into the editor footer and renders a sparkle icon.
  * Click to toggle a popover with connection details and cancel control.
  *
- * @return {import('react').ReactElement|null} Rendered component or null.
+ * @return Rendered component or null.
  */
 export default function ConnectionStatus() {
 	const { mcpConnected } = useMcpStatus();
 
 	const currentPostId = useSelect(
-		(select) => select('core/editor').getCurrentPostId(),
+		(select) => select(aiActionsStore).getCurrentPostId(),
 		[]
 	);
 
@@ -49,7 +52,7 @@ export default function ConnectionStatus() {
 	const { activeCommand, history, cancel } = useCommands(currentPostId);
 
 	// Toast notifications on command completion/failure.
-	const { createNotice } = useDispatch('core/notices');
+	const { createNotice } = useDispatch(noticesStore);
 	const prevActiveRef = useRef(activeCommand);
 
 	useEffect(() => {
@@ -85,19 +88,19 @@ export default function ConnectionStatus() {
 				return null;
 			}
 
-			const post = select('core').getEntityRecord(
+			const post = select(coreDataStore).getEntityRecord(
 				'postType',
 				'post',
 				activeCommand.post_id
-			);
+			) as { title?: { rendered?: string } } | null | undefined;
 
-			return post?.title?.rendered || null;
+			return post?.title?.rendered ?? null;
 		},
 		[isEditingOtherPost, activeCommand?.post_id]
 	);
 
-	const [footerEl, setFooterEl] = useState(null);
-	const [showPopover, setShowPopover] = useState(false);
+	const [footerEl, setFooterEl] = useState<Element | null>(null);
+	const [showPopover, setShowPopover] = useState<boolean>(false);
 
 	useEffect(() => {
 		// Check for the footer element immediately, then observe the DOM
@@ -105,7 +108,7 @@ export default function ConnectionStatus() {
 		// screen resizing).
 		const selector = '.interface-interface-skeleton__footer';
 
-		const check = () => {
+		const check = (): void => {
 			const el = document.querySelector(selector);
 			setFooterEl(el || null);
 		};
@@ -119,7 +122,7 @@ export default function ConnectionStatus() {
 	}, []);
 
 	// Build tooltip content (computed every render, no early return above).
-	const statusLines = [];
+	const statusLines: string[] = [];
 
 	statusLines.push(
 		mcpConnected

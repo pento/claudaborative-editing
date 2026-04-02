@@ -2,7 +2,7 @@ const mockSubmitCommand = jest.fn();
 
 jest.mock('@wordpress/data', () => ({
 	useSelect: jest.fn(),
-	useDispatch: jest.fn(() => ({ submitCommand: mockSubmitCommand })),
+	useDispatch: jest.fn(() => ({})),
 }));
 
 jest.mock('@wordpress/components', () => {
@@ -18,7 +18,7 @@ jest.mock('@wordpress/components', () => {
 			variant: _v,
 			size: _s,
 			...props
-		}) =>
+		}: any) =>
 			createElement(
 				'button',
 				{ disabled, onClick, className, 'aria-label': label, ...props },
@@ -31,13 +31,16 @@ jest.mock('../../../hooks/use-mcp-status', () => ({
 	useMcpStatus: jest.fn(),
 }));
 
-jest.mock('../../../store', () => ({ STORE_NAME: 'wpce/ai-actions' }));
+jest.mock('../../../store', () => ({
+	__esModule: true,
+	default: 'ai-actions-store',
+}));
 
 jest.mock('../../SparkleIcon', () => {
 	const { createElement } = require('react');
 	return {
 		__esModule: true,
-		default: ({ size, processing }) =>
+		default: ({ size, processing }: any) =>
 			createElement('span', {
 				'data-testid': 'sparkle-icon',
 				'data-size': size,
@@ -47,38 +50,51 @@ jest.mock('../../SparkleIcon', () => {
 });
 
 import { render, screen, fireEvent, act } from '@testing-library/react';
-import { useSelect } from '@wordpress/data';
+import { useSelect, useDispatch } from '@wordpress/data';
+import aiActionsStore from '../../../store';
 import { useMcpStatus } from '../../../hooks/use-mcp-status';
 import NotesIntegration from '..';
 
+const mockedUseSelect = useSelect as jest.Mock;
+const mockedUseDispatch = useDispatch as jest.Mock;
+const mockedUseMcpStatus = useMcpStatus as jest.Mock;
+
 // MutationObserver stub for jsdom — components use window.MutationObserver.
-const OriginalMutationObserver = window.MutationObserver;
+const OriginalMutationObserver: typeof MutationObserver =
+	window.MutationObserver;
 window.MutationObserver = class {
 	observe() {}
 	disconnect() {}
-};
+	takeRecords() {
+		return [];
+	}
+} as any;
 
-function mockUseSelect(stores) {
-	useSelect.mockImplementation((selector) => {
-		const select = (storeName) => stores[storeName] || {};
+function mockUseSelect(
+	stores: Record<string, Record<string, (...args: any[]) => any>>
+) {
+	mockedUseSelect.mockImplementation((selector: any) => {
+		const select = (s: unknown) => stores[s as string] || {};
 		return selector(select);
 	});
 }
 
-function defaultStores() {
+const DEFAULT_AI_STORE = {
+	getCurrentPostId: () => 100,
+	getActiveCommand: () => null,
+};
+
+function defaultStores(
+	aiStoreOverrides: Record<string, (...args: any[]) => any> = {}
+) {
 	return {
-		'core/editor': { getCurrentPostId: () => 100 },
-		'wpce/ai-actions': { getActiveCommand: () => null },
+		[aiActionsStore]: { ...DEFAULT_AI_STORE, ...aiStoreOverrides },
 	};
 }
 
-/**
- * Create a mock notes sidebar panel in the DOM with optional threads.
- *
- * @param {Array<{id: number, hasStatus: boolean}>} threads Thread configs.
- * @return {{ panel: HTMLElement, cleanup: Function }} The panel element and cleanup fn.
- */
-function createMockPanel(threads = []) {
+function createMockPanel(
+	threads: Array<{ id: number; hasStatus: boolean }> = []
+): { panel: HTMLElement; cleanup: () => void } {
 	const panel = document.createElement('div');
 	panel.className = 'editor-collab-sidebar-panel';
 
@@ -110,7 +126,14 @@ describe('NotesIntegration', () => {
 	beforeEach(() => {
 		jest.clearAllMocks();
 
-		useMcpStatus.mockReturnValue({
+		mockedUseDispatch.mockImplementation((s: unknown) => {
+			if (s === aiActionsStore) {
+				return { submitCommand: mockSubmitCommand };
+			}
+			return {};
+		});
+
+		mockedUseMcpStatus.mockReturnValue({
 			mcpConnected: true,
 			mcpLastSeenAt: '2026-03-30T12:00:00Z',
 			isLoading: false,
@@ -143,10 +166,10 @@ describe('NotesIntegration', () => {
 
 		await act(async () => render(<NotesIntegration />));
 
-		const button = screen.getByText('Address All Notes').closest('button');
-		const sparkle = button.querySelector('[data-testid="sparkle-icon"]');
+		const button = screen.getByText('Address All Notes').closest('button')!;
+		const sparkle = button.querySelector('[data-testid="sparkle-icon"]')!;
 		expect(sparkle).toBeTruthy();
-		expect(sparkle.dataset.size).toBe('18');
+		expect((sparkle as HTMLElement).dataset.size).toBe('18');
 
 		cleanup();
 	});
@@ -206,25 +229,25 @@ describe('NotesIntegration', () => {
 	});
 
 	it('buttons disabled when postId is not available', async () => {
-		mockUseSelect({
-			'core/editor': { getCurrentPostId: () => null },
-			'wpce/ai-actions': { getActiveCommand: () => null },
-		});
+		mockUseSelect(defaultStores({ getCurrentPostId: () => null }));
 
 		const { cleanup } = createMockPanel([{ id: 42, hasStatus: true }]);
 
 		await act(async () => render(<NotesIntegration />));
 
 		expect(
-			screen.getByText('Address All Notes').closest('button').disabled
+			screen.getByText('Address All Notes').closest('button')!.disabled
 		).toBe(true);
-		expect(screen.getByLabelText('Address This Note').disabled).toBe(true);
+		expect(
+			(screen.getByLabelText('Address This Note') as HTMLButtonElement)
+				.disabled
+		).toBe(true);
 
 		cleanup();
 	});
 
 	it('buttons disabled when not connected', async () => {
-		useMcpStatus.mockReturnValue({
+		mockedUseMcpStatus.mockReturnValue({
 			mcpConnected: false,
 			mcpLastSeenAt: null,
 			isLoading: false,
@@ -236,50 +259,54 @@ describe('NotesIntegration', () => {
 		await act(async () => render(<NotesIntegration />));
 
 		expect(
-			screen.getByText('Address All Notes').closest('button').disabled
+			screen.getByText('Address All Notes').closest('button')!.disabled
 		).toBe(true);
-		expect(screen.getByLabelText('Address This Note').disabled).toBe(true);
+		expect(
+			(screen.getByLabelText('Address This Note') as HTMLButtonElement)
+				.disabled
+		).toBe(true);
 
 		cleanup();
 	});
 
 	it('buttons disabled when command is active', async () => {
-		mockUseSelect({
-			'core/editor': { getCurrentPostId: () => 100 },
-			'wpce/ai-actions': {
+		mockUseSelect(
+			defaultStores({
 				getActiveCommand: () => ({
 					id: 1,
 					prompt: 'proofread',
 					status: 'running',
 					post_id: 100,
 				}),
-			},
-		});
+			})
+		);
 
 		const { cleanup } = createMockPanel([{ id: 42, hasStatus: true }]);
 
 		await act(async () => render(<NotesIntegration />));
 
 		expect(
-			screen.getByText('Address All Notes').closest('button').disabled
+			screen.getByText('Address All Notes').closest('button')!.disabled
 		).toBe(true);
-		expect(screen.getByLabelText('Address This Note').disabled).toBe(true);
+		expect(
+			(screen.getByLabelText('Address This Note') as HTMLButtonElement)
+				.disabled
+		).toBe(true);
 
 		cleanup();
 	});
 
 	it('sparkle shows processing when command is active', async () => {
-		mockUseSelect({
-			'core/editor': { getCurrentPostId: () => 100 },
-			'wpce/ai-actions': {
+		mockUseSelect(
+			defaultStores({
 				getActiveCommand: () => ({
 					id: 1,
 					prompt: 'proofread',
 					status: 'running',
 					post_id: 100,
 				}),
-			},
-		});
+			})
+		);
 
 		const { cleanup } = createMockPanel();
 
@@ -295,7 +322,7 @@ describe('NotesIntegration', () => {
 		const { cleanup } = createMockPanel([]);
 
 		// Manually add a thread with bad ID
-		const panel = document.querySelector('.editor-collab-sidebar-panel');
+		const panel = document.querySelector('.editor-collab-sidebar-panel')!;
 		const thread = document.createElement('div');
 		thread.className = 'editor-collab-sidebar-panel__thread';
 		thread.id = 'not-a-comment-thread';
