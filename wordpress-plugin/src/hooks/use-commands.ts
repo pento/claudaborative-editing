@@ -68,7 +68,7 @@ export function useCommands(postId: number | null): UseCommandsReturn {
 
 	// Fetch any in-progress command when postId becomes available.
 	useEffect(() => {
-		if (postId) {
+		if (postId !== null) {
 			fetchActiveCommand(postId);
 		}
 	}, [postId, fetchActiveCommand]);
@@ -94,7 +94,7 @@ export function useCommands(postId: number | null): UseCommandsReturn {
 
 	const submit = useCallback(
 		(prompt: CommandPrompt, args?: Record<string, unknown>) => {
-			if (postId) {
+			if (postId !== null) {
 				submitCommand(prompt, postId, args);
 			}
 		},

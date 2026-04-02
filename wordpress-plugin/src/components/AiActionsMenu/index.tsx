@@ -66,7 +66,7 @@ export default function AiActionsMenu() {
 
 	const itemsDisabled =
 		!mcpConnected ||
-		!postId ||
+		postId === null ||
 		isSubmitting ||
 		activeCommand !== null ||
 		isEditingOtherPost;
@@ -85,7 +85,7 @@ export default function AiActionsMenu() {
 			>
 				{({ onClose }: { onClose: () => void }) => {
 					const handleSubmit = (prompt: CommandPrompt): void => {
-						if (postId) {
+						if (postId !== null) {
 							submitCommand(prompt, postId);
 						}
 						onClose();

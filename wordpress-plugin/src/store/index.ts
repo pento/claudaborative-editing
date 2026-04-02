@@ -316,7 +316,7 @@ const actions = {
 		(postId?: number) =>
 		async ({ dispatch }: StoreThunkArgs) => {
 			try {
-				const query = postId ? `?post_id=${postId}` : '';
+				const query = postId !== undefined ? `?post_id=${postId}` : '';
 				const commands = await apiFetch<Command[]>({
 					path: `/wpce/v1/commands${query}`,
 				});

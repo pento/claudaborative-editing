@@ -65,7 +65,8 @@ export default function NotesIntegration() {
 
 	const { submitCommand } = useDispatch(aiActionsStore);
 
-	const isDisabled = !mcpConnected || !postId || activeCommand !== null;
+	const isDisabled =
+		!mcpConnected || postId === null || activeCommand !== null;
 	const isProcessing = activeCommand !== null;
 
 	// Track sidebar panel elements and a revision counter that
@@ -168,7 +169,7 @@ export default function NotesIntegration() {
 					variant="secondary"
 					disabled={isDisabled}
 					onClick={() => {
-						if (postId) {
+						if (postId !== null) {
 							submitCommand('respond-to-notes', postId);
 						}
 					}}
@@ -190,7 +191,7 @@ export default function NotesIntegration() {
 					size="small"
 					disabled={isDisabled}
 					onClick={() => {
-						if (postId) {
+						if (postId !== null) {
 							submitCommand('respond-to-note', postId, {
 								noteId,
 							});
