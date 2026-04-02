@@ -296,15 +296,14 @@ Prompt handlers check `session.getState()` at invocation time:
 
 ### Available prompts
 
-| Prompt             | Description                                                                       | Arguments                                                    |
-| ------------------ | --------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| `edit`             | Edit a post with an optional editing focus                                        | `editingFocus` (optional)                                    |
-| `proofread`        | Fix grammar, spelling, and punctuation                                            | None                                                         |
-| `review`           | Leave editorial notes on blocks (falls back to text summary if notes unsupported) | None                                                         |
-| `respond-to-notes` | Address existing notes: edit blocks, reply, resolve                               | None                                                         |
-| `respond-to-note`  | Address a single note by ID: read, edit block, resolve                            | `noteId` (required)                                          |
-| `draft`            | Create a new post from a topic/brief                                              | `topic` (required), `tone` (optional), `audience` (optional) |
-| `translate`        | Translate post content into another language                                      | `language` (required)                                        |
+| Prompt             | Description                                                                       | Arguments                 |
+| ------------------ | --------------------------------------------------------------------------------- | ------------------------- |
+| `edit`             | Edit a post with an optional editing focus                                        | `editingFocus` (optional) |
+| `proofread`        | Fix grammar, spelling, and punctuation                                            | None                      |
+| `review`           | Leave editorial notes on blocks (falls back to text summary if notes unsupported) | None                      |
+| `respond-to-notes` | Address existing notes: edit blocks, reply, resolve                               | None                      |
+| `respond-to-note`  | Address a single note by ID: read, edit block, resolve                            | `noteId` (required)       |
+| `translate`        | Translate post content into another language                                      | `language` (required)     |
 
 ## MCP Server Usage
 

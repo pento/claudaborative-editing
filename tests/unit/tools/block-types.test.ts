@@ -192,6 +192,26 @@ describe('block-types tool', () => {
 		});
 	});
 
+	describe('error handling', () => {
+		it('returns error when getRegistry throws', async () => {
+			server = createMockServer();
+			session = createMockSession({ state: 'connected' });
+			Object.assign(session, {
+				getRegistry: vi.fn().mockImplementation(() => {
+					throw new Error('registry unavailable');
+				}),
+			});
+			registerBlockTypeTools(server as unknown as McpServer, session);
+
+			const tool = server.registeredTools.get('wp_block_types');
+			assertDefined(tool);
+			const result = await tool.handler({});
+
+			expect(result.isError).toBe(true);
+			expect(result.content[0].text).toContain('registry unavailable');
+		});
+	});
+
 	describe('info formatting', () => {
 		it('shows parent/allowedBlocks constraints', async () => {
 			server = createMockServer();
