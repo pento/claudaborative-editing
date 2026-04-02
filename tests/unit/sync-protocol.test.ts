@@ -126,7 +126,7 @@ describe('processIncomingUpdate', () => {
 	it('returns null for unknown update types', () => {
 		const doc = new Y.Doc();
 		const response = processIncomingUpdate(doc, {
-			type: 999 as SyncUpdateType,
+			type: 999 as unknown as SyncUpdateType,
 			data: uint8ArrayToBase64(new Uint8Array([1, 2, 3])),
 		});
 		expect(response).toBeNull();
