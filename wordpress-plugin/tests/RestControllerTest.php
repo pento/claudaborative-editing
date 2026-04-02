@@ -498,7 +498,8 @@ class RestControllerTest extends WP_UnitTestCase {
 		// Transition pending → running
 		$run_request = new WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
 		$run_request->set_body_params( [ 'status' => 'running' ] );
-		rest_get_server()->dispatch( $run_request );
+		$run_response = rest_get_server()->dispatch( $run_request );
+		$this->assertSame( 200, $run_response->get_status() );
 
 		// Cancel should fail — command is no longer pending
 		$cancel_request = new WP_REST_Request( 'DELETE', '/wpce/v1/commands/' . $command_id );

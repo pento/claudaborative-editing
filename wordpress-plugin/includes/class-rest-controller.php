@@ -524,7 +524,15 @@ class REST_Controller extends WP_REST_Controller {
 			[ '%d', '%s', '%s' ]
 		);
 
-		if ( ! $updated_rows ) {
+		if ( false === $updated_rows ) {
+			return new WP_Error(
+				'rest_update_failed',
+				__( 'Failed to cancel command.', 'claudaborative-editing' ),
+				[ 'status' => 500 ]
+			);
+		}
+
+		if ( 0 === $updated_rows ) {
 			return new WP_Error(
 				'rest_conflict',
 				__( 'This command is no longer pending.', 'claudaborative-editing' ),
