@@ -1,0 +1,51 @@
+.wpce-footer-status {
+	position: absolute;
+	right: 8px;
+	top: 0;
+	height: 100%;
+	display: flex;
+	align-items: center;
+}
+
+.wpce-footer-status-toggle.components-button {
+	padding: 4px;
+	min-width: 0;
+	height: auto;
+
+	svg {
+		display: block;
+		overflow: visible;
+	}
+
+	&:focus {
+		box-shadow: none;
+		outline: 1px dotted;
+		outline-offset: -1px;
+	}
+}
+
+.wpce-footer-status-popover .wpce-footer-status-tooltip {
+	padding: 8px 12px;
+	font-size: 12px;
+	line-height: 1.6;
+	white-space: nowrap;
+	min-width: 200px;
+}
+
+.wpce-footer-status-title {
+	font-weight: 600;
+	margin-bottom: 2px;
+}
+
+.wpce-footer-status-line {
+	color: #757575;
+}
+
+.wpce-footer-status-cancel {
+	display: inline;
+	font-size: 12px;
+	padding: 0;
+	min-height: 0;
+	height: auto;
+	vertical-align: baseline;
+}

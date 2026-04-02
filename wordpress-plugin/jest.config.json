@@ -1,5 +1,8 @@
 {
 	"preset": "@wordpress/jest-preset-default",
+	"transform": {
+		"\\.[jt]sx?$": "<rootDir>/node_modules/@wordpress/scripts/config/babel-transform.js"
+	},
 	"collectCoverageFrom": ["src/**/*.js", "!src/**/test/**"],
 	"coverageDirectory": "coverage/js",
 	"coverageReporters": ["text", "lcov"]

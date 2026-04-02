@@ -35,14 +35,15 @@
 	"scripts": {
 		"build": "tsup",
 		"dev": "tsup --watch",
-		"lint": "ESLINT_USE_FLAT_CONFIG=true eslint --max-warnings 0 . && markdownlint-cli2 && prettier --check -u .",
-		"lint:fix": "ESLINT_USE_FLAT_CONFIG=true eslint --fix --max-warnings 0 . && markdownlint-cli2 --fix && prettier --write -u .",
+		"lint": "ESLINT_USE_FLAT_CONFIG=true eslint --max-warnings 0 . && npm --prefix wordpress-plugin run lint:style && markdownlint-cli2 && prettier --check -u .",
+		"lint:fix": "ESLINT_USE_FLAT_CONFIG=true eslint --fix --max-warnings 0 . && npm --prefix wordpress-plugin run lint:style:fix && markdownlint-cli2 --fix && prettier --write -u .",
 		"prepare": "husky",
 		"prepublishOnly": "npm run typecheck && npm run lint && npm test && npm run build",
 		"start": "node dist/index.js",
 		"test": "vitest run",
-		"pretest:e2e": "npm run build",
+		"pretest:e2e": "npx wp-env --config .wp-env.test.json start",
 		"test:e2e": "playwright test",
+		"pretest:e2e:headed": "npx wp-env --config .wp-env.test.json start",
 		"test:e2e:headed": "playwright test --headed",
 		"test:e2e:install": "playwright install chromium",
 		"test:plugin-js": "npm --prefix wordpress-plugin test",
@@ -56,6 +57,7 @@
 		"*.{ts,js,md,json,jsonc}": "prettier --write",
 		"*.{ts,js}": "env ESLINT_USE_FLAT_CONFIG=true eslint --max-warnings 0 --no-warn-ignored",
 		"*.md": "markdownlint-cli2",
+		"wordpress-plugin/src/**/*.scss": "npm --prefix wordpress-plugin run lint:style:fix",
 		"wordpress-plugin/**/*.php": [
 			"bash -c 'cd wordpress-plugin && (vendor/bin/phpcbf --no-cache || test $? -eq 1)'",
 			"bash -c 'cd wordpress-plugin && vendor/bin/phpstan analyse --no-progress --memory-limit=512M'"
@@ -74,14 +76,18 @@
 		"@eslint/eslintrc": "^2.1.4",
 		"@eslint/js": "^8.57.1",
 		"@playwright/test": "^1.58.2",
+		"@types/eslint__eslintrc": "^2.1.2",
+		"@types/eslint__js": "^8.42.3",
 		"@types/node": "^22.19.15",
 		"@vitest/coverage-v8": "^4.1.0",
+		"@wordpress/e2e-test-utils-playwright": "^1.42.0",
 		"@wordpress/env": "^11.2.0",
 		"@wordpress/eslint-plugin": "^24.4.0",
 		"@wordpress/prettier-config": "^4.42.0",
 		"eslint": "^8.57.1",
 		"eslint-config-prettier": "^10.1.8",
 		"eslint-plugin-package-json": "^0.91.0",
+		"globals": "^17.4.0",
 		"husky": "^9.1.7",
 		"lint-staged": "^16.4.0",
 		"markdownlint-cli2": "^0.22.0",
@@ -90,5 +96,10 @@
 		"typescript": "^5.9.3",
 		"typescript-eslint": "^8.57.1",
 		"vitest": "^4.1.0"
+	},
+	"overrides": {
+		"@wordpress/e2e-test-utils-playwright": {
+			"@types/node": "$@types/node"
+		}
 	}
 }

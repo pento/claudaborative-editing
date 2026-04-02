@@ -4,17 +4,30 @@
 	"description": "WordPress plugin that adds AI action controls to the Gutenberg editor.",
 	"private": true,
 	"devDependencies": {
+		"@testing-library/react": "^16.3.2",
+		"@wordpress/api-fetch": "^7.42.0",
+		"@wordpress/components": "^32.4.0",
+		"@wordpress/data": "^10.42.0",
+		"@wordpress/editor": "^14.42.0",
+		"@wordpress/element": "^6.42.0",
 		"@wordpress/env": "^11.2.0",
-		"@wordpress/scripts": "^31.6.0"
+		"@wordpress/i18n": "^6.15.0",
+		"@wordpress/interface": "^9.27.0",
+		"@wordpress/plugins": "^7.42.0",
+		"@wordpress/scripts": "^31.6.0",
+		"react": "^18.3.1",
+		"stylelint-config-prettier-scss": "^1.0.0"
 	},
 	"scripts": {
-		"build": "wp-scripts build --webpack-src-dir=src",
-		"start": "wp-scripts start --webpack-src-dir=src",
+		"build": "wp-scripts build",
+		"start": "wp-scripts start",
 		"pretest:php": "npx wp-env --config .wp-env.test.json start",
 		"test:php": "npx wp-env --config .wp-env.test.json run cli --env-cwd=wp-content/plugins/claudaborative-editing vendor/bin/phpunit",
 		"pretest:php:coverage": "npx wp-env --config .wp-env.test.json start --xdebug=coverage",
 		"test:php:coverage": "npx wp-env --config .wp-env.test.json run cli --env-cwd=wp-content/plugins/claudaborative-editing vendor/bin/phpunit",
-		"test": "wp-scripts test-unit-js --passWithNoTests",
-		"test:coverage": "wp-scripts test-unit-js --coverage --passWithNoTests"
+		"lint:style": "wp-scripts lint-style 'src/**/*.scss'",
+		"lint:style:fix": "wp-scripts lint-style 'src/**/*.scss' --fix",
+		"test": "wp-scripts test-unit-js",
+		"test:coverage": "wp-scripts test-unit-js --coverage"
 	}
 }

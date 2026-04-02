@@ -1,0 +1,15 @@
+{
+	"extends": [
+		"@wordpress/stylelint-config/scss",
+		"stylelint-config-prettier-scss"
+	],
+	"rules": {
+		"rule-empty-line-before": [
+			"always",
+			{
+				"except": ["first-nested"],
+				"ignore": ["after-comment"]
+			}
+		]
+	}
+}

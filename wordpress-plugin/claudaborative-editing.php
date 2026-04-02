@@ -46,6 +46,45 @@ class Claudaborative_Editing {
 	}
 
 	/**
+	 * Enqueue block editor assets (JS + CSS).
+	 *
+	 * @return void
+	 */
+	public static function enqueue_editor_assets() {
+		$asset_file = __DIR__ . '/build/index.asset.php';
+
+		if ( ! file_exists( $asset_file ) ) {
+			return;
+		}
+
+		$asset = require $asset_file;
+
+		wp_enqueue_script(
+			'claudaborative-editing-ai-actions',
+			plugins_url( 'build/index.js', __FILE__ ),
+			$asset['dependencies'],
+			$asset['version'],
+			true
+		);
+
+		$style_path = __DIR__ . '/build/style-index.css';
+
+		if ( file_exists( $style_path ) ) {
+			wp_enqueue_style(
+				'claudaborative-editing-ai-actions',
+				plugins_url( 'build/style-index.css', __FILE__ ),
+				[],
+				$asset['version']
+			);
+		}
+
+		wp_set_script_translations(
+			'claudaborative-editing-ai-actions',
+			'claudaborative-editing'
+		);
+	}
+
+	/**
 	 * Plugin activation: register CPT before flushing rewrite rules.
 	 *
 	 * @return void
@@ -58,6 +97,7 @@ class Claudaborative_Editing {
 
 add_action( 'init', [ 'Claudaborative_Editing', 'register' ] );
 add_action( 'rest_api_init', [ 'Claudaborative_Editing', 'register_rest_routes' ] );
+add_action( 'enqueue_block_editor_assets', [ 'Claudaborative_Editing', 'enqueue_editor_assets' ] );
 
 register_activation_hook( __FILE__, [ 'Claudaborative_Editing', 'activate' ] );
 register_deactivation_hook( __FILE__, 'flush_rewrite_rules' );

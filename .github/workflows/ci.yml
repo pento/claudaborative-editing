@@ -27,6 +27,11 @@ jobs:
                   node-version: ${{ matrix.node-version }}
 
             - run: npm ci --no-audit
+
+            - name: Install plugin npm dependencies
+              run: npm ci --no-audit
+              working-directory: wordpress-plugin
+
             - run: npm run typecheck
             - run: npm run lint
             - run: npm run build
@@ -37,10 +42,8 @@ jobs:
               uses: pento/lcov-coverage-check@v3
               with:
                   lcov-file: coverage/lcov.info
-                  path: |
-                      src/
-                  ignore-patterns: |
-                      **/types.ts
+                  path: src/
+                  ignore-patterns: '**/types.ts'
                   coverage-label: typescript
                   github-token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -57,6 +60,15 @@ jobs:
                   node-version: 22
 
             - run: npm ci --no-audit
+
+            - name: Install plugin npm dependencies
+              run: npm ci --no-audit
+              working-directory: wordpress-plugin
+
+            - name: Build plugin
+              run: npm run build
+              working-directory: wordpress-plugin
+
             - run: npx playwright install --with-deps chromium
             - run: npm run test:e2e
 
@@ -131,8 +143,7 @@ jobs:
               uses: pento/lcov-coverage-check@v3
               with:
                   lcov-file: wordpress-plugin/coverage/lcov.info
-                  path: |
-                      wordpress-plugin/includes/
+                  path: wordpress-plugin/includes/
                   coverage-label: plugin-php
                   github-token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -166,7 +177,7 @@ jobs:
               uses: pento/lcov-coverage-check@v3
               with:
                   lcov-file: wordpress-plugin/coverage/js/lcov.info
-                  path: |
-                      wordpress-plugin/src/
+                  path: wordpress-plugin/src/
+                  ignore-patterns: 'wordpress-plugin/src/**/*.test.js'
                   coverage-label: plugin-js
                   github-token: ${{ secrets.GITHUB_TOKEN }}

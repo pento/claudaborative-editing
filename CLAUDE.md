@@ -302,6 +302,7 @@ Prompt handlers check `session.getState()` at invocation time:
 | `proofread`        | Fix grammar, spelling, and punctuation                                            | None                                                         |
 | `review`           | Leave editorial notes on blocks (falls back to text summary if notes unsupported) | None                                                         |
 | `respond-to-notes` | Address existing notes: edit blocks, reply, resolve                               | None                                                         |
+| `respond-to-note`  | Address a single note by ID: read, edit block, resolve                            | `noteId` (required)                                          |
 | `draft`            | Create a new post from a topic/brief                                              | `topic` (required), `tone` (optional), `audience` (optional) |
 | `translate`        | Translate post content into another language                                      | `language` (required)                                        |
 
@@ -324,7 +325,7 @@ composer phpcs         # PHP CodeSniffer (WordPress-Extra)
 composer phpstan       # PHPStan static analysis (level 7)
 ```
 
-JS linting is handled by the root ESLint config (`eslint.config.mjs`) via `@wordpress/eslint-plugin` + FlatCompat. Run `npm run lint` from the repo root to lint everything (MCP TypeScript + plugin JS + Prettier + markdownlint).
+JS linting is handled by the root ESLint config (`eslint.config.mjs`) via `@wordpress/eslint-plugin` + FlatCompat. SCSS linting uses `@wordpress/stylelint-config/scss` with `stylelint-config-prettier-scss`. Run `npm run lint` from the repo root to lint everything (ESLint + stylelint + markdownlint + Prettier).
 
 PHPUnit tests require wp-env:
 
@@ -340,7 +341,14 @@ cd wordpress-plugin && npm run test:php  # from plugin directory
 - `includes/class-command-formatter.php` — Converts `wpce_command` posts to REST API response shape
 - `includes/class-rest-controller.php` — `WP_REST_Controller` subclass for `wpce/v1` endpoints
 - `includes/class-sse-handler.php` — SSE streaming logic for real-time command delivery
-- `src/ai-actions/` — Gutenberg editor plugin source (compiled by `@wordpress/scripts`)
+- `src/` — Gutenberg editor plugin source (compiled by `@wordpress/scripts`)
+- `src/store/index.js` — `@wordpress/data` store (`wpce/ai-actions`) for MCP status and command state
+- `src/hooks/use-mcp-status.js` — Hook for MCP connection status polling (5s interval)
+- `src/hooks/use-commands.js` — Hook for command lifecycle management (3s polling while active)
+- `src/components/AiActionsMenu/` — `DropdownMenu` in toolbar pinned items with Proofread/Review menu items
+- `src/components/ConnectionStatus/` — Footer sparkle icon indicating MCP connection and command state
+- `src/components/NotesIntegration/` — Injects "Address All Notes" and per-note buttons into the Gutenberg notes sidebar
+- `src/components/SparkleIcon/` — Shared animated sparkle SVG icon component
 - `tests/` — PHPUnit tests (WordPress test framework)
 
 ### Custom Post Type: `wpce_command`
@@ -366,4 +374,18 @@ REST endpoints for the command queue between the browser and the MCP server. All
 
 **MCP connection tracking**: User-scoped transient (`wpce_mcp_last_seen_{user_id}`), updated on command claim and SSE stream activity. Status endpoint reports `mcp_connected` (true if last seen < 30s ago).
 
-**Prompt validation**: Commands accept only: `proofread`, `review`, `respond-to-notes`, `edit`, `translate`.
+**Prompt validation**: Commands accept only: `proofread`, `review`, `respond-to-notes`, `respond-to-note`, `edit`, `translate`.
+
+### Editor UI
+
+The plugin registers three always-mounted Gutenberg plugins via `registerPlugin()`:
+
+1. **Toolbar Dropdown** (`AiActionsMenu`) — A `DropdownMenu` in the editor toolbar's `PinnedItems` area. Contains Proofread and Review menu items with info descriptions. Each submits a command via `POST /wpce/v1/commands`. Items are disabled when Claude is not connected, a command is active, or Claude is editing a different post. The dropdown closes after submitting an action. Submission errors are shown as snackbar toasts.
+
+2. **Footer Status** (`ConnectionStatus`) — A sparkle icon button portaled into the editor footer bar. Orange when connected, grey when disconnected. Animates (pulse + twinkle) when a command is in progress. Click toggles a popover showing plugin name, connection status, active command label, and a cancel link for pending/claimed commands (cancel only shown when connected). Uses `MutationObserver` to re-attach when the footer DOM changes (distraction-free mode, resizing). Also owns command polling (`useCommands`) and snackbar toast notifications for command completion/failure.
+
+3. **Notes Integration** (`NotesIntegration`) — Injects buttons into Gutenberg's collaboration/notes sidebar via DOM observation and `createPortal`. "Address All Notes" button is pinned at the top of the notes panel (sticky in floating mode, sticky below header in full mode). Per-note sparkle buttons appear on each root thread's action bar. Uses `respond-to-notes` and `respond-to-note` prompts respectively.
+
+**Data layer:** `@wordpress/data` store `wpce/ai-actions` manages MCP status and command queue state. Custom hooks `useMcpStatus()` (5s polling) and `useCommands(postId)` (3s polling while command active) provide reactive access. Store actions use `@wordpress/api-fetch` thunks for REST API calls.
+
+**Asset loading:** `enqueue_block_editor_assets` hook loads `build/index.js` + `style-index.css` with dependencies auto-detected from `index.asset.php` (generated by `@wordpress/scripts`).

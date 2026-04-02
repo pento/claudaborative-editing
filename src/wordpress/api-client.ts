@@ -273,6 +273,7 @@ export class WordPressApiClient {
 				context: 'edit',
 				per_page: String(perPage),
 				page: String(page),
+				status: 'all',
 			});
 
 			const notes = await this.apiFetch<WPNote[]>(
@@ -302,7 +303,8 @@ export class WordPressApiClient {
 				post: data.post,
 				content: data.content,
 				type: 'note',
-				...(data.parent ? { parent: data.parent } : {}),
+				status: 'hold',
+				parent: data.parent ?? 0,
 			}),
 		});
 	}

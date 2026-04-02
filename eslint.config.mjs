@@ -5,6 +5,7 @@ import eslint from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import packageJson from 'eslint-plugin-package-json';
 import eslintConfigPrettier from 'eslint-config-prettier';
+import globals from 'globals';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const compat = new FlatCompat({ baseDirectory: __dirname });
@@ -109,21 +110,26 @@ export default [
 		},
 	},
 
-	// WordPress plugin JS: @wordpress/eslint-plugin via FlatCompat
-	// Uses individual sub-configs rather than 'recommended' to avoid loading
-	// eslint-plugin-react (and its prop-types dep) until we have React code.
-	// Add 'plugin:@wordpress/eslint-plugin/react' and
-	// 'plugin:@wordpress/eslint-plugin/jsx-a11y' when React is introduced.
+	// WordPress plugin JS: @wordpress/eslint-plugin recommended (without Prettier
+	// rule — we handle formatting via eslint-config-prettier at the end)
 	...compat
-		.extends(
-			'plugin:@wordpress/eslint-plugin/esnext',
-			'plugin:@wordpress/eslint-plugin/custom',
-			'plugin:@wordpress/eslint-plugin/i18n'
-		)
+		.extends('plugin:@wordpress/eslint-plugin/recommended-with-formatting')
 		.map((config) => ({
 			...config,
 			files: ['wordpress-plugin/**/*.js'],
 		})),
+
+	// WordPress plugin test files: Jest globals
+	{
+		files: ['wordpress-plugin/src/**/test/**/*.js'],
+		languageOptions: {
+			globals: globals.jest,
+		},
+		rules: {
+			'@wordpress/i18n-no-variables': 'off',
+			'@wordpress/i18n-text-domain': 'off',
+		},
+	},
 
 	// Root package.json only (plugin has its own conventions)
 	{
