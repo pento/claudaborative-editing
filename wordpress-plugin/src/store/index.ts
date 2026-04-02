@@ -12,32 +12,50 @@ import { createReduxStore, register } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
 
 /**
- * Store name constant.
- *
- * @type {string}
+ * Internal dependencies
  */
-export const STORE_NAME = 'wpce/ai-actions';
+import type {
+	Command,
+	CommandStatus,
+	StoreState,
+	StoreAction,
+	StatusApiResponse,
+} from './types';
+
+/**
+ * Thunk arguments provided by @wordpress/data to thunk action creators.
+ *
+ * `dispatch` accepts both plain action objects and thunk functions.
+ * `select` exposes the store's bound selectors.
+ */
+interface StoreThunkArgs {
+	dispatch: (action: unknown) => void;
+	select: {
+		getActiveCommand: () => Command | null;
+	};
+}
+
+export const STORE_NAME = 'wpce/ai-actions' as const;
 
 /**
  * Maximum number of commands to keep in history.
- *
- * @type {number}
  */
 const MAX_HISTORY = 10;
 
 /**
  * Terminal command statuses that indicate the command is no longer active.
- *
- * @type {string[]}
  */
-const TERMINAL_STATUSES = ['completed', 'failed', 'cancelled', 'expired'];
+const TERMINAL_STATUSES: readonly CommandStatus[] = [
+	'completed',
+	'failed',
+	'cancelled',
+	'expired',
+];
 
 /**
  * Default state for the store.
- *
- * @type {Object}
  */
-const DEFAULT_STATE = {
+const DEFAULT_STATE: StoreState = {
 	status: {
 		mcpConnected: false,
 		mcpLastSeenAt: null,
@@ -57,11 +75,14 @@ const DEFAULT_STATE = {
 /**
  * Store reducer.
  *
- * @param {Object} state  Current state.
- * @param {Object} action Dispatched action.
- * @return {Object} Next state.
+ * @param state  Current state.
+ * @param action Dispatched action.
+ * @return Next state.
  */
-function reducer(state = DEFAULT_STATE, action) {
+function reducer(
+	state: StoreState = DEFAULT_STATE,
+	action: StoreAction
+): StoreState {
 	switch (action.type) {
 		case 'SET_STATUS':
 			return {
@@ -176,15 +197,15 @@ const actions = {
 	/**
 	 * Fetch the current MCP connection status from the REST API.
 	 *
-	 * @return {Function} Thunk action.
+	 * @return Thunk action.
 	 */
 	refreshStatus:
 		() =>
-		async ({ dispatch }) => {
+		async ({ dispatch }: StoreThunkArgs) => {
 			dispatch({ type: 'SET_STATUS_LOADING', isLoading: true });
 
 			try {
-				const response = await apiFetch({
+				const response = await apiFetch<StatusApiResponse>({
 					path: '/wpce/v1/status',
 				});
 
@@ -195,31 +216,35 @@ const actions = {
 					version: response.version,
 					protocolVersion: response.protocol_version,
 				});
-			} catch (error) {
+			} catch (error: unknown) {
 				dispatch({
 					type: 'SET_STATUS_ERROR',
-					error: error.message || String(error),
+					error:
+						error instanceof Error ? error.message : String(error),
 				});
 			} finally {
-				dispatch({ type: 'SET_STATUS_LOADING', isLoading: false });
+				dispatch({
+					type: 'SET_STATUS_LOADING',
+					isLoading: false,
+				});
 			}
 		},
 
 	/**
 	 * Submit a new command to the REST API.
 	 *
-	 * @param {string} prompt The prompt identifier (e.g. 'proofread', 'review').
-	 * @param {number} postId The target post ID.
-	 * @param {Object} args   Optional arguments for the command.
-	 * @return {Function} Thunk action.
+	 * @param prompt The prompt identifier (e.g. 'proofread', 'review').
+	 * @param postId The target post ID.
+	 * @param args   Optional arguments for the command.
+	 * @return Thunk action.
 	 */
 	submitCommand:
-		(prompt, postId, args = {}) =>
-		async ({ dispatch }) => {
+		(prompt: string, postId: number, args: Record<string, unknown> = {}) =>
+		async ({ dispatch }: StoreThunkArgs) => {
 			dispatch({ type: 'SUBMIT_COMMAND_START' });
 
 			try {
-				const command = await apiFetch({
+				const command = await apiFetch<Command>({
 					path: '/wpce/v1/commands',
 					method: 'POST',
 					data: {
@@ -233,10 +258,11 @@ const actions = {
 					type: 'SUBMIT_COMMAND_SUCCESS',
 					command,
 				});
-			} catch (error) {
+			} catch (error: unknown) {
 				dispatch({
 					type: 'SUBMIT_COMMAND_ERROR',
-					error: error.message || String(error),
+					error:
+						error instanceof Error ? error.message : String(error),
 				});
 			}
 		},
@@ -244,23 +270,24 @@ const actions = {
 	/**
 	 * Cancel an active command via the REST API.
 	 *
-	 * @param {number} id The command ID to cancel.
-	 * @return {Function} Thunk action.
+	 * @param id The command ID to cancel.
+	 * @return Thunk action.
 	 */
 	cancelCommand:
-		(id) =>
-		async ({ dispatch }) => {
+		(id: number) =>
+		async ({ dispatch }: StoreThunkArgs) => {
 			try {
-				const command = await apiFetch({
+				const command = await apiFetch<Command>({
 					path: `/wpce/v1/commands/${id}`,
 					method: 'DELETE',
 				});
 
 				dispatch({ type: 'CLEAR_ACTIVE_COMMAND', command });
-			} catch (error) {
+			} catch (error: unknown) {
 				dispatch({
 					type: 'SUBMIT_COMMAND_ERROR',
-					error: error.message || String(error),
+					error:
+						error instanceof Error ? error.message : String(error),
 				});
 			}
 		},
@@ -272,15 +299,15 @@ const actions = {
 	 * When omitted, fetches all commands for the current user
 	 * (needed to discover active commands on other posts after reload).
 	 *
-	 * @param {number} [postId] Optional post ID to filter by.
-	 * @return {Function} Thunk action.
+	 * @param postId Optional post ID to filter by.
+	 * @return Thunk action.
 	 */
 	fetchActiveCommand:
-		(postId) =>
-		async ({ dispatch }) => {
+		(postId?: number) =>
+		async ({ dispatch }: StoreThunkArgs) => {
 			try {
 				const query = postId ? `?post_id=${postId}` : '';
-				const commands = await apiFetch({
+				const commands = await apiFetch<Command[]>({
 					path: `/wpce/v1/commands${query}`,
 				});
 
@@ -303,7 +330,7 @@ const actions = {
 					type: 'SET_COMMAND_HISTORY',
 					history: pastCommands,
 				});
-			} catch (error) {
+			} catch (_error: unknown) {
 				// Silently fail — the sidebar will still function without
 				// historical data.
 			}
@@ -312,11 +339,11 @@ const actions = {
 	/**
 	 * Poll for updates to the currently active command.
 	 *
-	 * @return {Function} Thunk action.
+	 * @return Thunk action.
 	 */
 	pollActiveCommand:
 		() =>
-		async ({ dispatch, select }) => {
+		async ({ dispatch, select }: StoreThunkArgs) => {
 			const active = select.getActiveCommand();
 
 			if (!active) {
@@ -324,7 +351,7 @@ const actions = {
 			}
 
 			try {
-				const commands = await apiFetch({
+				const commands = await apiFetch<Command[]>({
 					path: `/wpce/v1/commands?post_id=${active.post_id}`,
 				});
 
@@ -348,7 +375,7 @@ const actions = {
 						command: updated,
 					});
 				}
-			} catch (error) {
+			} catch (_error: unknown) {
 				// Silently fail — will retry on the next poll cycle.
 			}
 		},
@@ -361,70 +388,70 @@ const selectors = {
 	/**
 	 * Get the full MCP status object.
 	 *
-	 * @param {Object} state Store state.
-	 * @return {Object} Status object.
+	 * @param state Store state.
+	 * @return Status object.
 	 */
-	getMcpStatus(state) {
+	getMcpStatus(state: StoreState) {
 		return state.status;
 	},
 
 	/**
 	 * Check whether the MCP server is connected.
 	 *
-	 * @param {Object} state Store state.
-	 * @return {boolean} True if connected.
+	 * @param state Store state.
+	 * @return True if connected.
 	 */
-	isMcpConnected(state) {
+	isMcpConnected(state: StoreState) {
 		return state.status.mcpConnected;
 	},
 
 	/**
 	 * Get the currently active command, if any.
 	 *
-	 * @param {Object} state Store state.
-	 * @return {Object|null} Active command object or null.
+	 * @param state Store state.
+	 * @return Active command object or null.
 	 */
-	getActiveCommand(state) {
+	getActiveCommand(state: StoreState) {
 		return state.commands.active;
 	},
 
 	/**
 	 * Check whether a command is currently running.
 	 *
-	 * @param {Object} state Store state.
-	 * @return {boolean} True if a command is active.
+	 * @param state Store state.
+	 * @return True if a command is active.
 	 */
-	isCommandRunning(state) {
+	isCommandRunning(state: StoreState) {
 		return state.commands.active !== null;
 	},
 
 	/**
 	 * Check whether a command is being submitted.
 	 *
-	 * @param {Object} state Store state.
-	 * @return {boolean} True if submitting.
+	 * @param state Store state.
+	 * @return True if submitting.
 	 */
-	isSubmitting(state) {
+	isSubmitting(state: StoreState) {
 		return state.commands.isSubmitting;
 	},
 
 	/**
 	 * Get the command history.
 	 *
-	 * @param {Object} state Store state.
-	 * @return {Array} Array of past commands.
+	 * @param state Store state.
+	 * @return Array of past commands.
 	 */
-	getCommandHistory(state) {
+	getCommandHistory(state: StoreState) {
 		return state.commands.history;
 	},
 
 	/**
 	 * Get the current command error, if any.
 	 *
-	 * @param {Object} state Store state.
-	 * @return {string|null} Error message or null.
+	 * @param state Store state.
+	 * @return Error message or null.
 	 */
-	getCommandError(state) {
+	getCommandError(state: StoreState) {
 		return state.commands.error;
 	},
 };
@@ -436,19 +463,17 @@ const resolvers = {
 	/**
 	 * Resolver for getMcpStatus — fetches status from the API on first access.
 	 *
-	 * @return {Function} Thunk action.
+	 * @return Thunk action.
 	 */
 	getMcpStatus:
 		() =>
-		async ({ dispatch }) => {
+		async ({ dispatch }: StoreThunkArgs) => {
 			dispatch(actions.refreshStatus());
 		},
 };
 
 /**
  * The Redux store instance.
- *
- * @type {Object}
  */
 const store = createReduxStore(STORE_NAME, {
 	reducer,

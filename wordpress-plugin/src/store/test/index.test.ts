@@ -18,8 +18,12 @@ jest.mock('@wordpress/api-fetch', () => {
 import { createReduxStore } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
 import { STORE_NAME } from '../index';
+import type { Command } from '../types';
 
-const storeConfig = createReduxStore.mock.calls[0][1];
+const mockedCreateReduxStore = createReduxStore as jest.Mock;
+const mockedApiFetch = apiFetch as jest.Mock;
+
+const storeConfig = mockedCreateReduxStore.mock.calls[0][1] as any;
 const { reducer, actions, selectors } = storeConfig;
 
 const DEFAULT_STATE = {
@@ -39,7 +43,7 @@ const DEFAULT_STATE = {
 	},
 };
 
-const MOCK_COMMAND = {
+const MOCK_COMMAND: Command = {
 	id: 42,
 	post_id: 123,
 	prompt: 'proofread',
@@ -50,7 +54,7 @@ const MOCK_COMMAND = {
 
 describe('AI Actions store', () => {
 	beforeEach(() => {
-		apiFetch.mockReset();
+		mockedApiFetch.mockReset();
 	});
 
 	it('registers with the correct store name', () => {
@@ -338,7 +342,7 @@ describe('AI Actions store', () => {
 	});
 
 	describe('actions', () => {
-		let dispatch;
+		let dispatch: jest.Mock;
 
 		beforeEach(() => {
 			dispatch = jest.fn();
@@ -346,7 +350,7 @@ describe('AI Actions store', () => {
 
 		describe('refreshStatus', () => {
 			it('dispatches status on success', async () => {
-				apiFetch.mockResolvedValueOnce({
+				mockedApiFetch.mockResolvedValueOnce({
 					mcp_connected: true,
 					mcp_last_seen_at: '2026-03-30T12:00:00Z',
 					version: '0.1.0',
@@ -376,7 +380,9 @@ describe('AI Actions store', () => {
 			});
 
 			it('dispatches error on failure', async () => {
-				apiFetch.mockRejectedValueOnce(new Error('Network error'));
+				mockedApiFetch.mockRejectedValueOnce(
+					new Error('Network error')
+				);
 
 				await actions.refreshStatus()({ dispatch });
 
@@ -393,7 +399,7 @@ describe('AI Actions store', () => {
 
 		describe('submitCommand', () => {
 			it('submits command and dispatches success', async () => {
-				apiFetch.mockResolvedValueOnce(MOCK_COMMAND);
+				mockedApiFetch.mockResolvedValueOnce(MOCK_COMMAND);
 
 				await actions.submitCommand('proofread', 123, {})({ dispatch });
 
@@ -416,7 +422,7 @@ describe('AI Actions store', () => {
 			});
 
 			it('dispatches error on failure', async () => {
-				apiFetch.mockRejectedValueOnce(new Error('Forbidden'));
+				mockedApiFetch.mockRejectedValueOnce(new Error('Forbidden'));
 
 				await actions.submitCommand('review', 456)({ dispatch });
 
@@ -433,7 +439,7 @@ describe('AI Actions store', () => {
 					...MOCK_COMMAND,
 					status: 'cancelled',
 				};
-				apiFetch.mockResolvedValueOnce(cancelled);
+				mockedApiFetch.mockResolvedValueOnce(cancelled);
 
 				await actions.cancelCommand(42)({ dispatch });
 
@@ -448,7 +454,7 @@ describe('AI Actions store', () => {
 			});
 
 			it('dispatches error on failure', async () => {
-				apiFetch.mockRejectedValueOnce(new Error('Not found'));
+				mockedApiFetch.mockRejectedValueOnce(new Error('Not found'));
 
 				await actions.cancelCommand(99)({ dispatch });
 
@@ -467,7 +473,7 @@ describe('AI Actions store', () => {
 					id: 41,
 					status: 'completed',
 				};
-				apiFetch.mockResolvedValueOnce([running, completed]);
+				mockedApiFetch.mockResolvedValueOnce([running, completed]);
 
 				await actions.fetchActiveCommand(123)({ dispatch });
 
@@ -481,7 +487,7 @@ describe('AI Actions store', () => {
 			});
 
 			it('fetches all commands when postId is omitted', async () => {
-				apiFetch.mockResolvedValueOnce([]);
+				mockedApiFetch.mockResolvedValueOnce([]);
 
 				await actions.fetchActiveCommand()({ dispatch });
 
@@ -495,7 +501,7 @@ describe('AI Actions store', () => {
 					...MOCK_COMMAND,
 					status: 'completed',
 				};
-				apiFetch.mockResolvedValueOnce([completed]);
+				mockedApiFetch.mockResolvedValueOnce([completed]);
 
 				await actions.fetchActiveCommand(123)({ dispatch });
 
@@ -513,7 +519,7 @@ describe('AI Actions store', () => {
 					id: 41,
 					status: 'completed',
 				};
-				apiFetch.mockResolvedValueOnce([running, completed]);
+				mockedApiFetch.mockResolvedValueOnce([running, completed]);
 
 				await actions.fetchActiveCommand(123)({ dispatch });
 
@@ -524,7 +530,7 @@ describe('AI Actions store', () => {
 			});
 
 			it('silently fails on API error', async () => {
-				apiFetch.mockRejectedValueOnce(new Error('Server error'));
+				mockedApiFetch.mockRejectedValueOnce(new Error('Server error'));
 
 				await actions.fetchActiveCommand(123)({ dispatch });
 
@@ -533,7 +539,7 @@ describe('AI Actions store', () => {
 		});
 
 		describe('pollActiveCommand', () => {
-			let select;
+			let select: { getActiveCommand: jest.Mock };
 
 			beforeEach(() => {
 				select = {
@@ -555,7 +561,7 @@ describe('AI Actions store', () => {
 				select.getActiveCommand.mockReturnValue(active);
 
 				const updated = { ...active, message: 'in progress' };
-				apiFetch.mockResolvedValueOnce([updated]);
+				mockedApiFetch.mockResolvedValueOnce([updated]);
 
 				await actions.pollActiveCommand()({ dispatch, select });
 
@@ -574,7 +580,7 @@ describe('AI Actions store', () => {
 					status: 'completed',
 					message: 'Done',
 				};
-				apiFetch.mockResolvedValueOnce([completed]);
+				mockedApiFetch.mockResolvedValueOnce([completed]);
 
 				await actions.pollActiveCommand()({ dispatch, select });
 
@@ -586,7 +592,7 @@ describe('AI Actions store', () => {
 
 			it('clears when command not found', async () => {
 				select.getActiveCommand.mockReturnValue(MOCK_COMMAND);
-				apiFetch.mockResolvedValueOnce([]);
+				mockedApiFetch.mockResolvedValueOnce([]);
 
 				await actions.pollActiveCommand()({ dispatch, select });
 
@@ -603,11 +609,11 @@ describe('AI Actions store', () => {
 					'expired',
 				]) {
 					dispatch.mockClear();
-					apiFetch.mockReset();
+					mockedApiFetch.mockReset();
 
 					select.getActiveCommand.mockReturnValue(MOCK_COMMAND);
 					const terminal = { ...MOCK_COMMAND, status };
-					apiFetch.mockResolvedValueOnce([terminal]);
+					mockedApiFetch.mockResolvedValueOnce([terminal]);
 
 					await actions.pollActiveCommand()({
 						dispatch,
@@ -623,7 +629,7 @@ describe('AI Actions store', () => {
 
 			it('silently fails on API error', async () => {
 				select.getActiveCommand.mockReturnValue(MOCK_COMMAND);
-				apiFetch.mockRejectedValueOnce(new Error('Timeout'));
+				mockedApiFetch.mockRejectedValueOnce(new Error('Timeout'));
 
 				await actions.pollActiveCommand()({ dispatch, select });
 

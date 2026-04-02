@@ -13,6 +13,8 @@ import { __ } from '@wordpress/i18n';
 import { DropdownMenu, MenuGroup, MenuItem } from '@wordpress/components';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { useEffect, useRef } from '@wordpress/element';
+import { store as editorStore } from '@wordpress/editor';
+import { store as noticesStore } from '@wordpress/notices';
 import { PinnedItems } from '@wordpress/interface';
 
 /**
@@ -20,7 +22,8 @@ import { PinnedItems } from '@wordpress/interface';
  */
 import { useMcpStatus } from '../../hooks/use-mcp-status';
 import SparkleIcon from '../SparkleIcon';
-import { STORE_NAME } from '../../store';
+import aiActionsStore from '../../store';
+import type { CommandPrompt } from '../../store/types';
 
 import './style.scss';
 
@@ -30,25 +33,25 @@ import './style.scss';
  * Renders a dropdown button in the editor toolbar's pinned items area
  * with Proofread and Review menu items.
  *
- * @return {import('react').ReactElement} Rendered dropdown.
+ * @return Rendered dropdown.
  */
 export default function AiActionsMenu() {
 	const { mcpConnected } = useMcpStatus();
 
 	const postId = useSelect(
-		(select) => select('core/editor').getCurrentPostId(),
+		(select) => select(editorStore).getCurrentPostId(),
 		[]
 	);
 
 	const { activeCommand, isSubmitting, error, isEditingOtherPost } =
 		useSelect(
 			(select) => {
-				const store = select(STORE_NAME);
-				const active = store.getActiveCommand();
+				const s = select(aiActionsStore);
+				const active = s.getActiveCommand();
 				return {
 					activeCommand: active,
-					isSubmitting: store.isSubmitting(),
-					error: store.getCommandError(),
+					isSubmitting: s.isSubmitting(),
+					error: s.getCommandError(),
 					isEditingOtherPost:
 						active !== null && active.post_id !== postId,
 				};
@@ -56,11 +59,11 @@ export default function AiActionsMenu() {
 			[postId]
 		);
 
-	const { submitCommand } = useDispatch(STORE_NAME);
-	const { createNotice } = useDispatch('core/notices');
+	const { submitCommand } = useDispatch(aiActionsStore);
+	const { createNotice } = useDispatch(noticesStore);
 
 	// Show submission errors as toasts.
-	const prevErrorRef = useRef(error);
+	const prevErrorRef = useRef<string | null>(error);
 	useEffect(() => {
 		if (error && error !== prevErrorRef.current) {
 			createNotice('error', error, { type: 'snackbar' });
@@ -87,9 +90,11 @@ export default function AiActionsMenu() {
 				label={__('Claudaborative Editing', 'claudaborative-editing')}
 				popoverProps={{ placement: 'bottom-end' }}
 			>
-				{({ onClose }) => {
-					const handleSubmit = (prompt) => {
-						submitCommand(prompt, postId);
+				{({ onClose }: { onClose: () => void }) => {
+					const handleSubmit = (prompt: CommandPrompt): void => {
+						if (typeof postId === 'number') {
+							submitCommand(prompt, postId);
+						}
 						onClose();
 					};
 

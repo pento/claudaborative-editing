@@ -2,13 +2,18 @@ jest.mock('@wordpress/data', () => ({
 	useSelect: jest.fn(),
 	useDispatch: jest.fn(() => ({})),
 }));
-jest.mock('../../store', () => ({ STORE_NAME: 'wpce/ai-actions' }));
+jest.mock('../../store', () => ({ __esModule: true, default: 'mock-store' }));
 
 import { renderHook, act } from '@testing-library/react';
 import { useSelect, useDispatch } from '@wordpress/data';
+import store from '../../store';
 import { useCommands } from '../use-commands';
+import type { Command } from '../../store/types';
 
-const MOCK_COMMAND = {
+const mockedUseSelect = useSelect as jest.Mock;
+const mockedUseDispatch = useDispatch as jest.Mock;
+
+const MOCK_COMMAND: Command = {
 	id: 42,
 	post_id: 123,
 	prompt: 'proofread',
@@ -17,10 +22,12 @@ const MOCK_COMMAND = {
 	message: null,
 };
 
-function mockUseSelect(storeData) {
-	useSelect.mockImplementation((selector) => {
-		const select = (storeName) => {
-			if (storeName === 'wpce/ai-actions') {
+function mockUseSelect(
+	storeData: Record<string, (...args: any[]) => any>
+): void {
+	mockedUseSelect.mockImplementation((selector: Function) => {
+		const select = (s: unknown) => {
+			if (s === store) {
 				return storeData;
 			}
 			return {};
@@ -30,10 +37,10 @@ function mockUseSelect(storeData) {
 }
 
 describe('useCommands', () => {
-	let submitCommand;
-	let cancelCommand;
-	let fetchActiveCommand;
-	let pollActiveCommand;
+	let submitCommand: jest.Mock;
+	let cancelCommand: jest.Mock;
+	let fetchActiveCommand: jest.Mock;
+	let pollActiveCommand: jest.Mock;
 
 	beforeEach(() => {
 		jest.clearAllMocks();
@@ -51,7 +58,7 @@ describe('useCommands', () => {
 			getCommandHistory: () => [],
 		});
 
-		useDispatch.mockReturnValue({
+		mockedUseDispatch.mockReturnValue({
 			submitCommand,
 			cancelCommand,
 			fetchActiveCommand,

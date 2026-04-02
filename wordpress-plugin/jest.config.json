@@ -3,7 +3,11 @@
 	"transform": {
 		"\\.[jt]sx?$": "<rootDir>/node_modules/@wordpress/scripts/config/babel-transform.js"
 	},
-	"collectCoverageFrom": ["src/**/*.js", "!src/**/test/**"],
+	"collectCoverageFrom": [
+		"src/**/*.{ts,tsx}",
+		"!src/**/test/**",
+		"!src/types/**"
+	],
 	"coverageDirectory": "coverage/js",
 	"coverageReporters": ["text", "lcov"]
 }

@@ -2,16 +2,21 @@ jest.mock('@wordpress/data', () => ({
 	useSelect: jest.fn(),
 	useDispatch: jest.fn(() => ({})),
 }));
-jest.mock('../../store', () => ({ STORE_NAME: 'wpce/ai-actions' }));
+jest.mock('../../store', () => ({ __esModule: true, default: 'mock-store' }));
 
 import { renderHook, act } from '@testing-library/react';
 import { useSelect, useDispatch } from '@wordpress/data';
+import store from '../../store';
 import { useMcpStatus } from '../use-mcp-status';
+import type { McpStatus } from '../../store/types';
 
-function mockUseSelect(statusData) {
-	useSelect.mockImplementation((selector) => {
-		const select = (storeName) => {
-			if (storeName === 'wpce/ai-actions') {
+const mockedUseSelect = useSelect as jest.Mock;
+const mockedUseDispatch = useDispatch as jest.Mock;
+
+function mockUseSelect(statusData: Partial<McpStatus>): void {
+	mockedUseSelect.mockImplementation((selector: Function) => {
+		const select = (s: unknown) => {
+			if (s === store) {
 				return { getMcpStatus: () => statusData };
 			}
 			return {};
@@ -21,7 +26,7 @@ function mockUseSelect(statusData) {
 }
 
 describe('useMcpStatus', () => {
-	let refreshStatus;
+	let refreshStatus: jest.Mock;
 
 	beforeEach(() => {
 		jest.clearAllMocks();
@@ -36,7 +41,7 @@ describe('useMcpStatus', () => {
 			error: null,
 		});
 
-		useDispatch.mockReturnValue({ refreshStatus });
+		mockedUseDispatch.mockReturnValue({ refreshStatus });
 	});
 
 	afterEach(() => {
