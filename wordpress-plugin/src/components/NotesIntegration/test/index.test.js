@@ -51,8 +51,9 @@ import { useSelect } from '@wordpress/data';
 import { useMcpStatus } from '../../../hooks/use-mcp-status';
 import NotesIntegration from '..';
 
-// MutationObserver stub for jsdom
-global.MutationObserver = class {
+// MutationObserver stub for jsdom — components use window.MutationObserver.
+const OriginalMutationObserver = window.MutationObserver;
+window.MutationObserver = class {
 	observe() {}
 	disconnect() {}
 };
@@ -102,6 +103,10 @@ function createMockPanel(threads = []) {
 }
 
 describe('NotesIntegration', () => {
+	afterAll(() => {
+		window.MutationObserver = OriginalMutationObserver;
+	});
+
 	beforeEach(() => {
 		jest.clearAllMocks();
 

@@ -87,6 +87,7 @@
 		"eslint": "^8.57.1",
 		"eslint-config-prettier": "^10.1.8",
 		"eslint-plugin-package-json": "^0.91.0",
+		"globals": "^17.4.0",
 		"husky": "^9.1.7",
 		"lint-staged": "^16.4.0",
 		"markdownlint-cli2": "^0.22.0",

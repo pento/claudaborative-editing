@@ -18,7 +18,7 @@ import { registerPlugin } from '@wordpress/plugins';
 // Register the data store (side-effect import).
 import './store';
 
-import AiActionsMenu from './components/AiActionsSidebar';
+import AiActionsMenu from './components/AiActionsMenu';
 import ConnectionStatus from './components/ConnectionStatus';
 import NotesIntegration from './components/NotesIntegration';
 

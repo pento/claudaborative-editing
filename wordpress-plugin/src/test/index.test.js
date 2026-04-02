@@ -2,7 +2,7 @@ jest.mock('@wordpress/plugins', () => ({
 	registerPlugin: jest.fn(),
 }));
 jest.mock('../store', () => {});
-jest.mock('../components/AiActionsSidebar', () => ({
+jest.mock('../components/AiActionsMenu', () => ({
 	__esModule: true,
 	default: () => null,
 }));

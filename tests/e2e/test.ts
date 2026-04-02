@@ -45,17 +45,19 @@ const test = base.extend({
 			if (!isSuppressed(args)) origError.apply(console, args);
 		};
 
-		await use(page);
-
-		// eslint-disable-next-line no-console
-		console.warn = origWarn;
-		// eslint-disable-next-line no-console
-		console.error = origError;
-
 		try {
-			await page.evaluate('window.localStorage.clear()');
-		} catch {
-			// noop — page may already be closed (e.g., skipped tests).
+			await use(page);
+		} finally {
+			// eslint-disable-next-line no-console
+			console.warn = origWarn;
+			// eslint-disable-next-line no-console
+			console.error = origError;
+
+			try {
+				await page.evaluate('window.localStorage.clear()');
+			} catch {
+				// noop — page may already be closed (e.g., skipped tests).
+			}
 		}
 	},
 });

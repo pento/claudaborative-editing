@@ -345,7 +345,7 @@ cd wordpress-plugin && npm run test:php  # from plugin directory
 - `src/store/index.js` — `@wordpress/data` store (`wpce/ai-actions`) for MCP status and command state
 - `src/hooks/use-mcp-status.js` — Hook for MCP connection status polling (5s interval)
 - `src/hooks/use-commands.js` — Hook for command lifecycle management (3s polling while active)
-- `src/components/AiActionsSidebar/` — `DropdownMenu` in toolbar pinned items for quick actions
+- `src/components/AiActionsMenu/` — `DropdownMenu` in toolbar pinned items for quick actions
 - `src/components/ConnectionStatus/` — Footer sparkle icon indicating MCP connection and command state
 - `src/components/QuickActions/` — Proofread and Review menu items for the toolbar dropdown
 - `src/components/NotesIntegration/` — Injects "Address All Notes" and per-note buttons into the Gutenberg notes sidebar
@@ -381,7 +381,7 @@ REST endpoints for the command queue between the browser and the MCP server. All
 
 The plugin registers three always-mounted Gutenberg plugins via `registerPlugin()`:
 
-1. **Toolbar Dropdown** (`AiActionsSidebar`) — A `DropdownMenu` in the editor toolbar's `PinnedItems` area. Contains Proofread and Review menu items with info descriptions. Each submits a command via `POST /wpce/v1/commands`. Items are disabled when Claude is not connected, a command is active, or Claude is editing a different post. The dropdown closes after submitting an action.
+1. **Toolbar Dropdown** (`AiActionsMenu`) — A `DropdownMenu` in the editor toolbar's `PinnedItems` area. Contains Proofread and Review menu items with info descriptions. Each submits a command via `POST /wpce/v1/commands`. Items are disabled when Claude is not connected, a command is active, or Claude is editing a different post. The dropdown closes after submitting an action.
 
 2. **Footer Status** (`ConnectionStatus`) — A sparkle icon portaled into the editor footer bar. Orange when connected, grey when disconnected. Animates (pulse + twinkle) when a command is in progress. Hover popover shows plugin name, connection status, active command label, and a cancel link for pending/claimed commands. Uses `MutationObserver` to re-attach when the footer DOM changes (distraction-free mode, resizing). Also owns command polling (`useCommands`) and snackbar toast notifications for command completion/failure.
 

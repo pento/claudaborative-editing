@@ -52,9 +52,9 @@ import { useMcpStatus } from '../../../hooks/use-mcp-status';
 import { useCommands } from '../../../hooks/use-commands';
 import ConnectionStatus from '..';
 
-// MutationObserver stub for jsdom — no-op, footer element is
-// already present before render so the initial check() finds it.
-global.MutationObserver = class {
+// MutationObserver stub for jsdom — components use window.MutationObserver.
+const OriginalMutationObserver = window.MutationObserver;
+window.MutationObserver = class {
 	observe() {}
 	disconnect() {}
 };
@@ -67,6 +67,10 @@ function mockUseSelect(stores) {
 }
 
 describe('ConnectionStatus', () => {
+	afterAll(() => {
+		window.MutationObserver = OriginalMutationObserver;
+	});
+
 	let footerEl;
 
 	beforeEach(() => {

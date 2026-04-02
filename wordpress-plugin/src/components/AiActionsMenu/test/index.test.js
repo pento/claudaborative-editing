@@ -1,5 +1,5 @@
 jest.mock('@wordpress/data', () => ({
-	useSelect: jest.fn(() => false),
+	useSelect: jest.fn(),
 }));
 
 jest.mock('@wordpress/components', () => {
@@ -34,11 +34,29 @@ jest.mock('../../QuickActions', () => {
 jest.mock('../../../store', () => ({ STORE_NAME: 'wpce/ai-actions' }));
 
 import { render, screen } from '@testing-library/react';
+import { useSelect } from '@wordpress/data';
 import AiActionsMenu from '..';
+
+function mockUseSelect(stores) {
+	useSelect.mockImplementation((selector) => {
+		const select = (storeName) => stores[storeName] || {};
+		return selector(select);
+	});
+}
+
+function defaultStores(overrides = {}) {
+	return {
+		'wpce/ai-actions': {
+			getActiveCommand: () => null,
+		},
+		...overrides,
+	};
+}
 
 describe('AiActionsMenu', () => {
 	beforeEach(() => {
 		jest.clearAllMocks();
+		mockUseSelect(defaultStores());
 	});
 
 	it('renders inside PinnedItems', () => {
@@ -60,11 +78,34 @@ describe('AiActionsMenu', () => {
 		expect(screen.getByTestId('quick-actions')).toBeTruthy();
 	});
 
-	it('renders the icon SVG', () => {
+	it('renders SparkleIcon without processing when no active command', () => {
 		render(<AiActionsMenu />);
 
 		const iconContainer = screen.getByTestId('menu-icon');
 		const svg = iconContainer.querySelector('svg');
 		expect(svg).toBeTruthy();
+		expect(svg.classList.contains('wpce-sparkles-processing')).toBe(false);
+	});
+
+	it('renders SparkleIcon with processing when command is active', () => {
+		mockUseSelect(
+			defaultStores({
+				'wpce/ai-actions': {
+					getActiveCommand: () => ({
+						id: 1,
+						prompt: 'proofread',
+						status: 'running',
+						post_id: 100,
+					}),
+				},
+			})
+		);
+
+		render(<AiActionsMenu />);
+
+		const iconContainer = screen.getByTestId('menu-icon');
+		const svg = iconContainer.querySelector('svg');
+		expect(svg).toBeTruthy();
+		expect(svg.classList.contains('wpce-sparkles-processing')).toBe(true);
 	});
 });

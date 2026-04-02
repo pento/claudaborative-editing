@@ -34,6 +34,8 @@ export default function SparkleIcon({
 			height={size}
 			viewBox="6 2 18 16"
 			xmlns="http://www.w3.org/2000/svg"
+			aria-hidden="true"
+			focusable="false"
 		>
 			{/* Main sparkle — pulses when processing */}
 			<path
