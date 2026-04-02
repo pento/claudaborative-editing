@@ -400,9 +400,10 @@ class RestControllerTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Concurrent pending → running should return 409 for the second attempt.
+	 * A second pending → running request after one has already succeeded
+	 * should return 409 (command is no longer pending).
 	 */
-	public function test_pending_to_running_conflict() {
+	public function test_pending_to_running_rejects_after_already_running() {
 		$command_id = $this->create_command_directly( [ 'status' => 'pending' ] );
 
 		// First transition succeeds
@@ -411,7 +412,7 @@ class RestControllerTest extends WP_UnitTestCase {
 		$response1 = rest_get_server()->dispatch( $request1 );
 		$this->assertSame( 200, $response1->get_status() );
 
-		// Second attempt should fail (no longer pending)
+		// Second attempt fails — command is no longer pending
 		$request2 = new WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
 		$request2->set_body_params( [ 'status' => 'running' ] );
 		$response2 = rest_get_server()->dispatch( $request2 );
