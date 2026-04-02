@@ -122,6 +122,15 @@ describe('processIncomingUpdate', () => {
 		expect(docA.getMap('data').get('x')).toBe(1);
 		expect(docA.getMap('data').get('y')).toBe(2);
 	});
+
+	it('returns null for unknown update types', () => {
+		const doc = new Y.Doc();
+		const response = processIncomingUpdate(doc, {
+			type: 999 as SyncUpdateType,
+			data: uint8ArrayToBase64(new Uint8Array([1, 2, 3])),
+		});
+		expect(response).toBeNull();
+	});
 });
 
 describe('createUpdateFromChange', () => {
