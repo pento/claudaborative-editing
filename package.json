@@ -34,6 +34,7 @@
 	"packageManager": "npm@11.9.0",
 	"scripts": {
 		"build": "tsup",
+		"build:all": "npm run build && npm --prefix wordpress-plugin run build",
 		"dev": "tsup --watch",
 		"lint": "ESLINT_USE_FLAT_CONFIG=true eslint --max-warnings 0 . && npm --prefix wordpress-plugin run lint:style && markdownlint-cli2 && prettier --check -u .",
 		"lint:fix": "ESLINT_USE_FLAT_CONFIG=true eslint --fix --max-warnings 0 . && npm --prefix wordpress-plugin run lint:style:fix && markdownlint-cli2 --fix && prettier --write -u .",
