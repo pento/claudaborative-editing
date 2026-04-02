@@ -457,6 +457,40 @@ class RestControllerTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The atomic conditional update returns 409 when the DB status has
+	 * changed since the meta cache was populated (simulates a concurrent
+	 * transition by another process).
+	 */
+	public function test_pending_to_running_atomic_conflict() {
+		global $wpdb;
+
+		$command_id = $this->create_command_directly( [ 'status' => 'pending' ] );
+
+		// Populate the WP object cache with 'pending'
+		get_post_meta( $command_id, 'wpce_command_status', true );
+
+		// Directly change the DB to 'running', bypassing the object cache.
+		// This simulates another process winning the race.
+		$wpdb->update(
+			$wpdb->postmeta,
+			[ 'meta_value' => 'running' ],
+			[
+				'post_id'    => $command_id,
+				'meta_key'   => 'wpce_command_status',
+				'meta_value' => 'pending',
+			]
+		);
+
+		// The PATCH handler reads 'pending' from cache, passes the
+		// transition check, but the atomic DB update finds 0 rows.
+		$request = new WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
+		$request->set_body_params( [ 'status' => 'running' ] );
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 409, $response->get_status() );
+	}
+
+	/**
 	 * Running an expired command should return 409.
 	 */
 	public function test_run_expired_command() {
@@ -474,6 +508,37 @@ class RestControllerTest extends WP_UnitTestCase {
 	// -------------------------------------------------------------------------
 	// DELETE /wpce/v1/commands/{id}
 	// -------------------------------------------------------------------------
+
+	/**
+	 * The atomic cancel returns 409 when the DB status changed since the
+	 * meta cache was populated (simulates a concurrent run transition).
+	 */
+	public function test_cancel_atomic_conflict() {
+		global $wpdb;
+
+		$command_id = $this->create_command_directly( [ 'status' => 'pending' ] );
+
+		// Populate the WP object cache with 'pending'
+		get_post_meta( $command_id, 'wpce_command_status', true );
+
+		// Directly change the DB to 'running', bypassing the object cache.
+		$wpdb->update(
+			$wpdb->postmeta,
+			[ 'meta_value' => 'running' ],
+			[
+				'post_id'    => $command_id,
+				'meta_key'   => 'wpce_command_status',
+				'meta_value' => 'pending',
+			]
+		);
+
+		// The DELETE handler reads 'pending' from cache, passes the check,
+		// but the atomic DB update finds 0 rows.
+		$request  = new WP_REST_Request( 'DELETE', '/wpce/v1/commands/' . $command_id );
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 409, $response->get_status() );
+	}
 
 	/**
 	 * Cancelling a pending command should set status to "cancelled".
