@@ -22,6 +22,8 @@ import { useMcpStatus } from '../../hooks/use-mcp-status';
 import SparkleIcon from '../SparkleIcon';
 import { STORE_NAME } from '../../store';
 
+import './style.scss';
+
 /**
  * AiActionsMenu component.
  *
@@ -92,7 +94,7 @@ export default function AiActionsMenu() {
 					};
 
 					return (
-						<MenuGroup>
+						<MenuGroup className="claudaborative-editing-ai-actions-menu">
 							<MenuItem
 								info={__(
 									'Fix grammar, spelling, and punctuation',
