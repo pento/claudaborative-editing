@@ -456,6 +456,24 @@ describe('CommandHandler', () => {
 			expect(handler.getPluginStatus()).toBeNull();
 		});
 
+		it('silently ignores commands dispatched after stop', async () => {
+			const { dispatchCommand } = setupMockCommandClient({
+				resolve: makePluginStatus(),
+			});
+
+			const notifier = vi
+				.fn<ChannelNotifier>()
+				.mockResolvedValue(undefined);
+			handler.setNotifier(notifier);
+			await handler.start(createMockApiClient());
+			handler.stop();
+
+			// Dispatch after stop — should be silently ignored
+			await dispatchCommand(makeCommand({ id: 99 }));
+
+			expect(notifier).not.toHaveBeenCalled();
+		});
+
 		it('clears pending notifications on stop', async () => {
 			const { dispatchCommand } = setupMockCommandClient({
 				resolve: makePluginStatus(),
