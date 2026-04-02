@@ -124,14 +124,22 @@ export default [
 	// Keep @wordpress/eslint-plugin for WP-specific rules (i18n, etc.).
 	{
 		files: ['wordpress-plugin/**/*.{ts,tsx}'],
+		plugins: {
+			'@typescript-eslint': tseslint.plugin,
+		},
 		languageOptions: {
 			parser: tseslint.parser,
 		},
 		rules: {
-			// TypeScript handles these natively
+			// TypeScript handles these natively — replace with TS equivalents
 			'no-undef': 'off',
 			'no-unused-vars': 'off',
+			'@typescript-eslint/no-unused-vars': [
+				'error',
+				{ ignoreRestSiblings: true },
+			],
 			'no-redeclare': 'off',
+			'@typescript-eslint/no-redeclare': 'error',
 			// JSDoc types are redundant with TypeScript
 			'jsdoc/require-param-type': 'off',
 			'jsdoc/require-returns-type': 'off',

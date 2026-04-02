@@ -38,10 +38,11 @@ import './style.scss';
 export default function AiActionsMenu() {
 	const { mcpConnected } = useMcpStatus();
 
-	const postId = useSelect(
+	const rawPostId = useSelect(
 		(select) => select(editorStore).getCurrentPostId(),
 		[]
 	);
+	const postId = typeof rawPostId === 'number' ? rawPostId : null;
 
 	const { activeCommand, isSubmitting, error, isEditingOtherPost } =
 		useSelect(
@@ -92,7 +93,7 @@ export default function AiActionsMenu() {
 			>
 				{({ onClose }: { onClose: () => void }) => {
 					const handleSubmit = (prompt: CommandPrompt): void => {
-						if (typeof postId === 'number') {
+						if (postId) {
 							submitCommand(prompt, postId);
 						}
 						onClose();

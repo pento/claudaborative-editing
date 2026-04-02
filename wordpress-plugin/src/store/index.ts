@@ -16,6 +16,7 @@ import apiFetch from '@wordpress/api-fetch';
  */
 import type {
 	Command,
+	CommandPrompt,
 	CommandStatus,
 	StoreState,
 	StoreAction,
@@ -239,7 +240,11 @@ const actions = {
 	 * @return Thunk action.
 	 */
 	submitCommand:
-		(prompt: string, postId: number, args: Record<string, unknown> = {}) =>
+		(
+			prompt: CommandPrompt,
+			postId: number,
+			args: Record<string, unknown> = {}
+		) =>
 		async ({ dispatch }: StoreThunkArgs) => {
 			dispatch({ type: 'SUBMIT_COMMAND_START' });
 
@@ -330,7 +335,7 @@ const actions = {
 					type: 'SET_COMMAND_HISTORY',
 					history: pastCommands,
 				});
-			} catch (_error: unknown) {
+			} catch {
 				// Silently fail — the sidebar will still function without
 				// historical data.
 			}
@@ -375,7 +380,7 @@ const actions = {
 						command: updated,
 					});
 				}
-			} catch (_error: unknown) {
+			} catch {
 				// Silently fail — will retry on the next poll cycle.
 			}
 		},
