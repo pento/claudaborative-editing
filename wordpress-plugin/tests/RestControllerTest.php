@@ -866,4 +866,47 @@ class RestControllerTest extends WP_UnitTestCase {
 
 		$this->assertSame( 400, $response->get_status() );
 	}
+
+	/**
+	 * The since param filters commands by modification date.
+	 */
+	public function test_list_commands_since_filter() {
+		// Create two commands with different modification times.
+		$old_id = $this->create_command_directly();
+		$new_id = $this->create_command_directly();
+
+		// Back-date the old command's post_modified_gmt.
+		global $wpdb;
+		$wpdb->update(
+			$wpdb->posts,
+			[ 'post_modified_gmt' => '2020-01-01 00:00:00' ],
+			[ 'ID' => $old_id ]
+		);
+		clean_post_cache( $old_id );
+
+		// Query with since = 1 minute ago — should exclude the back-dated command.
+		$request = new WP_REST_Request( 'GET', '/wpce/v1/commands' );
+		$request->set_param( 'since', gmdate( 'Y-m-d\TH:i:s\Z', time() - 60 ) );
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+
+		$ids = array_column( $response->get_data(), 'id' );
+		$this->assertContains( $new_id, $ids );
+		$this->assertNotContains( $old_id, $ids );
+	}
+
+	/**
+	 * A subscriber cannot cancel commands (no edit_posts capability).
+	 */
+	public function test_cancel_command_no_permission() {
+		$command_id = $this->create_command_directly();
+
+		wp_set_current_user( self::$subscriber_id );
+
+		$request  = new WP_REST_Request( 'DELETE', '/wpce/v1/commands/' . $command_id );
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 403, $response->get_status() );
+	}
 }
