@@ -214,13 +214,15 @@ describe('AI Actions store', () => {
 				commands: {
 					...DEFAULT_STATE.commands,
 					active: MOCK_COMMAND,
+					history: [{ ...MOCK_COMMAND, id: 1, status: 'completed' }],
 				},
 			};
 			const state = reducer(initial, {
 				type: 'CLEAR_ACTIVE_COMMAND',
 			});
 			expect(state.commands.active).toBeNull();
-			expect(state.commands.history[0]).toEqual(MOCK_COMMAND);
+			// Should not push stale active to history
+			expect(state.commands.history).toEqual(initial.commands.history);
 		});
 
 		it('CLEAR_ACTIVE_COMMAND caps history at 10', () => {
@@ -228,16 +230,22 @@ describe('AI Actions store', () => {
 				...MOCK_COMMAND,
 				id: i,
 			}));
+			const completed = {
+				...MOCK_COMMAND,
+				id: 99,
+				status: 'completed',
+			};
 			const initial = {
 				...DEFAULT_STATE,
 				commands: {
 					...DEFAULT_STATE.commands,
-					active: { ...MOCK_COMMAND, id: 99 },
+					active: completed,
 					history: existingHistory,
 				},
 			};
 			const state = reducer(initial, {
 				type: 'CLEAR_ACTIVE_COMMAND',
+				command: completed,
 			});
 			expect(state.commands.history).toHaveLength(10);
 			expect(state.commands.history[0].id).toBe(99);

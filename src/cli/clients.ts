@@ -64,7 +64,11 @@ function addClaudeCodeToolPermission(): void {
 	const settingsPath = join(homedir(), '.claude', 'settings.json');
 	const config = readJsonConfig(settingsPath);
 
-	if (typeof config.permissions !== 'object' || config.permissions === null) {
+	if (
+		typeof config.permissions !== 'object' ||
+		config.permissions === null ||
+		Array.isArray(config.permissions)
+	) {
 		config.permissions = {};
 	}
 	const perms = config.permissions as Record<string, unknown>;

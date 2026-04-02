@@ -135,11 +135,8 @@ function reducer(state = DEFAULT_STATE, action) {
 			};
 
 		case 'CLEAR_ACTIVE_COMMAND': {
-			// Use the provided command (with terminal status) if available,
-			// otherwise fall back to the current active command.
-			const finishedCommand = action.command || state.commands.active;
-			const history = finishedCommand
-				? [finishedCommand, ...state.commands.history].slice(
+			const history = action.command
+				? [action.command, ...state.commands.history].slice(
 						0,
 						MAX_HISTORY
 					)
