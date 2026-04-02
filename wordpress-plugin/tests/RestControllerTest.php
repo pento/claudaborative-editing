@@ -342,50 +342,6 @@ class RestControllerTest extends WP_UnitTestCase {
 	// -------------------------------------------------------------------------
 
 	/**
-	 * Claiming a pending command transitions it to "claimed".
-	 */
-	public function test_claim_command() {
-		$command_id = $this->create_command_directly();
-
-		$request = new WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
-		$request->set_body_params( [ 'status' => 'claimed' ] );
-		$response = rest_get_server()->dispatch( $request );
-
-		$this->assertSame( 200, $response->get_status() );
-
-		$data = $response->get_data();
-		$this->assertSame( 'claimed', $data['status'] );
-		$this->assertSame( self::$editor_id, $data['claimed_by'] );
-	}
-
-	/**
-	 * Claiming an already-claimed command should return 409.
-	 */
-	public function test_double_claim_returns_conflict() {
-		$command_id = $this->create_command_directly( [ 'status' => 'claimed' ] );
-
-		$request = new WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
-		$request->set_body_params( [ 'status' => 'claimed' ] );
-		$response = rest_get_server()->dispatch( $request );
-
-		$this->assertSame( 409, $response->get_status() );
-	}
-
-	/**
-	 * Transitioning claimed → running should succeed.
-	 */
-	public function test_claimed_to_running() {
-		$command_id = $this->create_command_directly( [ 'status' => 'claimed' ] );
-
-		$request = new WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
-		$request->set_body_params( [ 'status' => 'running' ] );
-		$response = rest_get_server()->dispatch( $request );
-
-		$this->assertSame( 200, $response->get_status() );
-		$this->assertSame( 'running', $response->get_data()['status'] );
-	}
-
-	/**
 	 * Transitioning running → completed should succeed, with a message.
 	 */
 	public function test_running_to_completed_with_message() {
@@ -427,26 +383,49 @@ class RestControllerTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * An invalid transition (pending → running) should be rejected.
+	 * Transitioning pending → running should succeed (atomic claim+run).
 	 */
-	public function test_invalid_transition_pending_to_running() {
+	public function test_pending_to_running() {
 		$command_id = $this->create_command_directly( [ 'status' => 'pending' ] );
 
 		$request = new WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
 		$request->set_body_params( [ 'status' => 'running' ] );
 		$response = rest_get_server()->dispatch( $request );
 
-		$this->assertSame( 409, $response->get_status() );
+		$this->assertSame( 200, $response->get_status() );
+
+		$data = $response->get_data();
+		$this->assertSame( 'running', $data['status'] );
+		$this->assertSame( self::$editor_id, $data['claimed_by'] );
 	}
 
 	/**
-	 * An invalid transition (completed → claimed) should be rejected.
+	 * Concurrent pending → running should return 409 for the second attempt.
 	 */
-	public function test_invalid_transition_completed_to_claimed() {
+	public function test_pending_to_running_conflict() {
+		$command_id = $this->create_command_directly( [ 'status' => 'pending' ] );
+
+		// First transition succeeds
+		$request1 = new WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
+		$request1->set_body_params( [ 'status' => 'running' ] );
+		$response1 = rest_get_server()->dispatch( $request1 );
+		$this->assertSame( 200, $response1->get_status() );
+
+		// Second attempt should fail (no longer pending)
+		$request2 = new WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
+		$request2->set_body_params( [ 'status' => 'running' ] );
+		$response2 = rest_get_server()->dispatch( $request2 );
+		$this->assertSame( 409, $response2->get_status() );
+	}
+
+	/**
+	 * An invalid transition (completed → running) should be rejected.
+	 */
+	public function test_invalid_transition_completed_to_running() {
 		$command_id = $this->create_command_directly( [ 'status' => 'completed' ] );
 
 		$request = new WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
-		$request->set_body_params( [ 'status' => 'claimed' ] );
+		$request->set_body_params( [ 'status' => 'running' ] );
 		$response = rest_get_server()->dispatch( $request );
 
 		$this->assertSame( 409, $response->get_status() );
@@ -457,7 +436,7 @@ class RestControllerTest extends WP_UnitTestCase {
 	 */
 	public function test_update_nonexistent_command() {
 		$request = new WP_REST_Request( 'PATCH', '/wpce/v1/commands/999999' );
-		$request->set_body_params( [ 'status' => 'claimed' ] );
+		$request->set_body_params( [ 'status' => 'running' ] );
 		$response = rest_get_server()->dispatch( $request );
 
 		$this->assertSame( 404, $response->get_status() );
@@ -470,22 +449,22 @@ class RestControllerTest extends WP_UnitTestCase {
 		$command_id = $this->create_command_directly( [ 'author' => self::$editor2_id ] );
 
 		$request = new WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
-		$request->set_body_params( [ 'status' => 'claimed' ] );
+		$request->set_body_params( [ 'status' => 'running' ] );
 		$response = rest_get_server()->dispatch( $request );
 
 		$this->assertSame( 403, $response->get_status() );
 	}
 
 	/**
-	 * Claiming an expired command should return 409.
+	 * Running an expired command should return 409.
 	 */
-	public function test_claim_expired_command() {
+	public function test_run_expired_command() {
 		$command_id = $this->create_command_directly(
 			[ 'expires_at' => gmdate( 'Y-m-d\TH:i:s\Z', time() - 60 ) ]
 		);
 
 		$request = new WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
-		$request->set_body_params( [ 'status' => 'claimed' ] );
+		$request->set_body_params( [ 'status' => 'running' ] );
 		$response = rest_get_server()->dispatch( $request );
 
 		$this->assertSame( 409, $response->get_status() );
@@ -500,19 +479,6 @@ class RestControllerTest extends WP_UnitTestCase {
 	 */
 	public function test_cancel_pending_command() {
 		$command_id = $this->create_command_directly();
-
-		$request  = new WP_REST_Request( 'DELETE', '/wpce/v1/commands/' . $command_id );
-		$response = rest_get_server()->dispatch( $request );
-
-		$this->assertSame( 200, $response->get_status() );
-		$this->assertSame( 'cancelled', $response->get_data()['status'] );
-	}
-
-	/**
-	 * Cancelling a claimed command should set status to "cancelled".
-	 */
-	public function test_cancel_claimed_command() {
-		$command_id = $this->create_command_directly( [ 'status' => 'claimed' ] );
 
 		$request  = new WP_REST_Request( 'DELETE', '/wpce/v1/commands/' . $command_id );
 		$response = rest_get_server()->dispatch( $request );
@@ -602,13 +568,13 @@ class RestControllerTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * MCP should show as connected after claiming a command.
+	 * MCP should show as connected after running a command.
 	 */
-	public function test_mcp_connected_after_claim() {
+	public function test_mcp_connected_after_running() {
 		$command_id = $this->create_command_directly();
 
 		$request = new WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
-		$request->set_body_params( [ 'status' => 'claimed' ] );
+		$request->set_body_params( [ 'status' => 'running' ] );
 		rest_get_server()->dispatch( $request );
 
 		$request  = new WP_REST_Request( 'GET', '/wpce/v1/status' );
@@ -695,9 +661,9 @@ class RestControllerTest extends WP_UnitTestCase {
 	 * The SSE query should not return non-pending commands.
 	 */
 	public function test_sse_query_excludes_non_pending() {
-		$this->create_command_directly( [ 'status' => 'claimed' ] );
 		$this->create_command_directly( [ 'status' => 'running' ] );
 		$this->create_command_directly( [ 'status' => 'completed' ] );
+		$this->create_command_directly( [ 'status' => 'failed' ] );
 
 		$results = SSE_Handler::query_pending_commands( self::$editor_id, 0 );
 
@@ -770,28 +736,6 @@ class RestControllerTest extends WP_UnitTestCase {
 
 		$this->assertCount( 1, $results );
 		$this->assertSame( $active_id, $results[0]->ID );
-	}
-
-	/**
-	 * Updating an expired claimed command should return 409 and expire it.
-	 */
-	public function test_update_expired_claimed_command() {
-		$command_id = $this->create_command_directly(
-			[
-				'status'     => 'claimed',
-				'expires_at' => gmdate( 'Y-m-d\TH:i:s\Z', time() - 60 ),
-			]
-		);
-
-		$request = new WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
-		$request->set_body_params( [ 'status' => 'running' ] );
-		$response = rest_get_server()->dispatch( $request );
-
-		$this->assertSame( 409, $response->get_status() );
-		$this->assertSame(
-			'expired',
-			get_post_meta( $command_id, 'wpce_command_status', true )
-		);
 	}
 
 	/**

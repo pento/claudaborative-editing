@@ -255,10 +255,10 @@ async function main(): Promise<void> {
 		fail(`Expected status "pending", got "${command.status}"`);
 	}
 
-	// 8. Wait for the command to be claimed by the MCP listener
-	log('Waiting for MCP to claim the command...');
+	// 8. Wait for the command to reach "running" status via the MCP listener
+	log('Waiting for MCP to pick up the command...');
 	const deadline = Date.now() + 15_000;
-	let claimed = false;
+	let running = false;
 
 	while (Date.now() < deadline) {
 		const updated = await apiFetch<{ id: number; status: string }>(
@@ -272,22 +272,22 @@ async function main(): Promise<void> {
 			return list.find((c) => c.id === command.id);
 		});
 
-		if (updated && updated.status === 'claimed') {
-			claimed = true;
+		if (updated && updated.status === 'running') {
+			running = true;
 			break;
 		}
 
 		await new Promise((resolve) => setTimeout(resolve, 500));
 	}
 
-	if (!claimed) {
+	if (!running) {
 		fail(
-			'Command was not claimed within 15 seconds.\n' +
+			'Command did not reach "running" status within 15 seconds.\n' +
 				`  Transport: ${pluginInfo.transport}\n` +
 				'  The command listener may not be receiving events.'
 		);
 	}
-	log('Command claimed by MCP!');
+	log('Command picked up by MCP!');
 
 	// 9. Check the channel notification was dispatched
 	if (notifications.length === 0) {

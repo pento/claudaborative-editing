@@ -42,7 +42,7 @@ Claude Code  <--stdio-->  MCP Server (Node.js)  <--HTTP polling-->  WordPress
 - `src/wordpress/command-client.ts` — REST methods for plugin command endpoints + SSE/polling transport
 - `src/yjs/` — Y.Doc management, block ↔ Yjs conversion, sync protocol encoding
 - `src/session/` — Connection lifecycle, awareness/presence, command handler
-- `src/session/command-handler.ts` — Command listener lifecycle, claim logic, channel notification dispatch
+- `src/session/command-handler.ts` — Command listener lifecycle, channel notification dispatch
 - `src/tools/` — MCP tool handlers (connect, posts, read, edit, media, metadata, notes, commands, status)
 - `src/prompts/` — MCP prompt handlers (editing, review, authoring)
 - `src/blocks/` — Gutenberg HTML parser, Claude-friendly renderer
@@ -77,7 +77,7 @@ The MCP server declares the `claude/channel` experimental capability and include
 - **SSE (primary)**: Opens `GET /wpce/v1/commands/stream` with Application Password auth. Parses Server-Sent Events from the response stream. Reconnects automatically when the connection drops (server closes after ~5 minutes). Uses exponential backoff on errors.
 - **Polling (fallback)**: Falls back to `GET /wpce/v1/commands?status=pending` polling every 5 seconds after 3 failed SSE attempts. Periodically retries SSE (every 60 seconds) to recover when the connection issue was transient.
 
-**Command flow**: When a command arrives (via SSE or polling), the handler claims it (`PATCH /wpce/v1/commands/{id}` with `status: claimed`), then pushes a channel notification to Claude Code via `server.server.notification()`. If the claim fails with 409 (another instance got it) or 404, the command is skipped silently.
+**Command flow**: When a command arrives (via SSE or polling), the handler pushes a channel notification to Claude Code via `server.server.notification()` **without claiming** the command. The claim happens when Claude calls `wp_update_command_status("running")`, which performs an atomic `pending → running` transition on the WordPress side (409 on conflict). This design ensures that instances whose clients ignore the notification (e.g., channels not enabled) never claim commands, leaving them available for channel-capable instances.
 
 **Channel notification format**: The `notifications/claude/channel` notification includes a `content` field describing the request and `meta` fields with `command_id`, `prompt`, `post_id`, and optionally `arguments`. Claude Code wraps this as a `<channel source="wpce">` tag (source is set automatically from the server name).
 
@@ -368,11 +368,11 @@ REST endpoints for the command queue between the browser and the MCP server. All
 | `DELETE` | `/wpce/v1/commands/{id}`   | Browser cancels a command (author only)                   |
 | `GET`    | `/wpce/v1/status`          | Plugin version, protocol version, MCP connection state    |
 
-**Command status lifecycle**: `pending` → `claimed` → `running` → `completed` or `failed`. Also: `pending` → `cancelled` (user cancels), `pending` or `claimed` → `expired` (timeout). Claim uses atomic conditional update (409 on conflict). Expired commands are transitioned lazily on query.
+**Command status lifecycle**: `pending` → `running` → `completed` or `failed`. Also: `pending` → `cancelled` (user cancels), `pending` → `expired` (timeout). The `pending → running` transition uses an atomic conditional update (409 on conflict) so only one MCP instance can claim a command. Expired commands are transitioned lazily on query.
 
 **SSE stream**: Polls the database every 2s for pending commands, sends `event: command` with JSON data, heartbeat every 30s. Supports `Last-Event-ID` for reconnection. Exits after ~5 minutes (client reconnects via EventSource retry).
 
-**MCP connection tracking**: User-scoped transient (`wpce_mcp_last_seen_{user_id}`), updated on command claim and SSE stream activity. Status endpoint reports `mcp_connected` (true if last seen < 30s ago).
+**MCP connection tracking**: User-scoped transient (`wpce_mcp_last_seen_{user_id}`), updated when a command transitions to `running` and on SSE stream activity. Status endpoint reports `mcp_connected` (true if last seen < 30s ago).
 
 **Prompt validation**: Commands accept only: `proofread`, `review`, `respond-to-notes`, `respond-to-note`, `edit`, `translate`.
 
@@ -382,7 +382,7 @@ The plugin registers three always-mounted Gutenberg plugins via `registerPlugin(
 
 1. **Toolbar Dropdown** (`AiActionsMenu`) — A `DropdownMenu` in the editor toolbar's `PinnedItems` area. Contains Proofread and Review menu items with info descriptions. Each submits a command via `POST /wpce/v1/commands`. Items are disabled when Claude is not connected, a command is active, or Claude is editing a different post. The dropdown closes after submitting an action. Submission errors are shown as snackbar toasts.
 
-2. **Footer Status** (`ConnectionStatus`) — A sparkle icon button portaled into the editor footer bar. Orange when connected, grey when disconnected. Animates (pulse + twinkle) when a command is in progress. Click toggles a popover showing plugin name, connection status, active command label, and a cancel link for pending/claimed commands (cancel only shown when connected). Uses `MutationObserver` to re-attach when the footer DOM changes (distraction-free mode, resizing). Also owns command polling (`useCommands`) and snackbar toast notifications for command completion/failure.
+2. **Footer Status** (`ConnectionStatus`) — A sparkle icon button portaled into the editor footer bar. Orange when connected, grey when disconnected. Animates (pulse + twinkle) when a command is in progress. Click toggles a popover showing plugin name, connection status, active command label, and a cancel link for pending commands (cancel only shown when connected). Uses `MutationObserver` to re-attach when the footer DOM changes (distraction-free mode, resizing). Also owns command polling (`useCommands`) and snackbar toast notifications for command completion/failure.
 
 3. **Notes Integration** (`NotesIntegration`) — Injects buttons into Gutenberg's collaboration/notes sidebar via DOM observation and `createPortal`. "Address All Notes" button is pinned at the top of the notes panel (sticky in floating mode, sticky below header in full mode). Per-note sparkle buttons appear on each root thread's action bar. Uses `respond-to-notes` and `respond-to-note` prompts respectively.
 

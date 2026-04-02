@@ -282,7 +282,7 @@ test.describe('AI Actions', () => {
 							prompt: 'proofread',
 							post_id: postId,
 							status: expect.stringMatching(
-								/^(pending|claimed|running)$/
+								/^(pending|running)$/
 							),
 						}),
 					])
@@ -350,7 +350,7 @@ test.describe('AI Actions', () => {
 							prompt: 'review',
 							post_id: postId,
 							status: expect.stringMatching(
-								/^(pending|claimed|running)$/
+								/^(pending|running)$/
 							),
 						}),
 					])

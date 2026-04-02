@@ -177,24 +177,6 @@ describe('CommandClient', () => {
 		});
 	});
 
-	describe('claimCommand()', () => {
-		it('sends PATCH with status claimed', async () => {
-			const claimed = fakeCommand({ id: 5, status: 'claimed' });
-			apiClient.request.mockResolvedValue(claimed);
-
-			const result = await client.claimCommand(5);
-
-			expect(apiClient.request).toHaveBeenCalledWith(
-				'/wpce/v1/commands/5',
-				{
-					method: 'PATCH',
-					body: JSON.stringify({ status: 'claimed' }),
-				}
-			);
-			expect(result).toEqual(claimed);
-		});
-	});
-
 	describe('updateCommandStatus()', () => {
 		it('sends PATCH with status only', async () => {
 			const updated = fakeCommand({ id: 3, status: 'running' });

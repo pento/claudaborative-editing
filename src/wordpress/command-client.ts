@@ -109,13 +109,6 @@ export class CommandClient {
 		);
 	}
 
-	async claimCommand(id: number): Promise<Command> {
-		return this.apiClient.request<Command>(`/wpce/v1/commands/${id}`, {
-			method: 'PATCH',
-			body: JSON.stringify({ status: 'claimed' }),
-		});
-	}
-
 	async updateCommandStatus(
 		id: number,
 		status: string,

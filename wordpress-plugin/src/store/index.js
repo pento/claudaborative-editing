@@ -285,7 +285,7 @@ const actions = {
 				});
 
 				const active = commands.find((command) =>
-					['pending', 'claimed', 'running'].includes(command.status)
+					['pending', 'running'].includes(command.status)
 				);
 
 				if (active) {
@@ -297,9 +297,7 @@ const actions = {
 
 				const pastCommands = commands.filter(
 					(command) =>
-						!['pending', 'claimed', 'running'].includes(
-							command.status
-						)
+						!['pending', 'running'].includes(command.status)
 				);
 				dispatch({
 					type: 'SET_COMMAND_HISTORY',

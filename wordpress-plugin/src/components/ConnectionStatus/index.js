@@ -164,10 +164,7 @@ export default function ConnectionStatus() {
 	}
 
 	const isCancellable =
-		mcpConnected &&
-		activeCommand &&
-		(activeCommand.status === 'pending' ||
-			activeCommand.status === 'claimed');
+		mcpConnected && activeCommand && activeCommand.status === 'pending';
 
 	const togglePopover = useCallback(
 		() => setShowPopover((prev) => !prev),

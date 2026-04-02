@@ -143,30 +143,14 @@ export class CommandHandler {
 	// --- Internal ---
 
 	/**
-	 * Handle an incoming command: claim it and send a channel notification.
+	 * Handle an incoming command: send a channel notification without
+	 * claiming. The claim happens when the client calls
+	 * `wp_update_command_status("running")`, which performs an atomic
+	 * pending→running transition on the WordPress side (409 on conflict).
+	 * This way, instances whose clients ignore the notification (e.g.,
+	 * channels not enabled) never claim the command.
 	 */
 	private async handleCommand(command: Command): Promise<void> {
-		const client = this.commandClient;
-		if (!client) return;
-
-		// Attempt to claim the command
-		try {
-			await client.claimCommand(command.id);
-		} catch (error) {
-			// Claim failed — another instance may have claimed it, or it
-			// was cancelled/expired. Skip silently.
-			if (
-				error instanceof WordPressApiError &&
-				(error.status === 409 || error.status === 404)
-			) {
-				return;
-			}
-			// Other errors — log and skip
-			console.error(`Failed to claim command ${command.id}:`, error);
-			return;
-		}
-
-		// stop() may have been called during the claim await
 		if (!this.commandClient) return;
 
 		// Build the notification

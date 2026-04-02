@@ -1388,12 +1388,12 @@ describe('WordPressApiClient', () => {
 	describe('PATCH requests', () => {
 		it('includes Content-Type: application/json header', async () => {
 			fetchMock.mockResolvedValue(
-				mockResponse({ id: 1, status: 'claimed' })
+				mockResponse({ id: 1, status: 'running' })
 			);
 			const client = createClient();
 			await client.request('/wpce/v1/commands/1', {
 				method: 'PATCH',
-				body: JSON.stringify({ status: 'claimed' }),
+				body: JSON.stringify({ status: 'running' }),
 			});
 
 			const [, options] = fetchMock.mock.calls[0] as [
