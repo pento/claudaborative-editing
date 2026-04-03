@@ -61,7 +61,7 @@ const STRINGS: Record<CommandSlug, CommandStrings> = {
 	edit: {
 		label: __('Edit', 'claudaborative-editing'),
 		description: __(
-			'Edit with an optional editing focus',
+			'Make broad editorial changes to the post',
 			'claudaborative-editing'
 		),
 		progressLabel: __('Editing…', 'claudaborative-editing'),

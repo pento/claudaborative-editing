@@ -7,6 +7,7 @@
  * Run from repo root: npm run generate:defs
  */
 
+import { execSync } from 'child_process';
 import { writeFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -179,3 +180,13 @@ const tsLines = [
 const tsPath = resolve(pluginDir, 'src/utils/command-i18n.ts');
 writeFileSync(tsPath, tsLines.join('\n'), 'utf8');
 console.log('Generated ' + tsPath);
+
+// Lint the generated files to ensure they meet our coding standards
+execSync(`npx prettier --write ${tsPath}`, {
+	stdio: 'inherit',
+	cwd: __dirname,
+});
+execSync('composer run phpcbf includes/class-command-defs.php', {
+	stdio: 'inherit',
+	cwd: pluginDir,
+});
