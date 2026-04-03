@@ -13,6 +13,8 @@ export function registerAuthoringPrompts(
 			argsSchema: {
 				language: z
 					.string()
+					.trim()
+					.min(1)
 					.describe(
 						'Target language (e.g., "Spanish", "French", "Japanese", "zh-CN")'
 					),

@@ -13,6 +13,8 @@ export function registerEditingPrompts(
 			argsSchema: {
 				editingFocus: z
 					.string()
+					.trim()
+					.min(1)
 					.describe(
 						'A brief description of the editing focus or intent (e.g., "Make it more formal", "Improve the flow", "Condense the intro")'
 					),
