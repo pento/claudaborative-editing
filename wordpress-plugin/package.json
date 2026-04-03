@@ -1,6 +1,6 @@
 {
 	"name": "claudaborative-editing-plugin",
-	"version": "0.3.0",
+	"version": "0.3.1",
 	"description": "WordPress plugin that adds AI action controls to the Gutenberg editor.",
 	"private": true,
 	"devDependencies": {
