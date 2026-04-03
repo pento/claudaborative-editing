@@ -88,7 +88,10 @@ function defaultStores(
 	aiStoreOverrides: Record<string, (...args: any[]) => any> = {}
 ) {
 	return {
-		[aiActionsStore as unknown as string]: { ...DEFAULT_AI_STORE, ...aiStoreOverrides },
+		[aiActionsStore as unknown as string]: {
+			...DEFAULT_AI_STORE,
+			...aiStoreOverrides,
+		},
 	};
 }
 
