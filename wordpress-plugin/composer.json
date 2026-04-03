@@ -23,6 +23,6 @@
 	"scripts": {
 		"phpcs": "phpcs",
 		"phpcbf": "phpcbf",
-		"phpstan": "phpstan analyse --no-progress --memory-limit=512M"
+		"phpstan": "phpstan analyse --no-progress --memory-limit=1024M"
 	}
 }
