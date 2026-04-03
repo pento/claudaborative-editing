@@ -1,5 +1,7 @@
 /.git
 /.github
+/.wordpress-org
+/bin
 /node_modules
 /vendor
 /src
@@ -12,6 +14,8 @@
 .phpcs-cache
 .phpstan-cache
 .prettierrc
+.stylelintrc.json
+.wp-env.test.json
 composer.json
 composer.lock
 package.json
@@ -19,4 +23,7 @@ package-lock.json
 phpcs.xml.dist
 phpstan.neon.dist
 phpunit.xml.dist
+jest.config.json
+tsconfig.json
+webpack.config.js
 README.md
