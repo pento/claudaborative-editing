@@ -947,35 +947,17 @@ class RestControllerTest extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * A command with an invalid MySQL date should still format without error.
+	 * format_date() should fall back to epoch when strtotime() returns false.
+	 *
+	 * Calls the private method directly via reflection to bypass MySQL's
+	 * datetime normalization (MySQL converts invalid dates to 0000-00-00).
 	 */
 	public function test_command_formatter_handles_invalid_date() {
-		global $wpdb;
+		$ref = new \ReflectionMethod( Command_Formatter::class, 'format_date' );
 
-		$command_id = $this->create_command_directly();
+		$result = $ref->invoke( null, 'not-a-date' );
 
-		// Set an unparseable date string directly in the database —
-		// strtotime('not-a-date') returns false on all PHP versions.
-		$wpdb->update(
-			$wpdb->posts,
-			[
-				'post_date_gmt'     => 'not-a-date',
-				'post_modified_gmt' => 'not-a-date',
-			],
-			[ 'ID' => $command_id ],
-			[ '%s', '%s' ],
-			[ '%d' ]
-		);
-		clean_post_cache( $command_id );
-
-		$command = get_post( $command_id );
-		$data    = Command_Formatter::format( $command );
-
-		// Should not error; the fallback produces epoch timestamps.
-		$this->assertArrayHasKey( 'created_at', $data );
-		$this->assertArrayHasKey( 'updated_at', $data );
-		$this->assertSame( '1970-01-01T00:00:00Z', $data['created_at'] );
-		$this->assertSame( '1970-01-01T00:00:00Z', $data['updated_at'] );
+		$this->assertSame( '1970-01-01T00:00:00Z', $result );
 	}
 
 	/**
