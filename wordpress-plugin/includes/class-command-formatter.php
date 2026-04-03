@@ -1,7 +1,11 @@
 <?php
 /**
  * Command Formatter — converts a wpce_command post into the REST API response shape.
+ *
+ * @package Claudaborative_Editing
  */
+
+namespace Claudaborative_Editing;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -15,7 +19,7 @@ class Command_Formatter {
 	/**
 	 * Format a wpce_command post as an associative array for REST responses.
 	 *
-	 * @param WP_Post $post A post of type wpce_command.
+	 * @param \WP_Post $post A post of type wpce_command.
 	 * @return array{
 	 *     id: int,
 	 *     post_id: int,
@@ -30,7 +34,7 @@ class Command_Formatter {
 	 *     expires_at: string,
 	 * } Command object.
 	 */
-	public static function format( WP_Post $post ) {
+	public static function format( \WP_Post $post ) {
 		$claimed_by = get_post_meta( $post->ID, 'wpce_claimed_by', true );
 		$message    = get_post_meta( $post->ID, 'wpce_message', true );
 		$arguments  = get_post_meta( $post->ID, 'wpce_arguments', true );

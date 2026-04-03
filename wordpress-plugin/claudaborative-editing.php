@@ -9,17 +9,26 @@
  * Requires at least: 6.9
  * Requires PHP: 7.4
  * Text Domain: claudaborative-editing
+ *
+ * @package Claudaborative_Editing
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-require_once __DIR__ . '/includes/class-command-defs.php';
-require_once __DIR__ . '/includes/class-command-store.php';
-require_once __DIR__ . '/includes/class-command-formatter.php';
-require_once __DIR__ . '/includes/class-rest-controller.php';
-require_once __DIR__ . '/includes/class-sse-handler.php';
+if ( file_exists( plugin_dir_path( __FILE__ ) . 'vendor/autoload.php' ) ) {
+	require_once plugin_dir_path( __FILE__ ) . 'vendor/autoload.php';
+} else {
+	wp_trigger_error( 'Claudaborative_Editing', 'Autoload file not found. Please run `composer install`.', E_USER_ERROR );
+	return;
+}
+
+use Claudaborative_Editing\Command_Defs;
+use Claudaborative_Editing\Command_Formatter;
+use Claudaborative_Editing\Command_Store;
+use Claudaborative_Editing\REST_Controller;
+use Claudaborative_Editing\SSE_Handler;
 
 /**
  * Main plugin class.

@@ -1,7 +1,11 @@
 <?php
 /**
  * Command Store — registers the wpce_command CPT and its meta fields.
+ *
+ * @package Claudaborative_Editing
  */
+
+namespace Claudaborative_Editing;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -135,7 +139,7 @@ class Command_Store {
 	 * @return void
 	 */
 	public static function expire_stale_commands( $user_id, $cache_results = true ) {
-		$query = new WP_Query(
+		$query = new \WP_Query(
 			[
 				'post_type'      => self::POST_TYPE,
 				'post_status'    => 'any',

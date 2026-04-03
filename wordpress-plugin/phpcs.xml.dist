@@ -15,6 +15,11 @@
 	<exclude-pattern>/src/*</exclude-pattern>
 	<exclude-pattern>/vendor/*</exclude-pattern>
 
+	<rule ref="WordPress-Docs">
+		<exclude-pattern>tests/*</exclude-pattern>
+		<exclude name="Generic.Commenting.DocComment.MissingShort" />
+	</rule>
+
 	<!-- Use WordPress-Extra (Core + security sniffs, skips pedantic docs) -->
 	<rule ref="WordPress-Extra">
 		<!-- Allow short array syntax -->
@@ -25,6 +30,12 @@
 	<config name="testVersion" value="7.4-" />
 	<rule ref="PHPCompatibilityWP" />
 
+	<rule ref="VariableAnalysis">
+		<properties>
+			<property name="allowUnusedFunctionParameters" value="true" />
+		</properties>
+	</rule>
+
 	<!-- WordPress minimum version -->
 	<config name="minimum_wp_version" value="6.9" />
 
@@ -33,6 +44,16 @@
 		<properties>
 			<property name="text_domain" type="array">
 				<element value="claudaborative-editing" />
+			</property>
+		</properties>
+	</rule>
+
+	<!-- Enforce global prefixing to avoid conflicts -->
+	<rule ref="WordPress.NamingConventions.PrefixAllGlobals">
+		<exclude-pattern>tests/bootstrap.php</exclude-pattern>
+		<properties>
+			<property name="prefixes" type="array">
+				<element value="Claudaborative_Editing" />
 			</property>
 		</properties>
 	</rule>

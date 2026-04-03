@@ -3,10 +3,12 @@
  * Tests for the REST_Controller class.
  */
 
+namespace Claudaborative_Editing;
+
 /**
  * Test the wpce/v1 REST API endpoints.
  */
-class RestControllerTest extends WP_UnitTestCase {
+class RestControllerTest extends \WP_UnitTestCase {
 
 	/**
 	 * Editor user ID (primary test user).
@@ -39,10 +41,10 @@ class RestControllerTest extends WP_UnitTestCase {
 	/**
 	 * Create shared fixtures once for all tests in this class.
 	 *
-	 * @param WP_UnitTest_Factory $factory The factory instance.
+	 * @param \WP_UnitTest_Factory $factory The factory instance.
 	 * @return void
 	 */
-	public static function wpSetUpBeforeClass( WP_UnitTest_Factory $factory ) {
+	public static function wpSetUpBeforeClass( \WP_UnitTest_Factory $factory ) {
 		/** @var int $editor_id */
 		$editor_id       = $factory->user->create( [ 'role' => 'editor' ] );
 		self::$editor_id = $editor_id;
@@ -82,7 +84,7 @@ class RestControllerTest extends WP_UnitTestCase {
 	 * Create a command via the REST API and return the response.
 	 *
 	 * @param array<string, mixed> $params Override default command parameters.
-	 * @return WP_REST_Response The response.
+	 * @return \WP_REST_Response The response.
 	 */
 	private function create_command( $params = [] ) {
 		$defaults = [
@@ -90,7 +92,7 @@ class RestControllerTest extends WP_UnitTestCase {
 			'prompt'  => 'review',
 		];
 
-		$request = new WP_REST_Request( 'POST', '/wpce/v1/commands' );
+		$request = new \WP_REST_Request( 'POST', '/wpce/v1/commands' );
 		$request->set_body_params( array_merge( $defaults, $params ) );
 
 		return rest_get_server()->dispatch( $request );
@@ -166,7 +168,7 @@ class RestControllerTest extends WP_UnitTestCase {
 		$data     = $response->get_data();
 
 		$this->assertIsObject( $data['arguments'] );
-		$this->assertEquals( new stdClass(), $data['arguments'] );
+		$this->assertEquals( new \stdClass(), $data['arguments'] );
 	}
 
 	/**
@@ -253,7 +255,7 @@ class RestControllerTest extends WP_UnitTestCase {
 		$this->create_command_directly();
 		$this->create_command_directly();
 
-		$request  = new WP_REST_Request( 'GET', '/wpce/v1/commands' );
+		$request  = new \WP_REST_Request( 'GET', '/wpce/v1/commands' );
 		$response = rest_get_server()->dispatch( $request );
 
 		$this->assertSame( 200, $response->get_status() );
@@ -267,7 +269,7 @@ class RestControllerTest extends WP_UnitTestCase {
 		$this->create_command_directly();
 		$this->create_command_directly( [ 'author' => self::$editor2_id ] );
 
-		$request  = new WP_REST_Request( 'GET', '/wpce/v1/commands' );
+		$request  = new \WP_REST_Request( 'GET', '/wpce/v1/commands' );
 		$response = rest_get_server()->dispatch( $request );
 
 		$data = $response->get_data();
@@ -284,7 +286,7 @@ class RestControllerTest extends WP_UnitTestCase {
 		$this->create_command_directly();
 		$this->create_command_directly( [ 'post_id' => $other_post ] );
 
-		$request = new WP_REST_Request( 'GET', '/wpce/v1/commands' );
+		$request = new \WP_REST_Request( 'GET', '/wpce/v1/commands' );
 		$request->set_param( 'post_id', self::$target_post_id );
 		$response = rest_get_server()->dispatch( $request );
 
@@ -300,7 +302,7 @@ class RestControllerTest extends WP_UnitTestCase {
 		$this->create_command_directly( [ 'status' => 'pending' ] );
 		$this->create_command_directly( [ 'status' => 'completed' ] );
 
-		$request = new WP_REST_Request( 'GET', '/wpce/v1/commands' );
+		$request = new \WP_REST_Request( 'GET', '/wpce/v1/commands' );
 		$request->set_param( 'status', 'completed' );
 		$response = rest_get_server()->dispatch( $request );
 
@@ -317,8 +319,8 @@ class RestControllerTest extends WP_UnitTestCase {
 			[ 'expires_at' => gmdate( 'Y-m-d\TH:i:s\Z', time() - 60 ) ]
 		);
 
-		$request  = new WP_REST_Request( 'GET', '/wpce/v1/commands' );
-		$response = rest_get_server()->dispatch( $request );
+		$request = new \WP_REST_Request( 'GET', '/wpce/v1/commands' );
+		rest_get_server()->dispatch( $request );
 
 		$this->assertSame(
 			'expired',
@@ -331,7 +333,7 @@ class RestControllerTest extends WP_UnitTestCase {
 	 */
 	public function test_list_commands_no_permission() {
 		wp_set_current_user( self::$subscriber_id );
-		$request  = new WP_REST_Request( 'GET', '/wpce/v1/commands' );
+		$request  = new \WP_REST_Request( 'GET', '/wpce/v1/commands' );
 		$response = rest_get_server()->dispatch( $request );
 
 		$this->assertSame( 403, $response->get_status() );
@@ -347,7 +349,7 @@ class RestControllerTest extends WP_UnitTestCase {
 	public function test_running_to_completed_with_message() {
 		$command_id = $this->create_command_directly( [ 'status' => 'running' ] );
 
-		$request = new WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
+		$request = new \WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
 		$request->set_body_params(
 			[
 				'status'  => 'completed',
@@ -369,7 +371,7 @@ class RestControllerTest extends WP_UnitTestCase {
 	public function test_running_to_failed() {
 		$command_id = $this->create_command_directly( [ 'status' => 'running' ] );
 
-		$request = new WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
+		$request = new \WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
 		$request->set_body_params(
 			[
 				'status'  => 'failed',
@@ -388,7 +390,7 @@ class RestControllerTest extends WP_UnitTestCase {
 	public function test_pending_to_running() {
 		$command_id = $this->create_command_directly( [ 'status' => 'pending' ] );
 
-		$request = new WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
+		$request = new \WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
 		$request->set_body_params( [ 'status' => 'running' ] );
 		$response = rest_get_server()->dispatch( $request );
 
@@ -407,13 +409,13 @@ class RestControllerTest extends WP_UnitTestCase {
 		$command_id = $this->create_command_directly( [ 'status' => 'pending' ] );
 
 		// First transition succeeds
-		$request1 = new WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
+		$request1 = new \WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
 		$request1->set_body_params( [ 'status' => 'running' ] );
 		$response1 = rest_get_server()->dispatch( $request1 );
 		$this->assertSame( 200, $response1->get_status() );
 
 		// Second attempt fails — command is no longer pending
-		$request2 = new WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
+		$request2 = new \WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
 		$request2->set_body_params( [ 'status' => 'running' ] );
 		$response2 = rest_get_server()->dispatch( $request2 );
 		$this->assertSame( 409, $response2->get_status() );
@@ -425,7 +427,7 @@ class RestControllerTest extends WP_UnitTestCase {
 	public function test_invalid_transition_completed_to_running() {
 		$command_id = $this->create_command_directly( [ 'status' => 'completed' ] );
 
-		$request = new WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
+		$request = new \WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
 		$request->set_body_params( [ 'status' => 'running' ] );
 		$response = rest_get_server()->dispatch( $request );
 
@@ -436,7 +438,7 @@ class RestControllerTest extends WP_UnitTestCase {
 	 * Updating a nonexistent command should return 404.
 	 */
 	public function test_update_nonexistent_command() {
-		$request = new WP_REST_Request( 'PATCH', '/wpce/v1/commands/999999' );
+		$request = new \WP_REST_Request( 'PATCH', '/wpce/v1/commands/999999' );
 		$request->set_body_params( [ 'status' => 'running' ] );
 		$response = rest_get_server()->dispatch( $request );
 
@@ -449,7 +451,7 @@ class RestControllerTest extends WP_UnitTestCase {
 	public function test_update_other_users_command() {
 		$command_id = $this->create_command_directly( [ 'author' => self::$editor2_id ] );
 
-		$request = new WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
+		$request = new \WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
 		$request->set_body_params( [ 'status' => 'running' ] );
 		$response = rest_get_server()->dispatch( $request );
 
@@ -483,7 +485,7 @@ class RestControllerTest extends WP_UnitTestCase {
 
 		// The PATCH handler reads 'pending' from cache, passes the
 		// transition check, but the atomic DB update finds 0 rows.
-		$request = new WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
+		$request = new \WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
 		$request->set_body_params( [ 'status' => 'running' ] );
 		$response = rest_get_server()->dispatch( $request );
 
@@ -498,7 +500,7 @@ class RestControllerTest extends WP_UnitTestCase {
 			[ 'expires_at' => gmdate( 'Y-m-d\TH:i:s\Z', time() - 60 ) ]
 		);
 
-		$request = new WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
+		$request = new \WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
 		$request->set_body_params( [ 'status' => 'running' ] );
 		$response = rest_get_server()->dispatch( $request );
 
@@ -534,7 +536,7 @@ class RestControllerTest extends WP_UnitTestCase {
 
 		// The DELETE handler reads 'pending' from cache, passes the check,
 		// but the atomic DB update finds 0 rows.
-		$request  = new WP_REST_Request( 'DELETE', '/wpce/v1/commands/' . $command_id );
+		$request  = new \WP_REST_Request( 'DELETE', '/wpce/v1/commands/' . $command_id );
 		$response = rest_get_server()->dispatch( $request );
 
 		$this->assertSame( 409, $response->get_status() );
@@ -546,7 +548,7 @@ class RestControllerTest extends WP_UnitTestCase {
 	public function test_cancel_pending_command() {
 		$command_id = $this->create_command_directly();
 
-		$request  = new WP_REST_Request( 'DELETE', '/wpce/v1/commands/' . $command_id );
+		$request  = new \WP_REST_Request( 'DELETE', '/wpce/v1/commands/' . $command_id );
 		$response = rest_get_server()->dispatch( $request );
 
 		$this->assertSame( 200, $response->get_status() );
@@ -561,13 +563,13 @@ class RestControllerTest extends WP_UnitTestCase {
 		$command_id = $this->create_command_directly();
 
 		// Transition pending → running
-		$run_request = new WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
+		$run_request = new \WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
 		$run_request->set_body_params( [ 'status' => 'running' ] );
 		$run_response = rest_get_server()->dispatch( $run_request );
 		$this->assertSame( 200, $run_response->get_status() );
 
 		// Cancel should fail — command is no longer pending
-		$cancel_request = new WP_REST_Request( 'DELETE', '/wpce/v1/commands/' . $command_id );
+		$cancel_request = new \WP_REST_Request( 'DELETE', '/wpce/v1/commands/' . $command_id );
 		$response       = rest_get_server()->dispatch( $cancel_request );
 
 		$this->assertSame( 400, $response->get_status() );
@@ -579,7 +581,7 @@ class RestControllerTest extends WP_UnitTestCase {
 	public function test_cancel_running_command_fails() {
 		$command_id = $this->create_command_directly( [ 'status' => 'running' ] );
 
-		$request  = new WP_REST_Request( 'DELETE', '/wpce/v1/commands/' . $command_id );
+		$request  = new \WP_REST_Request( 'DELETE', '/wpce/v1/commands/' . $command_id );
 		$response = rest_get_server()->dispatch( $request );
 
 		$this->assertSame( 400, $response->get_status() );
@@ -591,7 +593,7 @@ class RestControllerTest extends WP_UnitTestCase {
 	public function test_cancel_completed_command_fails() {
 		$command_id = $this->create_command_directly( [ 'status' => 'completed' ] );
 
-		$request  = new WP_REST_Request( 'DELETE', '/wpce/v1/commands/' . $command_id );
+		$request  = new \WP_REST_Request( 'DELETE', '/wpce/v1/commands/' . $command_id );
 		$response = rest_get_server()->dispatch( $request );
 
 		$this->assertSame( 400, $response->get_status() );
@@ -603,7 +605,7 @@ class RestControllerTest extends WP_UnitTestCase {
 	public function test_cancel_other_users_command() {
 		$command_id = $this->create_command_directly( [ 'author' => self::$editor2_id ] );
 
-		$request  = new WP_REST_Request( 'DELETE', '/wpce/v1/commands/' . $command_id );
+		$request  = new \WP_REST_Request( 'DELETE', '/wpce/v1/commands/' . $command_id );
 		$response = rest_get_server()->dispatch( $request );
 
 		$this->assertSame( 403, $response->get_status() );
@@ -613,7 +615,7 @@ class RestControllerTest extends WP_UnitTestCase {
 	 * Cancelling a nonexistent command should return 404.
 	 */
 	public function test_cancel_nonexistent_command() {
-		$request  = new WP_REST_Request( 'DELETE', '/wpce/v1/commands/999999' );
+		$request  = new \WP_REST_Request( 'DELETE', '/wpce/v1/commands/999999' );
 		$response = rest_get_server()->dispatch( $request );
 
 		$this->assertSame( 404, $response->get_status() );
@@ -627,7 +629,7 @@ class RestControllerTest extends WP_UnitTestCase {
 	 * The status endpoint returns the expected shape.
 	 */
 	public function test_status_returns_expected_shape() {
-		$request  = new WP_REST_Request( 'GET', '/wpce/v1/status' );
+		$request  = new \WP_REST_Request( 'GET', '/wpce/v1/status' );
 		$response = rest_get_server()->dispatch( $request );
 
 		$this->assertSame( 200, $response->get_status() );
@@ -645,7 +647,7 @@ class RestControllerTest extends WP_UnitTestCase {
 	public function test_mcp_not_connected_initially() {
 		delete_transient( 'wpce_mcp_last_seen_' . self::$editor_id );
 
-		$request  = new WP_REST_Request( 'GET', '/wpce/v1/status' );
+		$request  = new \WP_REST_Request( 'GET', '/wpce/v1/status' );
 		$response = rest_get_server()->dispatch( $request );
 
 		$data = $response->get_data();
@@ -659,11 +661,11 @@ class RestControllerTest extends WP_UnitTestCase {
 	public function test_mcp_connected_after_running() {
 		$command_id = $this->create_command_directly();
 
-		$request = new WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
+		$request = new \WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
 		$request->set_body_params( [ 'status' => 'running' ] );
 		rest_get_server()->dispatch( $request );
 
-		$request  = new WP_REST_Request( 'GET', '/wpce/v1/status' );
+		$request  = new \WP_REST_Request( 'GET', '/wpce/v1/status' );
 		$response = rest_get_server()->dispatch( $request );
 
 		$this->assertTrue( $response->get_data()['mcp_connected'] );
@@ -676,7 +678,7 @@ class RestControllerTest extends WP_UnitTestCase {
 		$stale_time = gmdate( 'Y-m-d\TH:i:s\Z', time() - REST_Controller::MCP_TIMEOUT_SECONDS - 1 );
 		set_transient( 'wpce_mcp_last_seen_' . self::$editor_id, $stale_time, 120 );
 
-		$request  = new WP_REST_Request( 'GET', '/wpce/v1/status' );
+		$request  = new \WP_REST_Request( 'GET', '/wpce/v1/status' );
 		$response = rest_get_server()->dispatch( $request );
 
 		$this->assertFalse( $response->get_data()['mcp_connected'] );
@@ -687,7 +689,7 @@ class RestControllerTest extends WP_UnitTestCase {
 	 */
 	public function test_status_no_permission() {
 		wp_set_current_user( self::$subscriber_id );
-		$request  = new WP_REST_Request( 'GET', '/wpce/v1/status' );
+		$request  = new \WP_REST_Request( 'GET', '/wpce/v1/status' );
 		$response = rest_get_server()->dispatch( $request );
 
 		$this->assertSame( 403, $response->get_status() );
@@ -710,7 +712,7 @@ class RestControllerTest extends WP_UnitTestCase {
 	 */
 	public function test_stream_no_permission() {
 		wp_set_current_user( self::$subscriber_id );
-		$request  = new WP_REST_Request( 'GET', '/wpce/v1/commands/stream' );
+		$request  = new \WP_REST_Request( 'GET', '/wpce/v1/commands/stream' );
 		$response = rest_get_server()->dispatch( $request );
 
 		$this->assertSame( 403, $response->get_status() );
@@ -849,7 +851,7 @@ class RestControllerTest extends WP_UnitTestCase {
 		);
 		clean_post_cache( $command_id );
 
-		$request = new WP_REST_Request( 'GET', '/wpce/v1/commands' );
+		$request = new \WP_REST_Request( 'GET', '/wpce/v1/commands' );
 		rest_get_server()->dispatch( $request );
 
 		$updated_modified = get_post( $command_id )->post_modified_gmt;
@@ -860,7 +862,7 @@ class RestControllerTest extends WP_UnitTestCase {
 	 * The since param should reject invalid date strings.
 	 */
 	public function test_list_commands_invalid_since_returns_400() {
-		$request = new WP_REST_Request( 'GET', '/wpce/v1/commands' );
+		$request = new \WP_REST_Request( 'GET', '/wpce/v1/commands' );
 		$request->set_param( 'since', 'not-a-date' );
 		$response = rest_get_server()->dispatch( $request );
 
@@ -885,7 +887,7 @@ class RestControllerTest extends WP_UnitTestCase {
 		clean_post_cache( $old_id );
 
 		// Query with since = 1 minute ago — should exclude the back-dated command.
-		$request = new WP_REST_Request( 'GET', '/wpce/v1/commands' );
+		$request = new \WP_REST_Request( 'GET', '/wpce/v1/commands' );
 		$request->set_param( 'since', gmdate( 'Y-m-d\TH:i:s\Z', time() - 60 ) );
 		$response = rest_get_server()->dispatch( $request );
 
@@ -904,7 +906,7 @@ class RestControllerTest extends WP_UnitTestCase {
 
 		wp_set_current_user( self::$subscriber_id );
 
-		$request  = new WP_REST_Request( 'DELETE', '/wpce/v1/commands/' . $command_id );
+		$request  = new \WP_REST_Request( 'DELETE', '/wpce/v1/commands/' . $command_id );
 		$response = rest_get_server()->dispatch( $request );
 
 		$this->assertSame( 403, $response->get_status() );

@@ -3,10 +3,12 @@
  * Tests for the Command_Store class.
  */
 
+namespace Claudaborative_Editing;
+
 /**
  * Test the wpce_command custom post type registration.
  */
-class CommandStoreTest extends WP_UnitTestCase {
+class CommandStoreTest extends \WP_UnitTestCase {
 
 	/**
 	 * Re-register meta before each test, since the WP test framework
@@ -30,7 +32,7 @@ class CommandStoreTest extends WP_UnitTestCase {
 	public function test_post_type_is_not_public() {
 		$post_type = get_post_type_object( Command_Store::POST_TYPE );
 
-		$this->assertInstanceOf( WP_Post_Type::class, $post_type );
+		$this->assertInstanceOf( \WP_Post_Type::class, $post_type );
 		$this->assertFalse( $post_type->public );
 		$this->assertFalse( $post_type->publicly_queryable );
 		$this->assertFalse( $post_type->show_ui );

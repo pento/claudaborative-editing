@@ -3,10 +3,12 @@
  * Tests for comment meta registration.
  */
 
+namespace Claudaborative_Editing;
+
 /**
  * Test the wpce_source comment meta registration.
  */
-class CommentMetaTest extends WP_UnitTestCase {
+class CommentMetaTest extends \WP_UnitTestCase {
 
 	/**
 	 * Re-register meta before each test, since the WP test framework
@@ -14,7 +16,7 @@ class CommentMetaTest extends WP_UnitTestCase {
 	 */
 	public function set_up() {
 		parent::set_up();
-		Claudaborative_Editing::register();
+		\Claudaborative_Editing::register();
 	}
 
 	/**
@@ -78,17 +80,17 @@ class CommentMetaTest extends WP_UnitTestCase {
 		update_comment_meta( $comment_id, 'wpce_source', 'mcp' );
 
 		$comment  = get_comment( $comment_id );
-		$response = new WP_REST_Response(
+		$response = new \WP_REST_Response(
 			[
 				'content' => [ 'rendered' => '<p>Test note</p>' ],
 			]
 		);
-		$request  = new WP_REST_Request( 'GET', '/wp/v2/comments' );
+		$request  = new \WP_REST_Request( 'GET', '/wp/v2/comments' );
 		$request->set_param( 'type', 'note' );
 		$request->set_param( 'context', 'edit' );
 
-		/** @var WP_REST_Response $result */
-		$result = Claudaborative_Editing::label_mcp_notes( $response, $comment, $request );
+		/** @var \WP_REST_Response $result */
+		$result = \Claudaborative_Editing::label_mcp_notes( $response, $comment, $request );
 		$data   = $result->get_data();
 
 		$this->assertStringStartsWith(
@@ -106,17 +108,17 @@ class CommentMetaTest extends WP_UnitTestCase {
 		$comment_id = self::factory()->comment->create( [ 'comment_content' => 'Human note' ] );
 
 		$comment  = get_comment( $comment_id );
-		$response = new WP_REST_Response(
+		$response = new \WP_REST_Response(
 			[
 				'content' => [ 'rendered' => '<p>Human note</p>' ],
 			]
 		);
-		$request  = new WP_REST_Request( 'GET', '/wp/v2/comments' );
+		$request  = new \WP_REST_Request( 'GET', '/wp/v2/comments' );
 		$request->set_param( 'type', 'note' );
 		$request->set_param( 'context', 'edit' );
 
-		/** @var WP_REST_Response $result */
-		$result = Claudaborative_Editing::label_mcp_notes( $response, $comment, $request );
+		/** @var \WP_REST_Response $result */
+		$result = \Claudaborative_Editing::label_mcp_notes( $response, $comment, $request );
 		$data   = $result->get_data();
 
 		$this->assertSame( '<p>Human note</p>', $data['content']['rendered'] );
@@ -131,17 +133,17 @@ class CommentMetaTest extends WP_UnitTestCase {
 		update_comment_meta( $comment_id, 'wpce_source', 'mcp' );
 
 		$comment  = get_comment( $comment_id );
-		$response = new WP_REST_Response(
+		$response = new \WP_REST_Response(
 			[
 				'content' => [ 'rendered' => '<p>Note</p>' ],
 			]
 		);
-		$request  = new WP_REST_Request( 'GET', '/wp/v2/comments' );
+		$request  = new \WP_REST_Request( 'GET', '/wp/v2/comments' );
 		$request->set_param( 'type', 'note' );
 		$request->set_param( 'context', 'view' );
 
-		/** @var WP_REST_Response $result */
-		$result = Claudaborative_Editing::label_mcp_notes( $response, $comment, $request );
+		/** @var \WP_REST_Response $result */
+		$result = \Claudaborative_Editing::label_mcp_notes( $response, $comment, $request );
 		$data   = $result->get_data();
 
 		$this->assertSame( '<p>Note</p>', $data['content']['rendered'] );
@@ -156,16 +158,16 @@ class CommentMetaTest extends WP_UnitTestCase {
 		update_comment_meta( $comment_id, 'wpce_source', 'mcp' );
 
 		$comment  = get_comment( $comment_id );
-		$response = new WP_REST_Response(
+		$response = new \WP_REST_Response(
 			[
 				'content' => [ 'rendered' => '<p>Comment</p>' ],
 			]
 		);
-		$request  = new WP_REST_Request( 'GET', '/wp/v2/comments' );
+		$request  = new \WP_REST_Request( 'GET', '/wp/v2/comments' );
 		$request->set_param( 'context', 'edit' );
 
-		/** @var WP_REST_Response $result */
-		$result = Claudaborative_Editing::label_mcp_notes( $response, $comment, $request );
+		/** @var \WP_REST_Response $result */
+		$result = \Claudaborative_Editing::label_mcp_notes( $response, $comment, $request );
 		$data   = $result->get_data();
 
 		$this->assertSame( '<p>Comment</p>', $data['content']['rendered'] );

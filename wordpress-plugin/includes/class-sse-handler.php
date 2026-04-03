@@ -1,7 +1,11 @@
 <?php
 /**
  * SSE Handler — streams pending commands to the MCP server via Server-Sent Events.
+ *
+ * @package Claudaborative_Editing
  */
+
+namespace Claudaborative_Editing;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -123,7 +127,7 @@ class SSE_Handler {
 	 *
 	 * @param int $user_id      The user ID to filter by.
 	 * @param int $last_seen_id Only return commands with ID greater than this.
-	 * @return WP_Post[] Array of command posts.
+	 * @return \WP_Post[] Array of command posts.
 	 */
 	public static function query_pending_commands( $user_id, $last_seen_id ) {
 		$filter_callback = null;
@@ -155,7 +159,7 @@ class SSE_Handler {
 
 		if ( $last_seen_id > 0 ) {
 			// Tag this query so the filter only applies to it, not to any
-			// nested queries that may run during WP_Query execution.
+			// nested queries that may run during \WP_Query execution.
 			$args['wpce_last_seen_id'] = $last_seen_id;
 
 			$filter_callback = function ( $where, $query ) use ( $last_seen_id ) {
@@ -169,8 +173,8 @@ class SSE_Handler {
 			add_filter( 'posts_where', $filter_callback, 10, 2 );
 		}
 
-		$query = new WP_Query( $args );
-		/** @var WP_Post[] $result */
+		$query = new \WP_Query( $args );
+		/** @var \WP_Post[] $result */
 		$result = $query->posts;
 
 		if ( $filter_callback ) {

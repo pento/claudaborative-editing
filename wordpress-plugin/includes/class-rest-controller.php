@@ -1,7 +1,11 @@
 <?php
 /**
  * REST Controller — registers and handles the wpce/v1 REST API endpoints.
+ *
+ * @package Claudaborative_Editing
  */
+
+namespace Claudaborative_Editing;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -10,7 +14,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * REST API controller for the command queue.
  */
-class REST_Controller extends WP_REST_Controller {
+class REST_Controller extends \WP_REST_Controller {
 
 	/**
 	 * REST API namespace.
@@ -44,7 +48,7 @@ class REST_Controller extends WP_REST_Controller {
 			'/commands',
 			[
 				[
-					'methods'             => WP_REST_Server::CREATABLE,
+					'methods'             => \WP_REST_Server::CREATABLE,
 					'callback'            => [ $this, 'create_command' ],
 					'permission_callback' => [ $this, 'create_command_permissions' ],
 					'args'                => [
@@ -64,12 +68,12 @@ class REST_Controller extends WP_REST_Controller {
 						'arguments' => [
 							'required' => false,
 							'type'     => 'object',
-							'default'  => new stdClass(),
+							'default'  => new \stdClass(),
 						],
 					],
 				],
 				[
-					'methods'             => WP_REST_Server::READABLE,
+					'methods'             => \WP_REST_Server::READABLE,
 					'callback'            => [ $this, 'list_commands' ],
 					'permission_callback' => [ $this, 'edit_posts_permissions' ],
 					'args'                => [
@@ -100,7 +104,7 @@ class REST_Controller extends WP_REST_Controller {
 			self::API_NAMESPACE,
 			'/commands/stream',
 			[
-				'methods'             => WP_REST_Server::READABLE,
+				'methods'             => \WP_REST_Server::READABLE,
 				'callback'            => [ $this, 'stream_commands' ],
 				'permission_callback' => [ $this, 'edit_posts_permissions' ],
 			]
@@ -128,7 +132,7 @@ class REST_Controller extends WP_REST_Controller {
 					],
 				],
 				[
-					'methods'             => WP_REST_Server::DELETABLE,
+					'methods'             => \WP_REST_Server::DELETABLE,
 					'callback'            => [ $this, 'delete_command' ],
 					'permission_callback' => [ $this, 'delete_command_permissions' ],
 				],
@@ -139,7 +143,7 @@ class REST_Controller extends WP_REST_Controller {
 			self::API_NAMESPACE,
 			'/status',
 			[
-				'methods'             => WP_REST_Server::READABLE,
+				'methods'             => \WP_REST_Server::READABLE,
 				'callback'            => [ $this, 'get_status' ],
 				'permission_callback' => [ $this, 'edit_posts_permissions' ],
 			]
@@ -149,14 +153,14 @@ class REST_Controller extends WP_REST_Controller {
 	/**
 	 * Permission check: user can edit the target post.
 	 *
-	 * @param WP_REST_Request $request The request object.
-	 * @return true|WP_Error True if permitted, WP_Error otherwise.
+	 * @param \WP_REST_Request $request The request object.
+	 * @return true|\WP_Error True if permitted, \WP_Error otherwise.
 	 */
 	public function create_command_permissions( $request ) {
 		$post_id = $request->get_param( 'post_id' );
 
 		if ( ! $post_id || ! current_user_can( 'edit_post', $post_id ) ) {
-			return new WP_Error(
+			return new \WP_Error(
 				'rest_forbidden',
 				__( 'You are not allowed to create commands for this post.', 'claudaborative-editing' ),
 				[ 'status' => 403 ]
@@ -169,12 +173,12 @@ class REST_Controller extends WP_REST_Controller {
 	/**
 	 * Permission check: user can edit posts.
 	 *
-	 * @param WP_REST_Request $request The request object.
-	 * @return true|WP_Error True if permitted, WP_Error otherwise.
+	 * @param \WP_REST_Request $request The request object.
+	 * @return true|\WP_Error True if permitted, \WP_Error otherwise.
 	 */
 	public function edit_posts_permissions( $request ) {
 		if ( ! current_user_can( 'edit_posts' ) ) {
-			return new WP_Error(
+			return new \WP_Error(
 				'rest_forbidden',
 				__( 'You are not allowed to manage commands.', 'claudaborative-editing' ),
 				[ 'status' => 403 ]
@@ -187,12 +191,12 @@ class REST_Controller extends WP_REST_Controller {
 	/**
 	 * Permission check: user can edit posts and owns the command.
 	 *
-	 * @param WP_REST_Request $request The request object.
-	 * @return true|WP_Error True if permitted, WP_Error otherwise.
+	 * @param \WP_REST_Request $request The request object.
+	 * @return true|\WP_Error True if permitted, \WP_Error otherwise.
 	 */
 	public function delete_command_permissions( $request ) {
 		if ( ! current_user_can( 'edit_posts' ) ) {
-			return new WP_Error(
+			return new \WP_Error(
 				'rest_forbidden',
 				__( 'You are not allowed to manage commands.', 'claudaborative-editing' ),
 				[ 'status' => 403 ]
@@ -202,7 +206,7 @@ class REST_Controller extends WP_REST_Controller {
 		$command = get_post( (int) $request['id'] );
 
 		if ( ! $command || Command_Store::POST_TYPE !== $command->post_type ) {
-			return new WP_Error(
+			return new \WP_Error(
 				'rest_not_found',
 				__( 'Command not found.', 'claudaborative-editing' ),
 				[ 'status' => 404 ]
@@ -210,7 +214,7 @@ class REST_Controller extends WP_REST_Controller {
 		}
 
 		if ( get_current_user_id() !== (int) $command->post_author ) {
-			return new WP_Error(
+			return new \WP_Error(
 				'rest_forbidden',
 				__( 'You can only cancel your own commands.', 'claudaborative-editing' ),
 				[ 'status' => 403 ]
@@ -223,14 +227,14 @@ class REST_Controller extends WP_REST_Controller {
 	/**
 	 * Validate the "since" query parameter is a parseable date.
 	 *
-	 * @param string          $value   The parameter value.
-	 * @param WP_REST_Request $request The request object.
-	 * @param string          $param   The parameter name.
-	 * @return true|WP_Error True if valid, WP_Error otherwise.
+	 * @param string           $value   The parameter value.
+	 * @param \WP_REST_Request $request The request object.
+	 * @param string           $param   The parameter name.
+	 * @return true|\WP_Error True if valid, \WP_Error otherwise.
 	 */
 	public function validate_since_param( $value, $request, $param ) {
 		if ( false === rest_parse_date( $value ) ) {
-			return new WP_Error(
+			return new \WP_Error(
 				'rest_invalid_param',
 				sprintf(
 					/* translators: %s: parameter name */
@@ -247,8 +251,8 @@ class REST_Controller extends WP_REST_Controller {
 	/**
 	 * POST /wpce/v1/commands — create a new command.
 	 *
-	 * @param WP_REST_Request $request The request object.
-	 * @return WP_REST_Response|WP_Error Response or error.
+	 * @param \WP_REST_Request $request The request object.
+	 * @return \WP_REST_Response|\WP_Error Response or error.
 	 */
 	public function create_command( $request ) {
 		$post_id   = (int) $request->get_param( 'post_id' );
@@ -278,14 +282,14 @@ class REST_Controller extends WP_REST_Controller {
 
 		$command = get_post( $command_id );
 
-		return new WP_REST_Response( Command_Formatter::format( $command ), 201 );
+		return new \WP_REST_Response( Command_Formatter::format( $command ), 201 );
 	}
 
 	/**
 	 * GET /wpce/v1/commands — list commands for the current user.
 	 *
-	 * @param WP_REST_Request $request The request object.
-	 * @return WP_REST_Response Response.
+	 * @param \WP_REST_Request $request The request object.
+	 * @return \WP_REST_Response Response.
 	 */
 	public function list_commands( $request ) {
 		$user_id = get_current_user_id();
@@ -329,10 +333,10 @@ class REST_Controller extends WP_REST_Controller {
 			];
 		}
 
-		$query = new WP_Query( $args );
-		/** @var WP_Post[] $posts */
+		$query = new \WP_Query( $args );
+		/** @var \WP_Post[] $posts */
 		$posts    = $query->posts;
-		$commands = array_map( [ 'Command_Formatter', 'format' ], $posts );
+		$commands = array_map( [ '\Claudaborative_Editing\Command_Formatter', 'format' ], $posts );
 
 		return rest_ensure_response( $commands );
 	}
@@ -340,7 +344,7 @@ class REST_Controller extends WP_REST_Controller {
 	/**
 	 * GET /wpce/v1/commands/stream — SSE stream of pending commands.
 	 *
-	 * @param WP_REST_Request $request The request object.
+	 * @param \WP_REST_Request $request The request object.
 	 * @return void
 	 */
 	public function stream_commands( $request ) {
@@ -355,14 +359,14 @@ class REST_Controller extends WP_REST_Controller {
 	/**
 	 * PATCH /wpce/v1/commands/{id} — update command status.
 	 *
-	 * @param WP_REST_Request $request The request object.
-	 * @return WP_REST_Response|WP_Error Response or error.
+	 * @param \WP_REST_Request $request The request object.
+	 * @return \WP_REST_Response|\WP_Error Response or error.
 	 */
 	public function update_command( $request ) {
 		$command = get_post( (int) $request['id'] );
 
 		if ( ! $command || Command_Store::POST_TYPE !== $command->post_type ) {
-			return new WP_Error(
+			return new \WP_Error(
 				'rest_not_found',
 				__( 'Command not found.', 'claudaborative-editing' ),
 				[ 'status' => 404 ]
@@ -371,7 +375,7 @@ class REST_Controller extends WP_REST_Controller {
 
 		// User scoping: only the command author can update it.
 		if ( get_current_user_id() !== (int) $command->post_author ) {
-			return new WP_Error(
+			return new \WP_Error(
 				'rest_forbidden',
 				__( 'You can only update your own commands.', 'claudaborative-editing' ),
 				[ 'status' => 403 ]
@@ -386,7 +390,7 @@ class REST_Controller extends WP_REST_Controller {
 			update_post_meta( $command->ID, 'wpce_command_status', 'expired' );
 			wp_update_post( [ 'ID' => $command->ID ] );
 
-			return new WP_Error(
+			return new \WP_Error(
 				'rest_command_expired',
 				__( 'This command has expired.', 'claudaborative-editing' ),
 				[ 'status' => 409 ]
@@ -395,7 +399,7 @@ class REST_Controller extends WP_REST_Controller {
 
 		// Validate the status transition.
 		if ( ! $this->validate_status_transition( $current_status, $new_status ) ) {
-			return new WP_Error(
+			return new \WP_Error(
 				'rest_invalid_transition',
 				sprintf(
 					/* translators: 1: current status, 2: requested status */
@@ -427,7 +431,7 @@ class REST_Controller extends WP_REST_Controller {
 			);
 
 			if ( false === $updated_rows ) {
-				return new WP_Error(
+				return new \WP_Error(
 					'rest_update_failed',
 					__( 'Failed to update command status.', 'claudaborative-editing' ),
 					[ 'status' => 500 ]
@@ -435,7 +439,7 @@ class REST_Controller extends WP_REST_Controller {
 			}
 
 			if ( 0 === $updated_rows ) {
-				return new WP_Error(
+				return new \WP_Error(
 					'rest_conflict',
 					__( 'This command is no longer pending.', 'claudaborative-editing' ),
 					[ 'status' => 409 ]
@@ -467,8 +471,8 @@ class REST_Controller extends WP_REST_Controller {
 	/**
 	 * DELETE /wpce/v1/commands/{id} — cancel a command.
 	 *
-	 * @param WP_REST_Request $request The request object.
-	 * @return WP_REST_Response|WP_Error Response or error.
+	 * @param \WP_REST_Request $request The request object.
+	 * @return \WP_REST_Response|\WP_Error Response or error.
 	 */
 	public function delete_command( $request ) {
 		$command = get_post( (int) $request['id'] );
@@ -478,7 +482,7 @@ class REST_Controller extends WP_REST_Controller {
 		$current_status = get_post_meta( $command->ID, 'wpce_command_status', true );
 
 		if ( 'pending' !== $current_status ) {
-			return new WP_Error(
+			return new \WP_Error(
 				'rest_invalid_transition',
 				sprintf(
 					/* translators: %s: current status */
@@ -506,7 +510,7 @@ class REST_Controller extends WP_REST_Controller {
 		);
 
 		if ( false === $updated_rows ) {
-			return new WP_Error(
+			return new \WP_Error(
 				'rest_update_failed',
 				__( 'Failed to cancel command.', 'claudaborative-editing' ),
 				[ 'status' => 500 ]
@@ -514,7 +518,7 @@ class REST_Controller extends WP_REST_Controller {
 		}
 
 		if ( 0 === $updated_rows ) {
-			return new WP_Error(
+			return new \WP_Error(
 				'rest_conflict',
 				__( 'This command is no longer pending.', 'claudaborative-editing' ),
 				[ 'status' => 409 ]
@@ -532,8 +536,8 @@ class REST_Controller extends WP_REST_Controller {
 	/**
 	 * GET /wpce/v1/status — plugin and MCP connection status.
 	 *
-	 * @param WP_REST_Request $request The request object.
-	 * @return WP_REST_Response Response.
+	 * @param \WP_REST_Request $request The request object.
+	 * @return \WP_REST_Response Response.
 	 */
 	public function get_status( $request ) {
 		$user_id      = get_current_user_id();
