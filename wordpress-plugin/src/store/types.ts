@@ -2,26 +2,12 @@
  * Type definitions for the AI Actions store.
  */
 
-export type CommandStatus =
-	| 'pending'
-	| 'running'
-	| 'completed'
-	| 'failed'
-	| 'cancelled'
-	| 'expired';
-
-export type CommandPrompt =
-	| 'proofread'
-	| 'review'
-	| 'respond-to-notes'
-	| 'respond-to-note'
-	| 'edit'
-	| 'translate';
+import type { CommandSlug, CommandStatus } from '#shared/commands';
 
 export interface Command {
 	id: number;
 	post_id: number;
-	prompt: CommandPrompt;
+	prompt: CommandSlug;
 	status: CommandStatus;
 	arguments: Record<string, unknown>;
 	message: string | null;

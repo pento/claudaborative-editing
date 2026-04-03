@@ -20,9 +20,13 @@ import { PinnedItems } from '@wordpress/interface';
  * Internal dependencies
  */
 import { useMcpStatus } from '../../hooks/use-mcp-status';
+import {
+	getCommandLabel,
+	getCommandDescription,
+} from '../../utils/command-i18n';
+import type { CommandSlug } from '#shared/commands';
 import SparkleIcon from '../SparkleIcon';
 import aiActionsStore from '../../store';
-import type { CommandPrompt } from '../../store/types';
 
 import './style.scss';
 
@@ -84,7 +88,7 @@ export default function AiActionsMenu() {
 				popoverProps={{ placement: 'bottom-end' }}
 			>
 				{({ onClose }: { onClose: () => void }) => {
-					const handleSubmit = (prompt: CommandPrompt): void => {
+					const handleSubmit = (prompt: CommandSlug): void => {
 						if (postId !== null) {
 							submitCommand(prompt, postId);
 						}
@@ -94,24 +98,18 @@ export default function AiActionsMenu() {
 					return (
 						<MenuGroup className="claudaborative-editing-ai-actions-menu">
 							<MenuItem
-								info={__(
-									'Fix grammar, spelling, and punctuation',
-									'claudaborative-editing'
-								)}
+								info={getCommandDescription('proofread')}
 								disabled={itemsDisabled}
 								onClick={() => handleSubmit('proofread')}
 							>
-								{__('Proofread', 'claudaborative-editing')}
+								{getCommandLabel('proofread')}
 							</MenuItem>
 							<MenuItem
-								info={__(
-									'Leave editorial notes on the post',
-									'claudaborative-editing'
-								)}
+								info={getCommandDescription('review')}
 								disabled={itemsDisabled}
 								onClick={() => handleSubmit('review')}
 							>
-								{__('Review', 'claudaborative-editing')}
+								{getCommandLabel('review')}
 							</MenuItem>
 						</MenuGroup>
 					);

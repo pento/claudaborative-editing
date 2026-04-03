@@ -14,6 +14,7 @@ import {
 } from '../wordpress/command-client.js';
 import { WordPressApiError } from '../wordpress/api-client.js';
 import type { WordPressApiClient } from '../wordpress/api-client.js';
+import type { CommandStatus } from '../../shared/commands.js';
 import type {
 	Command,
 	CommandClientConfig,
@@ -114,7 +115,7 @@ export class CommandHandler {
 	 */
 	async updateCommandStatus(
 		id: number,
-		status: string,
+		status: CommandStatus,
 		message?: string
 	): Promise<void> {
 		if (!this.commandClient) {

@@ -15,8 +15,9 @@ import { useSelect, useDispatch } from '@wordpress/data';
 /**
  * Internal dependencies
  */
+import type { CommandSlug } from '#shared/commands';
 import store from '../store';
-import type { Command, CommandPrompt } from '../store/types';
+import type { Command } from '../store/types';
 
 /**
  * Polling interval for active command updates (milliseconds).
@@ -31,7 +32,7 @@ export interface UseCommandsReturn {
 	isSubmitting: boolean;
 	error: string | null;
 	history: Command[];
-	submit: (prompt: CommandPrompt, args?: Record<string, unknown>) => void;
+	submit: (prompt: CommandSlug, args?: Record<string, unknown>) => void;
 	cancel: (id: number) => void;
 }
 
@@ -93,7 +94,7 @@ export function useCommands(postId: number | null): UseCommandsReturn {
 	}, [hasActiveCommand, pollActiveCommand]);
 
 	const submit = useCallback(
-		(prompt: CommandPrompt, args?: Record<string, unknown>) => {
+		(prompt: CommandSlug, args?: Record<string, unknown>) => {
 			if (postId !== null) {
 				submitCommand(prompt, postId, args);
 			}

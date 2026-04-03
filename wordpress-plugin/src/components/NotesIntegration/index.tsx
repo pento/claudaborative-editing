@@ -12,7 +12,6 @@
 /**
  * WordPress dependencies
  */
-import { __ } from '@wordpress/i18n';
 import { Button } from '@wordpress/components';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { useState, useEffect, createPortal } from '@wordpress/element';
@@ -22,6 +21,7 @@ import type { ReactPortal } from 'react';
  * Internal dependencies
  */
 import { useMcpStatus } from '../../hooks/use-mcp-status';
+import { getCommandLabel } from '../../utils/command-i18n';
 import aiActionsStore from '../../store';
 import SparkleIcon from '../SparkleIcon';
 
@@ -175,7 +175,7 @@ export default function NotesIntegration() {
 					}}
 				>
 					<SparkleIcon size={18} processing={isProcessing} />
-					{__('Address All Notes', 'claudaborative-editing')}
+					{getCommandLabel('respond-to-notes')}
 				</Button>,
 				container
 			)
@@ -197,7 +197,7 @@ export default function NotesIntegration() {
 							});
 						}
 					}}
-					label={__('Address This Note', 'claudaborative-editing')}
+					label={getCommandLabel('respond-to-note')}
 				>
 					<SparkleIcon size={16} processing={isProcessing} />
 				</Button>,

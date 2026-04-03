@@ -1,5 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { COMMANDS } from '../shared/commands.js';
 import { SessionManager } from './session/session-manager.js';
 import { registerConnectTools } from './tools/connect.js';
 import { registerPostTools } from './tools/posts.js';
@@ -44,12 +45,25 @@ export async function startServer(): Promise<void> {
 		? 'Already connected to WordPress. Do NOT call wp_connect. Use wp_status to check connection state, then wp_open_post or wp_create_post to start editing.'
 		: 'Use wp_connect to connect to a WordPress site first, or use wp_status to check connection state.';
 
+	// Build the prompt→action mapping for channel instructions from shared definitions
+	const promptDescriptions = Object.values(COMMANDS)
+		.map((cmd) => {
+			const argHints = Object.entries(cmd.args)
+				.map(([name]) => `arguments.${name}`)
+				.join(', ');
+			const hint = argHints
+				? `"${cmd.slug}" (${cmd.description}, using ${argHints})`
+				: `"${cmd.slug}" (${cmd.description})`;
+			return hint;
+		})
+		.join(', ');
+
 	const channelInstructions = `
 
 When you receive a <channel source="wpce"> event, it contains a command from a user in the WordPress editor. Follow these steps:
 1. Call wp_update_command_status with the command_id from the notification metadata and status "running".
 2. If no post is open, call wp_open_post with the post_id from the notification metadata. If a different post is open, call wp_close_post first.
-3. Execute the requested action based on the prompt field: "proofread" (fix grammar/spelling), "review" (leave editorial notes), "respond-to-notes" (address existing notes), "respond-to-note" (address a single note identified by arguments.noteId), "edit" (edit with the focus from arguments.editingFocus), "translate" (translate to arguments.language).
+3. Execute the requested action based on the prompt field: ${promptDescriptions}.
 4. Call wp_update_command_status with status "completed" and a brief summary, or "failed" with an error message.`;
 
 	const instructions = baseInstructions + channelInstructions;

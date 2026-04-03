@@ -13,8 +13,12 @@
 		"isolatedModules": true,
 		"noUnusedLocals": true,
 		"noUnusedParameters": true,
-		"noFallthroughCasesInSwitch": true
+		"noFallthroughCasesInSwitch": true,
+		"types": ["jest", "node"],
+		"paths": {
+			"#shared/*": ["../shared/*"]
+		}
 	},
-	"include": ["src/**/*"],
-	"exclude": ["node_modules", "src/**/test/**"]
+	"include": ["src/**/*", "../shared/**/*"],
+	"exclude": ["node_modules"]
 }

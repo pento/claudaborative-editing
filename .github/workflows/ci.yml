@@ -17,7 +17,7 @@ jobs:
 
         strategy:
             matrix:
-                node-version: [20, 22, 24]
+                node-version: [22, 24]
 
         steps:
             - uses: actions/checkout@v6
@@ -144,6 +144,7 @@ jobs:
               with:
                   lcov-file: wordpress-plugin/coverage/lcov.info
                   path: wordpress-plugin/includes/
+                  ignore-patterns: wordpress-plugin/includes/class-command-defs.php
                   coverage-label: plugin-php
                   github-token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -183,7 +184,8 @@ jobs:
                   lcov-file: wordpress-plugin/coverage/typescript/lcov.info
                   path: wordpress-plugin/src/
                   ignore-patterns: |
-                      wordpress-plugin/src/**/*.test.{ts,tsx}
+                      wordpress-plugin/src/**/*.test.ts
+                      wordpress-plugin/src/**/*.test.tsx
                       wordpress-plugin/src/**/types.ts
                   coverage-label: plugin-typescript
                   github-token: ${{ secrets.GITHUB_TOKEN }}

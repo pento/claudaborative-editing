@@ -131,6 +131,8 @@ export default [
 			parser: tseslint.parser,
 		},
 		rules: {
+			// #shared/* path alias is resolved by TS + webpack — not by eslint-plugin-import
+			'import/no-unresolved': ['error', { ignore: ['^#shared/'] }],
 			// TypeScript handles these natively — replace with TS equivalents
 			'no-undef': 'off',
 			'no-unused-vars': 'off',

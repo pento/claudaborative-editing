@@ -186,7 +186,7 @@ class RestControllerTest extends WP_UnitTestCase {
 	 * Each allowed prompt value should be accepted.
 	 */
 	public function test_create_command_accepts_all_valid_prompts() {
-		foreach ( REST_Controller::ALLOWED_PROMPTS as $prompt ) {
+		foreach ( Command_Defs::ALLOWED_PROMPTS as $prompt ) {
 			$response = $this->create_command( [ 'prompt' => $prompt ] );
 			$this->assertSame( 201, $response->get_status(), "Prompt '{$prompt}' should be accepted." );
 		}

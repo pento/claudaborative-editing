@@ -15,6 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+require_once __DIR__ . '/includes/class-command-defs.php';
 require_once __DIR__ . '/includes/class-command-store.php';
 require_once __DIR__ . '/includes/class-command-formatter.php';
 require_once __DIR__ . '/includes/class-rest-controller.php';

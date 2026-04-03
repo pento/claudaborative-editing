@@ -22,25 +22,6 @@ class REST_Controller extends WP_REST_Controller {
 	 */
 	const PROTOCOL_VERSION = 1;
 
-	/**
-	 * Allowed prompt values for command creation.
-	 */
-	const ALLOWED_PROMPTS = [
-		'proofread',
-		'review',
-		'respond-to-notes',
-		'respond-to-note',
-		'edit',
-		'translate',
-	];
-
-	/**
-	 * Valid status transitions: current_status => [ allowed_next_statuses ].
-	 */
-	const VALID_TRANSITIONS = [
-		'pending' => [ 'running' ],
-		'running' => [ 'completed', 'failed' ],
-	];
 
 	/**
 	 * Minutes until a command expires.
@@ -76,7 +57,7 @@ class REST_Controller extends WP_REST_Controller {
 						'prompt'    => [
 							'required'          => true,
 							'type'              => 'string',
-							'enum'              => self::ALLOWED_PROMPTS,
+							'enum'              => Command_Defs::ALLOWED_PROMPTS,
 							'validate_callback' => 'rest_validate_request_arg',
 							'sanitize_callback' => 'sanitize_text_field',
 						],
@@ -598,11 +579,11 @@ class REST_Controller extends WP_REST_Controller {
 	 * @return bool True if the transition is valid.
 	 */
 	private function validate_status_transition( $current_status, $new_status ) {
-		if ( ! isset( self::VALID_TRANSITIONS[ $current_status ] ) ) {
+		if ( ! isset( Command_Defs::VALID_TRANSITIONS[ $current_status ] ) ) {
 			return false;
 		}
 
-		return in_array( $new_status, self::VALID_TRANSITIONS[ $current_status ], true );
+		return in_array( $new_status, Command_Defs::VALID_TRANSITIONS[ $current_status ], true );
 	}
 
 	/**
