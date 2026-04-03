@@ -11,6 +11,10 @@ import { assertDefined } from '../../test-utils.js';
 import { WordPressApiError } from '../../../src/wordpress/api-client.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
+vi.mock('../../../src/version.js', () => ({
+	VERSION: '1.2.3',
+}));
+
 vi.mock('../../../src/wordpress/api-client.js', () => {
 	// eslint-disable-next-line @typescript-eslint/no-shadow -- must match the real export name
 	class WordPressApiError extends Error {
@@ -254,9 +258,8 @@ describe('status tools', () => {
 			const result = await tool.handler({});
 
 			expect(result.content[0].text).toContain('Plugin: not installed');
-			expect(result.content[0].text).toContain('Download from');
 			expect(result.content[0].text).toContain(
-				'github.com/pento/claudaborative-editing'
+				'github.com/pento/claudaborative-editing/releases/download/v1.2.3/claudaborative-editing-plugin.zip'
 			);
 		});
 

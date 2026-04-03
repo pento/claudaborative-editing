@@ -3,14 +3,8 @@ import type { SessionManager } from '../session/session-manager.js';
 import { VERSION } from '../version.js';
 import { WordPressApiError } from '../wordpress/api-client.js';
 
-const GITHUB_RELEASES_URL =
-	'https://github.com/pento/claudaborative-editing/releases';
-
 function getPluginDownloadUrl(): string {
-	if (VERSION === '0.0.0-dev') {
-		return GITHUB_RELEASES_URL;
-	}
-	return `${GITHUB_RELEASES_URL}/download/v${VERSION}/claudaborative-editing-plugin.zip`;
+	return `https://github.com/pento/claudaborative-editing/releases/download/v${VERSION}/claudaborative-editing-plugin.zip`;
 }
 
 export function registerStatusTools(
