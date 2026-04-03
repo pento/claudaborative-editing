@@ -33,7 +33,7 @@ jest.mock('../../../hooks/use-mcp-status', () => ({
 
 jest.mock('../../../store', () => ({
 	__esModule: true,
-	default: 'ai-actions-store',
+	default: { name: 'wpce/ai-actions' },
 }));
 
 jest.mock('../../SparkleIcon', () => {
@@ -71,10 +71,10 @@ window.MutationObserver = class {
 } as any;
 
 function mockUseSelect(
-	stores: Record<string, Record<string, (...args: any[]) => any>>
+	stores: Map<unknown, Record<string, (...args: any[]) => any>>
 ) {
 	mockedUseSelect.mockImplementation((selector: any) => {
-		const select = (s: unknown) => stores[s as string] || {};
+		const select = (s: unknown) => stores.get(s) ?? {};
 		return selector(select);
 	});
 }
@@ -86,13 +86,10 @@ const DEFAULT_AI_STORE = {
 
 function defaultStores(
 	aiStoreOverrides: Record<string, (...args: any[]) => any> = {}
-) {
-	return {
-		[aiActionsStore as unknown as string]: {
-			...DEFAULT_AI_STORE,
-			...aiStoreOverrides,
-		},
-	};
+): Map<unknown, Record<string, (...args: any[]) => any>> {
+	return new Map([
+		[aiActionsStore, { ...DEFAULT_AI_STORE, ...aiStoreOverrides }],
+	]);
 }
 
 function createMockPanel(
