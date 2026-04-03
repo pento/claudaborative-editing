@@ -47,7 +47,7 @@ Source files are in the `wordpress-plugin/src/` directory. See the repository `R
 
 == Changelog ==
 
-= 0.3.0 =
+= 0.3.1 =
 * Toolbar dropdown with Proofread and Review actions.
 * Connection status indicator in the editor footer bar.
 * Notes sidebar integration with per-note and address-all-notes buttons.
