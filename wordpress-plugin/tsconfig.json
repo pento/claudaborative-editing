@@ -14,10 +14,11 @@
 		"noUnusedLocals": true,
 		"noUnusedParameters": true,
 		"noFallthroughCasesInSwitch": true,
+		"types": ["jest", "node"],
 		"paths": {
 			"#shared/*": ["../shared/*"]
 		}
 	},
 	"include": ["src/**/*", "../shared/**/*"],
-	"exclude": ["node_modules", "src/**/test/**"]
+	"exclude": ["node_modules"]
 }

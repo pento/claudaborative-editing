@@ -119,10 +119,10 @@ describe('ConnectionStatus', () => {
 		});
 
 		mockUseSelect({
-			[aiActionsStore]: {
+			[aiActionsStore as unknown as string]: {
 				getCurrentPostId: () => 100,
 			},
-			[coreDataStore]: {
+			[coreDataStore as unknown as string]: {
 				getEntityRecord: () => null,
 			},
 		});
@@ -228,10 +228,10 @@ describe('ConnectionStatus', () => {
 		});
 
 		mockUseSelect({
-			[aiActionsStore]: {
+			[aiActionsStore as unknown as string]: {
 				getCurrentPostId: () => 100,
 			},
-			[coreDataStore]: {
+			[coreDataStore as unknown as string]: {
 				getEntityRecord: () => ({
 					title: { rendered: 'My Other Post' },
 				}),
