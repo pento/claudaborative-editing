@@ -9,7 +9,7 @@ const blockInputSchema: z.ZodType<BlockInput> = z.object({
 	name: z.string().describe(blockTypeDescription),
 	content: z.string().optional().describe('Text content for the block'),
 	attributes: z
-		.record(z.unknown())
+		.record(z.string(), z.unknown())
 		.optional()
 		.describe('Block attributes (key-value pairs)'),
 	innerBlocks: z
@@ -37,7 +37,7 @@ export function registerEditTools(
 					.optional()
 					.describe('New text content for the block'),
 				attributes: z
-					.record(z.unknown())
+					.record(z.string(), z.unknown())
 					.optional()
 					.describe('Attributes to update (key-value pairs)'),
 			},
@@ -82,7 +82,7 @@ export function registerEditTools(
 					.optional()
 					.describe('Text content for the block'),
 				attributes: z
-					.record(z.unknown())
+					.record(z.string(), z.unknown())
 					.optional()
 					.describe('Block attributes (key-value pairs)'),
 				innerBlocks: z
@@ -145,7 +145,7 @@ export function registerEditTools(
 					.optional()
 					.describe('Text content for the block'),
 				attributes: z
-					.record(z.unknown())
+					.record(z.string(), z.unknown())
 					.optional()
 					.describe('Block attributes (key-value pairs)'),
 				innerBlocks: z
