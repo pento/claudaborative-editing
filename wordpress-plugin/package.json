@@ -3,21 +3,19 @@
 	"version": "0.1.0",
 	"description": "WordPress plugin that adds AI action controls to the Gutenberg editor.",
 	"private": true,
-	"peerDependencies": {
+	"devDependencies": {
+		"@testing-library/react": "^16.3.2",
 		"@wordpress/api-fetch": "^7.42.0",
 		"@wordpress/components": "^32.4.0",
 		"@wordpress/core-data": "^7.42.0",
 		"@wordpress/data": "^10.42.0",
 		"@wordpress/editor": "^14.42.0",
 		"@wordpress/element": "^6.42.0",
+		"@wordpress/env": "^11.2.0",
 		"@wordpress/i18n": "^6.15.0",
 		"@wordpress/interface": "^9.27.0",
 		"@wordpress/notices": "^5.42.0",
-		"@wordpress/plugins": "^7.42.0"
-	},
-	"devDependencies": {
-		"@testing-library/react": "^16.3.2",
-		"@wordpress/env": "^11.2.0",
+		"@wordpress/plugins": "^7.42.0",
 		"@wordpress/scripts": "^31.6.0",
 		"react": "^18.3.1",
 		"stylelint-config-prettier-scss": "^1.0.0",
