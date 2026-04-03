@@ -67,6 +67,29 @@ describe('command tools', () => {
 			);
 		});
 
+		it('returns error when error thrown is a string', async () => {
+			const session = createMockSession();
+			(
+				session.updateCommandStatus as ReturnType<
+					typeof import('vitest').vi.fn
+				>
+			).mockRejectedValue('What a weird error');
+			registerCommandTools(server as unknown as McpServer, session);
+
+			const tool = server.registeredTools.get('wp_update_command_status');
+			assertDefined(tool);
+			const result = await tool.handler({
+				commandId: 3,
+				status: 'failed',
+				message: 'Something went wrong',
+			});
+
+			expect(result.isError).toBe(true);
+			expect(result.content[0].text).toContain(
+				'Failed to update command status: What a weird error'
+			);
+		});
+
 		it('returns descriptive error when plugin is not connected', async () => {
 			const session = createMockSession();
 			(
