@@ -852,12 +852,14 @@ describe('WordPressApiClient', () => {
 					type: string;
 					status: string;
 					parent?: number;
+					meta?: { wpce_source: string };
 				};
 				expect(body.post).toBe(42);
 				expect(body.content).toBe('A note');
 				expect(body.type).toBe('note');
 				expect(body.status).toBe('hold');
 				expect(body.parent).toBe(0);
+				expect(body.meta).toEqual({ wpce_source: 'mcp' });
 				expect(result).toEqual(fakeNote);
 			});
 
@@ -875,9 +877,11 @@ describe('WordPressApiClient', () => {
 				const body = JSON.parse(options.body as string) as {
 					parent: number;
 					type: string;
+					meta?: { wpce_source: string };
 				};
 				expect(body.parent).toBe(10);
 				expect(body.type).toBe('note');
+				expect(body.meta).toEqual({ wpce_source: 'mcp' });
 				expect(result).toEqual(replyNote);
 			});
 

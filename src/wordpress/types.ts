@@ -155,6 +155,7 @@ export interface WPNote {
 	content: { rendered: string; raw?: string };
 	status: string; // 'hold', 'approved', etc.
 	type: string; // always 'note'
+	meta?: { wpce_source?: string };
 }
 
 // --- Connection Config ---
