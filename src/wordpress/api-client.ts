@@ -148,7 +148,12 @@ export class WordPressApiClient {
 		options?: { altText?: string; caption?: string; title?: string }
 	): Promise<WPMediaItem> {
 		const formData = new FormData();
-		const blob = new Blob([new Uint8Array(fileData)], { type: mimeType });
+		const fileView = new Uint8Array(
+			fileData.buffer as ArrayBuffer,
+			fileData.byteOffset,
+			fileData.byteLength
+		);
+		const blob = new Blob([fileView], { type: mimeType });
 		formData.append('file', blob, fileName);
 
 		if (options?.title) formData.append('title', options.title);
