@@ -298,8 +298,10 @@ export class DocumentManager {
 			const innerBlocksArray = parentYMap.get('innerBlocks') as
 				| Y.Array<Y.Map<unknown>>
 				| undefined;
-			if (!innerBlocksArray) {
-				throw new Error(`Block at ${parentIndex} has no inner blocks`);
+			if (!innerBlocksArray || innerBlocksArray.length === 0) {
+				throw new Error(
+					`Block at index ${parentIndex} has no inner blocks`
+				);
 			}
 
 			innerBlocksArray.delete(startIndex, count);

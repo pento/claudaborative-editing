@@ -470,7 +470,7 @@ describe('DocumentManager', () => {
 
 			expect(() => {
 				manager.removeInnerBlocks(doc, '0', 0, 1);
-			}).toThrow();
+			}).toThrow('Block at index 0 has no inner blocks');
 		});
 	});
 
