@@ -49,6 +49,80 @@ jest.mock('../../../store', () => ({
 	default: { name: 'wpce/ai-actions' },
 }));
 
+jest.mock('../../EditFocusModal', () => {
+	const { createElement } = require('react');
+	return {
+		__esModule: true,
+		default: ({
+			onSubmit,
+			onRequestClose,
+		}: {
+			onSubmit: (v: string) => void;
+			onRequestClose: () => void;
+		}) =>
+			createElement(
+				'div',
+				{ 'data-testid': 'edit-focus-modal' },
+				createElement(
+					'button',
+					{
+						'data-testid': 'edit-focus-submit',
+						onClick: () => {
+							onSubmit('make it formal');
+							onRequestClose();
+						},
+					},
+					'Submit Edit'
+				),
+				createElement(
+					'button',
+					{
+						'data-testid': 'edit-focus-close',
+						onClick: onRequestClose,
+					},
+					'Close Edit'
+				)
+			),
+	};
+});
+
+jest.mock('../../TranslateModal', () => {
+	const { createElement } = require('react');
+	return {
+		__esModule: true,
+		default: ({
+			onSubmit,
+			onRequestClose,
+		}: {
+			onSubmit: (v: string) => void;
+			onRequestClose: () => void;
+		}) =>
+			createElement(
+				'div',
+				{ 'data-testid': 'translate-modal' },
+				createElement(
+					'button',
+					{
+						'data-testid': 'translate-submit',
+						onClick: () => {
+							onSubmit('Spanish');
+							onRequestClose();
+						},
+					},
+					'Submit Translate'
+				),
+				createElement(
+					'button',
+					{
+						'data-testid': 'translate-close',
+						onClick: onRequestClose,
+					},
+					'Close Translate'
+				)
+			),
+	};
+});
+
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { store as noticesStore } from '@wordpress/notices';
@@ -265,6 +339,93 @@ describe('AiActionsMenu', () => {
 		render(<AiActionsMenu />);
 		fireEvent.click(screen.getByText('Review'));
 		expect(mockSubmitCommand).toHaveBeenCalledWith('review', 123);
+	});
+
+	it('renders Edit and Translate menu items', () => {
+		render(<AiActionsMenu />);
+		expect(screen.getByText('Edit\u2026')).toBeTruthy();
+		expect(screen.getByText('Translate\u2026')).toBeTruthy();
+	});
+
+	it('Edit and Translate items show info descriptions', () => {
+		render(<AiActionsMenu />);
+		expect(
+			screen.getByText('Make broad editorial changes to the post')
+		).toBeTruthy();
+		expect(
+			screen.getByText('Translate post content into another language')
+		).toBeTruthy();
+	});
+
+	it('Edit and Translate items disabled when items are disabled', () => {
+		mockedUseMcpStatus.mockReturnValue({
+			mcpConnected: false,
+			mcpLastSeenAt: null,
+			isLoading: false,
+			error: null,
+		});
+
+		render(<AiActionsMenu />);
+		expect(screen.getByText('Edit\u2026').closest('button')!.disabled).toBe(
+			true
+		);
+		expect(
+			screen.getByText('Translate\u2026').closest('button')!.disabled
+		).toBe(true);
+	});
+
+	it('click Edit opens EditFocusModal', () => {
+		render(<AiActionsMenu />);
+		expect(screen.queryByTestId('edit-focus-modal')).toBeNull();
+
+		fireEvent.click(screen.getByText('Edit\u2026'));
+		expect(screen.getByTestId('edit-focus-modal')).toBeTruthy();
+	});
+
+	it('EditFocusModal submit calls submitCommand with editingFocus', () => {
+		render(<AiActionsMenu />);
+		fireEvent.click(screen.getByText('Edit\u2026'));
+		fireEvent.click(screen.getByTestId('edit-focus-submit'));
+
+		expect(mockSubmitCommand).toHaveBeenCalledWith('edit', 123, {
+			editingFocus: 'make it formal',
+		});
+	});
+
+	it('EditFocusModal close hides the modal', () => {
+		render(<AiActionsMenu />);
+		fireEvent.click(screen.getByText('Edit\u2026'));
+		expect(screen.getByTestId('edit-focus-modal')).toBeTruthy();
+
+		fireEvent.click(screen.getByTestId('edit-focus-close'));
+		expect(screen.queryByTestId('edit-focus-modal')).toBeNull();
+	});
+
+	it('click Translate opens TranslateModal', () => {
+		render(<AiActionsMenu />);
+		expect(screen.queryByTestId('translate-modal')).toBeNull();
+
+		fireEvent.click(screen.getByText('Translate\u2026'));
+		expect(screen.getByTestId('translate-modal')).toBeTruthy();
+	});
+
+	it('TranslateModal submit calls submitCommand with language', () => {
+		render(<AiActionsMenu />);
+		fireEvent.click(screen.getByText('Translate\u2026'));
+		fireEvent.click(screen.getByTestId('translate-submit'));
+
+		expect(mockSubmitCommand).toHaveBeenCalledWith('translate', 123, {
+			language: 'Spanish',
+		});
+	});
+
+	it('TranslateModal close hides the modal', () => {
+		render(<AiActionsMenu />);
+		fireEvent.click(screen.getByText('Translate\u2026'));
+		expect(screen.getByTestId('translate-modal')).toBeTruthy();
+
+		fireEvent.click(screen.getByTestId('translate-close'));
+		expect(screen.queryByTestId('translate-modal')).toBeNull();
 	});
 
 	it('shows error as snackbar toast when error appears', async () => {

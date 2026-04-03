@@ -57,7 +57,9 @@ describe('edit', () => {
 
 		it('embeds post content and tool instructions', async () => {
 			setup();
-			const result = await prompt.handler({});
+			const result = await prompt.handler({
+				editingFocus: 'improve clarity',
+			});
 
 			expect(result.messages[0].content.text).toContain(postContent);
 			expect(result.messages[0].content.text).toContain(
@@ -66,20 +68,11 @@ describe('edit', () => {
 			expect(result.description).toContain(fakePost.title.raw);
 		});
 
-		it('includes editing focus when provided', async () => {
+		it('includes editing focus in prompt', async () => {
 			setup();
 			const result = await prompt.handler({ editingFocus: 'tone' });
 
 			expect(result.messages[0].content.text).toContain('Focus on: tone');
-		});
-
-		it('asks the user what kind of editing when no focus provided', async () => {
-			setup();
-			const result = await prompt.handler({});
-
-			expect(result.messages[0].content.text).toContain(
-				'Ask me what kind of editing'
-			);
 		});
 	});
 });

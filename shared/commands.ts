@@ -69,14 +69,14 @@ export const COMMANDS: Record<CommandSlug, CommandDefinition> = {
 	edit: {
 		slug: 'edit',
 		label: 'Edit',
-		description: 'Edit with an optional editing focus',
+		description: 'Make broad editorial changes to the post',
 		progressLabel: 'Editing\u2026',
 		args: {
 			editingFocus: {
 				type: 'string',
-				required: false,
+				required: true,
 				description:
-					'Type of editing: tone, structure, expand, condense, rewrite, or custom',
+					'A brief description of the editing focus or intent (e.g. "Make it more formal", "Fix grammar and spelling", "Improve the flow"). This is used to guide the AI and provide context for human reviewers.',
 			},
 		},
 	},
@@ -88,7 +88,7 @@ export const COMMANDS: Record<CommandSlug, CommandDefinition> = {
 		args: {
 			language: {
 				type: 'string',
-				required: false,
+				required: true,
 				description: 'Target language',
 			},
 		},
