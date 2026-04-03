@@ -35,9 +35,9 @@
 	"scripts": {
 		"build": "tsup",
 		"build:all": "npm run build && npm --prefix wordpress-plugin run build",
-		"check:php-defs": "npm run generate:php-defs && git diff --exit-code wordpress-plugin/includes/class-command-defs.php",
+		"check:generated": "npm run generate:defs && git diff --exit-code wordpress-plugin/includes/class-command-defs.php wordpress-plugin/src/utils/command-i18n.ts",
 		"dev": "tsup --watch",
-		"generate:php-defs": "node bin/generate-php-defs.js",
+		"generate:defs": "node bin/generate-shared-defs.js && prettier --write wordpress-plugin/src/utils/command-i18n.ts",
 		"lint": "ESLINT_USE_FLAT_CONFIG=true eslint --max-warnings 0 . && npm --prefix wordpress-plugin run lint:style && markdownlint-cli2 && prettier --check -u .",
 		"lint:fix": "ESLINT_USE_FLAT_CONFIG=true eslint --fix --max-warnings 0 . && npm --prefix wordpress-plugin run lint:style:fix && markdownlint-cli2 --fix && prettier --write -u .",
 		"prepare": "husky",
