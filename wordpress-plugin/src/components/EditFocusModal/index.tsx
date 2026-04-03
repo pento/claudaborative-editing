@@ -10,7 +10,8 @@
  */
 import { __ } from '@wordpress/i18n';
 import { Modal, TextControl, Button } from '@wordpress/components';
-import { useState, type KeyboardEvent } from '@wordpress/element';
+import { useState } from '@wordpress/element';
+import type { KeyboardEvent } from 'react';
 
 import './style.scss';
 
