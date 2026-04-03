@@ -183,7 +183,8 @@ jobs:
                   lcov-file: wordpress-plugin/coverage/typescript/lcov.info
                   path: wordpress-plugin/src/
                   ignore-patterns: |
-                      wordpress-plugin/src/**/*.test.{ts,tsx}
+                      wordpress-plugin/src/**/*.test.ts
+                      wordpress-plugin/src/**/*.test.tsx
                       wordpress-plugin/src/**/types.ts
                   coverage-label: plugin-typescript
                   github-token: ${{ secrets.GITHUB_TOKEN }}
