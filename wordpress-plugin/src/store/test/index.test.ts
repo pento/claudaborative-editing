@@ -28,7 +28,7 @@ const mockedCreateRegistrySelector = createRegistrySelector as jest.Mock;
 const mockedApiFetch = apiFetch as unknown as jest.Mock;
 
 const storeConfig = mockedCreateReduxStore.mock.calls[0][1] as any;
-const { reducer, actions, selectors } = storeConfig;
+const { reducer, actions, selectors, resolvers } = storeConfig;
 
 const DEFAULT_STATE = {
 	status: {
@@ -673,6 +673,16 @@ describe('AI Actions store', () => {
 
 				expect(dispatch).not.toHaveBeenCalled();
 			});
+		});
+	});
+
+	describe('resolvers', () => {
+		it('getMcpStatus dispatches refreshStatus', async () => {
+			const dispatch = jest.fn();
+
+			await resolvers.getMcpStatus()({ dispatch });
+
+			expect(dispatch).toHaveBeenCalledTimes(1);
 		});
 	});
 });
