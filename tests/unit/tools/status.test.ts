@@ -334,6 +334,32 @@ describe('status tools', () => {
 			);
 		});
 
+		it('shows incompatible message when plugin is active but detection fails', async () => {
+			const session = createMockSession({
+				state: 'connected',
+				user: fakeUser,
+				pluginInfo: null,
+			});
+			(
+				session.getEditorPluginInstallStatus as ReturnType<typeof vi.fn>
+			).mockResolvedValue({
+				installed: true,
+				active: true,
+				version: '0.0.1',
+				pluginFile: 'claudaborative-editing/claudaborative-editing',
+			});
+			registerStatusTools(server as unknown as McpServer, session);
+
+			const tool = server.registeredTools.get('wp_status');
+			assertDefined(tool);
+			const result = await tool.handler({});
+			const text = result.content[0].text;
+
+			expect(text).toContain('Plugin: installed (v0.0.1)');
+			expect(text).toContain('not compatible');
+			expect(text).not.toContain('not installed');
+		});
+
 		it('installs plugin from wordpress.org when not installed', async () => {
 			const session = createMockSession({
 				state: 'connected',

@@ -207,10 +207,20 @@ async function ensureEditorPlugin(
 				await session.activateEditorPlugin(status.pluginFile);
 				if (await session.detectEditorPlugin()) return;
 			} catch {
-				// Activation failed — fall through to download URL
+				// Activation failed — fall through
 			}
 			lines.push(
 				`Plugin: installed but inactive. Activate at ${session.apiClient.createUrl('/wp-admin/plugins.php')}`
+			);
+			return;
+		}
+
+		if (status.installed && status.active) {
+			// Plugin is active but detection failed (e.g., older version
+			// without /wpce/v1/status, or endpoint blocked). Report as
+			// installed but incompatible rather than "not installed".
+			lines.push(
+				`Plugin: installed (v${status.version}) but not compatible with this MCP server. Check for updates at ${session.apiClient.createUrl('/wp-admin/plugins.php')}`
 			);
 			return;
 		}
