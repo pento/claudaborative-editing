@@ -1,8 +1,8 @@
 /**
  * Translate modal.
  *
- * Prompts the user to enter or select a target language for translation.
- * Common languages are offered as suggestion chips below the text input.
+ * Prompts the user to enter a target language for translation using
+ * explanatory text, a text input, and a submit button.
  */
 
 /**
@@ -59,6 +59,8 @@ export default function TranslateModal({
 				)}
 			</p>
 			<TextControl
+				label={__('Target language', 'claudaborative-editing')}
+				hideLabelFromVision
 				value={value}
 				onChange={setValue}
 				onKeyDown={(e: React.KeyboardEvent) => {

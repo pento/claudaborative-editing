@@ -46,7 +46,7 @@ export default function EditFocusModal({
 					'claudaborative-editing'
 				)}
 			</p>
-			<ul className="ul-disc">
+			<ul className="wpce-edit-focus-examples">
 				<li>
 					{__(
 						'Change the tone to be more formal, casual, enthusiastic, etc.',
@@ -79,6 +79,8 @@ export default function EditFocusModal({
 				)}
 			</p>
 			<TextControl
+				label={__('Editing instructions', 'claudaborative-editing')}
+				hideLabelFromVision
 				value={value}
 				onChange={setValue}
 				onKeyDown={(e: React.KeyboardEvent) => {

@@ -138,7 +138,10 @@ export default function AiActionsMenu() {
 											setEditModalOpen(true);
 										}}
 									>
-										{getCommandLabel('edit') + '\u2026'}
+										{__(
+											'Edit\u2026',
+											'claudaborative-editing'
+										)}
 									</MenuItem>
 									<MenuItem
 										info={getCommandDescription(
@@ -150,8 +153,10 @@ export default function AiActionsMenu() {
 											setTranslateModalOpen(true);
 										}}
 									>
-										{getCommandLabel('translate') +
-											'\u2026'}
+										{__(
+											'Translate\u2026',
+											'claudaborative-editing'
+										)}
 									</MenuItem>
 								</MenuGroup>
 							</>
