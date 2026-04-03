@@ -28,6 +28,11 @@ jobs:
             - run: npm run build
             - run: npm test
             - run: npm publish
+            - run: npm pack
+            - uses: actions/upload-artifact@v4
+              with:
+                  name: npm-tarball
+                  path: claudaborative-editing-*.tgz
 
     # wporg-deploy:
     #     name: Deploy to WordPress.org
@@ -114,6 +119,10 @@ jobs:
                   echo "$NOTES" > release-notes.txt
                   cat release-notes.txt
 
+            - uses: actions/download-artifact@v4
+              with:
+                  name: npm-tarball
+
             - name: Create GitHub release
               env:
                   GH_TOKEN: ${{ github.token }}
@@ -121,4 +130,5 @@ jobs:
                   gh release create "$GITHUB_REF_NAME" \
                     --title "$GITHUB_REF_NAME" \
                     --notes-file release-notes.txt \
-                    claudaborative-editing-plugin.zip
+                    claudaborative-editing-plugin.zip \
+                    claudaborative-editing-*.tgz
