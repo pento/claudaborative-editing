@@ -16,10 +16,8 @@ import { registerEditingPrompts } from './prompts/editing.js';
 import { registerReviewPrompts } from './prompts/review.js';
 import { registerAuthoringPrompts } from './prompts/authoring.js';
 
-declare const __PKG_VERSION__: string;
-
-export const VERSION =
-	typeof __PKG_VERSION__ !== 'undefined' ? __PKG_VERSION__ : '0.0.0-dev';
+import { VERSION } from './version.js';
+export { VERSION };
 
 export async function startServer(): Promise<void> {
 	const session = new SessionManager();

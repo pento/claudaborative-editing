@@ -150,6 +150,7 @@ export function createMockSession(
 			version: string;
 			protocolVersion: number;
 			transport: string;
+			protocolWarning?: string | null;
 		} | null;
 	} = {}
 ): SessionManager {
@@ -248,6 +249,33 @@ export function createMockSession(
 			),
 		drainStreamQueue: vi.fn().mockResolvedValue(undefined),
 		updateCommandStatus: vi.fn().mockResolvedValue(undefined),
-		getPluginInfo: vi.fn().mockReturnValue(overrides.pluginInfo ?? null),
+		getEditorPluginInstallStatus: vi.fn().mockResolvedValue({
+			installed: false,
+			active: false,
+			version: null,
+			pluginFile: null,
+		}),
+		detectEditorPlugin: vi.fn().mockResolvedValue(false),
+		activateEditorPlugin: vi.fn().mockResolvedValue(undefined),
+		installEditorPlugin: vi.fn().mockResolvedValue({
+			installed: true,
+			activated: true,
+			version: '1.0.0',
+		}),
+		getPluginInfo: vi.fn().mockReturnValue(
+			overrides.pluginInfo
+				? {
+						protocolWarning: null,
+						...overrides.pluginInfo,
+					}
+				: null
+		),
+		apiClient: {
+			createUrl: vi
+				.fn()
+				.mockImplementation(
+					(path: string) => `https://example.com${path}`
+				),
+		},
 	} as unknown as SessionManager;
 }

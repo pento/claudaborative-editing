@@ -1,5 +1,17 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { SessionManager } from '../session/session-manager.js';
+import { VERSION } from '../version.js';
+import { WordPressApiError } from '../wordpress/api-client.js';
+
+const GITHUB_RELEASES_URL =
+	'https://github.com/pento/claudaborative-editing/releases';
+
+function getPluginDownloadUrl(): string {
+	if (VERSION === '0.0.0-dev') {
+		return GITHUB_RELEASES_URL;
+	}
+	return `${GITHUB_RELEASES_URL}/download/v${VERSION}/claudaborative-editing-plugin.zip`;
+}
 
 export function registerStatusTools(
 	server: McpServer,
@@ -9,9 +21,11 @@ export function registerStatusTools(
 		'wp_status',
 		{
 			description:
-				'Show current connection state, sync status, and post info',
+				'Show current connection state, sync status, and post info. ' +
+				'If the plugin status includes URLs (download or admin links), ' +
+				'always show them to the user as clickable links.',
 		},
-		() => {
+		async () => {
 			const state = session.getState();
 			const lines: string[] = [];
 
@@ -30,13 +44,19 @@ export function registerStatusTools(
 					`Notes: ${session.getNotesSupported() ? 'supported' : 'not supported (requires WordPress 6.9+)'}`
 				);
 
+				// If plugin not yet detected, try to detect/activate/install it.
+				if (!session.getPluginInfo()) {
+					await ensureEditorPlugin(session, lines);
+				}
+
 				const pluginInfo = session.getPluginInfo();
 				if (pluginInfo) {
 					lines.push(
 						`Plugin: v${pluginInfo.version} (protocol v${pluginInfo.protocolVersion}), listener: ${pluginInfo.transport}`
 					);
-				} else {
-					lines.push('Plugin: not detected');
+					if (pluginInfo.protocolWarning) {
+						lines.push(`WARNING: ${pluginInfo.protocolWarning}`);
+					}
 				}
 
 				const post = session.getCurrentPost();
@@ -164,5 +184,65 @@ export function registerStatusTools(
 				};
 			}
 		}
+	);
+}
+
+/**
+ * Try to get the editor plugin running. Attempts, in order:
+ * 1. Re-probe (plugin may have been installed after connect)
+ * 2. If installed but inactive, activate it
+ * 3. If not installed, install from wordpress.org
+ * 4. Fall back to a download URL
+ *
+ * Appends status messages to `lines`. On success, the command listener
+ * is started via detectEditorPlugin() so getPluginInfo() returns data.
+ */
+async function ensureEditorPlugin(
+	session: SessionManager,
+	lines: string[]
+): Promise<void> {
+	// 1. Re-probe — plugin may have been installed/activated externally
+	if (await session.detectEditorPlugin()) return;
+
+	// 2. Check if installed but inactive
+	try {
+		const status = await session.getEditorPluginInstallStatus();
+
+		if (status.installed && !status.active && status.pluginFile) {
+			try {
+				await session.activateEditorPlugin(status.pluginFile);
+				if (await session.detectEditorPlugin()) return;
+			} catch {
+				// Activation failed — fall through to download URL
+			}
+			lines.push(
+				`Plugin: installed but inactive. Activate at ${session.apiClient.createUrl('/wp-admin/plugins.php')}`
+			);
+			return;
+		}
+
+		if (!status.installed) {
+			// 3. Try wordpress.org install
+			try {
+				await session.installEditorPlugin();
+				if (await session.detectEditorPlugin()) return;
+			} catch (installError) {
+				if (
+					installError instanceof WordPressApiError &&
+					installError.status === 404
+				) {
+					// Not on wordpress.org — fall through to download URL
+				} else {
+					// Other error (e.g., network) — fall through
+				}
+			}
+		}
+	} catch {
+		// getEditorPluginInstallStatus failed (e.g., 403 insufficient
+		// permissions to list plugins) — fall through to download URL
+	}
+
+	lines.push(
+		`Plugin: not installed. Download from ${getPluginDownloadUrl()}, then install at ${session.apiClient.createUrl('/wp-admin/plugin-install.php')}`
 	);
 }

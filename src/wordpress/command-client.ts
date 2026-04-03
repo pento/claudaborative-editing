@@ -9,6 +9,16 @@
 import type { WordPressApiClient } from './api-client.js';
 import type { CommandSlug, CommandStatus } from '../../shared/commands.js';
 
+// --- Protocol version compatibility ---
+
+/** Protocol versions this MCP server supports. */
+export const SUPPORTED_PROTOCOL_VERSIONS = [1] as const;
+
+/** Check if a plugin protocol version is compatible with this MCP server. */
+export function isProtocolCompatible(version: number): boolean {
+	return (SUPPORTED_PROTOCOL_VERSIONS as readonly number[]).includes(version);
+}
+
 // --- Types ---
 
 export interface PluginStatus {

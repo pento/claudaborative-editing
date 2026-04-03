@@ -16,14 +16,23 @@ import type {
  * Uses native fetch() — requires Node.js 18+.
  */
 export class WordPressApiClient {
+	private siteUrl: string;
 	private baseUrl: string;
 	private authHeader: string;
 
 	constructor(config: WordPressConfig) {
 		// Normalise URL: strip trailing slash(es)
-		const siteUrl = config.siteUrl.replace(/\/+$/, '');
-		this.baseUrl = `${siteUrl}/wp-json`;
+		this.siteUrl = config.siteUrl.replace(/\/+$/, '');
+		this.baseUrl = `${this.siteUrl}/wp-json`;
 		this.authHeader = `Basic ${btoa(config.username + ':' + config.appPassword)}`;
+	}
+
+	/**
+	 * Helper to construct full site URLs for a given endpoint path.
+	 * E.g. createUrl('/wp-admin') => 'https://example.com/wp-admin'
+	 */
+	createUrl(path: string): string {
+		return `${this.siteUrl}${path}`;
 	}
 
 	/**

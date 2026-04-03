@@ -31,6 +31,7 @@ const mockListNotes = vi.fn<() => Promise<WPNote[]>>();
 const mockCreateNote = vi.fn<() => Promise<WPNote>>();
 const mockUpdateNote = vi.fn<() => Promise<WPNote>>();
 const mockDeleteNote = vi.fn<() => Promise<void>>();
+const mockRequest = vi.fn();
 
 vi.mock('../../src/wordpress/api-client.js', () => {
 	// eslint-disable-next-line @typescript-eslint/no-shadow -- must match the real export name
@@ -67,6 +68,7 @@ vi.mock('../../src/wordpress/api-client.js', () => {
 			this.createNote = mockCreateNote;
 			this.updateNote = mockUpdateNote;
 			this.deleteNote = mockDeleteNote;
+			this.request = mockRequest;
 		}),
 		WordPressApiError,
 	};
@@ -126,6 +128,7 @@ const mockCommandHandlerSetNotifier = vi.fn();
 const mockCommandHandlerUpdateCommandStatus = vi.fn<() => Promise<void>>();
 const mockCommandHandlerGetPluginStatus = vi.fn();
 const mockCommandHandlerGetTransport = vi.fn();
+const mockCommandHandlerGetProtocolWarning = vi.fn().mockReturnValue(null);
 
 vi.mock('../../src/session/command-handler.js', () => {
 	return {
@@ -138,6 +141,7 @@ vi.mock('../../src/session/command-handler.js', () => {
 			this.updateCommandStatus = mockCommandHandlerUpdateCommandStatus;
 			this.getPluginStatus = mockCommandHandlerGetPluginStatus;
 			this.getTransport = mockCommandHandlerGetTransport;
+			this.getProtocolWarning = mockCommandHandlerGetProtocolWarning;
 		}),
 	};
 });
@@ -3277,6 +3281,7 @@ describe('SessionManager', () => {
 					version: '1.0.0',
 					protocolVersion: 1,
 					transport: 'sse',
+					protocolWarning: null,
 				});
 			});
 
@@ -3499,6 +3504,7 @@ describe('SessionManager', () => {
 					version: '2.1.0',
 					protocolVersion: 3,
 					transport: 'polling',
+					protocolWarning: null,
 				});
 			});
 
@@ -3522,6 +3528,201 @@ describe('SessionManager', () => {
 
 			it('returns null when disconnected', () => {
 				expect(session.getPluginInfo()).toBeNull();
+			});
+
+			it('includes protocolWarning when set', async () => {
+				mockCommandHandlerStart.mockResolvedValue(true);
+				mockCommandHandlerGetPluginStatus.mockReturnValue({
+					version: '2.0.0',
+					protocol_version: 99,
+					mcp_connected: false,
+					mcp_last_seen_at: null,
+				});
+				mockCommandHandlerGetTransport.mockReturnValue('disabled');
+				mockCommandHandlerGetProtocolWarning.mockReturnValue(
+					'Plugin protocol v99 is not compatible'
+				);
+
+				await connectSession(session);
+
+				expect(session.getPluginInfo()).toEqual(
+					expect.objectContaining({
+						protocolWarning:
+							'Plugin protocol v99 is not compatible',
+					})
+				);
+			});
+		});
+
+		describe('detectEditorPlugin()', () => {
+			it('starts command handler when plugin is detected', async () => {
+				await connectSession(session);
+				expect(session.getPluginInfo()).toBeNull();
+
+				// Re-detect with plugin now available
+				mockCommandHandlerStart.mockResolvedValue(true);
+				mockCommandHandlerGetPluginStatus.mockReturnValue({
+					version: '1.0.0',
+					protocol_version: 1,
+					mcp_connected: false,
+					mcp_last_seen_at: null,
+				});
+				mockCommandHandlerGetTransport.mockReturnValue('sse');
+
+				const detected = await session.detectEditorPlugin();
+
+				expect(detected).toBe(true);
+				expect(session.getPluginInfo()).not.toBeNull();
+			});
+
+			it('stops existing command handler before re-detecting', async () => {
+				mockCommandHandlerStart.mockResolvedValue(true);
+				mockCommandHandlerGetPluginStatus.mockReturnValue({
+					version: '1.0.0',
+					protocol_version: 1,
+					mcp_connected: false,
+					mcp_last_seen_at: null,
+				});
+				mockCommandHandlerGetTransport.mockReturnValue('sse');
+
+				await connectSession(session);
+				expect(mockCommandHandlerStop).not.toHaveBeenCalled();
+
+				await session.detectEditorPlugin();
+
+				// The old handler should have been stopped
+				expect(mockCommandHandlerStop).toHaveBeenCalled();
+			});
+
+			it('returns false when plugin is not found', async () => {
+				await connectSession(session);
+
+				mockCommandHandlerStart.mockResolvedValue(false);
+
+				const detected = await session.detectEditorPlugin();
+
+				expect(detected).toBe(false);
+				expect(session.getPluginInfo()).toBeNull();
+			});
+
+			it('throws when not connected', async () => {
+				await expect(session.detectEditorPlugin()).rejects.toThrow(
+					'requires state'
+				);
+			});
+		});
+
+		describe('getEditorPluginInstallStatus()', () => {
+			it('returns installed status when plugin is found', async () => {
+				await connectSession(session);
+
+				mockRequest.mockResolvedValue([
+					{
+						plugin: 'claudaborative-editing/claudaborative-editing.php',
+						status: 'active',
+						version: '1.0.0',
+					},
+				]);
+
+				const result = await session.getEditorPluginInstallStatus();
+
+				expect(result).toEqual({
+					installed: true,
+					active: true,
+					version: '1.0.0',
+					pluginFile: 'claudaborative-editing/claudaborative-editing',
+				});
+				expect(mockRequest).toHaveBeenCalledWith('/wp/v2/plugins');
+			});
+
+			it('returns inactive status', async () => {
+				await connectSession(session);
+
+				mockRequest.mockResolvedValue([
+					{
+						plugin: 'claudaborative-editing/claudaborative-editing.php',
+						status: 'inactive',
+						version: '0.1.0',
+					},
+				]);
+
+				const result = await session.getEditorPluginInstallStatus();
+
+				expect(result.installed).toBe(true);
+				expect(result.active).toBe(false);
+			});
+
+			it('returns not installed when plugin is absent', async () => {
+				await connectSession(session);
+
+				mockRequest.mockResolvedValue([
+					{
+						plugin: 'some-other-plugin/plugin.php',
+						status: 'active',
+						version: '2.0.0',
+					},
+				]);
+
+				const result = await session.getEditorPluginInstallStatus();
+
+				expect(result).toEqual({
+					installed: false,
+					active: false,
+					version: null,
+					pluginFile: null,
+				});
+			});
+
+			it('throws when not connected', async () => {
+				await expect(
+					session.getEditorPluginInstallStatus()
+				).rejects.toThrow('requires state');
+			});
+		});
+
+		describe('installEditorPlugin()', () => {
+			it('installs and returns result', async () => {
+				await connectSession(session);
+
+				mockRequest.mockResolvedValue({
+					plugin: 'claudaborative-editing/claudaborative-editing.php',
+					status: 'active',
+					version: '1.0.0',
+				});
+
+				const result = await session.installEditorPlugin();
+
+				expect(result).toEqual({
+					installed: true,
+					activated: true,
+					version: '1.0.0',
+				});
+				expect(mockRequest).toHaveBeenCalledWith(
+					'/wp/v2/plugins',
+					expect.objectContaining({
+						method: 'POST',
+					})
+				);
+			});
+
+			it('reports inactive when install returns inactive', async () => {
+				await connectSession(session);
+
+				mockRequest.mockResolvedValue({
+					plugin: 'claudaborative-editing/claudaborative-editing.php',
+					status: 'inactive',
+					version: '1.0.0',
+				});
+
+				const result = await session.installEditorPlugin();
+
+				expect(result.activated).toBe(false);
+			});
+
+			it('throws when not connected', async () => {
+				await expect(session.installEditorPlugin()).rejects.toThrow(
+					'requires state'
+				);
 			});
 		});
 	});

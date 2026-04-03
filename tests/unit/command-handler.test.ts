@@ -10,7 +10,11 @@ import type {
 
 // --- Mocks ---
 
-vi.mock('../../src/wordpress/command-client.js', () => {
+vi.mock('../../src/wordpress/command-client.js', async (importOriginal) => {
+	const original =
+		await importOriginal<
+			typeof import('../../src/wordpress/command-client.js')
+		>();
 	return {
 		CommandClient: vi.fn(),
 		DEFAULT_COMMAND_CLIENT_CONFIG: {
@@ -20,6 +24,8 @@ vi.mock('../../src/wordpress/command-client.js', () => {
 			sseBackoffBase: 1000,
 			sseBackoffMax: 30000,
 		},
+		SUPPORTED_PROTOCOL_VERSIONS: original.SUPPORTED_PROTOCOL_VERSIONS,
+		isProtocolCompatible: original.isProtocolCompatible,
 	};
 });
 
@@ -196,6 +202,81 @@ describe('CommandHandler', () => {
 			await expect(handler.start(createMockApiClient())).rejects.toThrow(
 				'Network failure'
 			);
+		});
+	});
+
+	// ---------------------------------------------------------------
+	// Protocol version negotiation
+	// ---------------------------------------------------------------
+	describe('protocol version negotiation', () => {
+		it('starts command listener when protocol version is compatible', async () => {
+			const { instance } = setupMockCommandClient({
+				resolve: makePluginStatus({ protocol_version: 1 }),
+			});
+
+			const result = await handler.start(createMockApiClient());
+
+			expect(result).toBe(true);
+			expect(instance.start).toHaveBeenCalledOnce();
+			expect(handler.getProtocolWarning()).toBeNull();
+		});
+
+		it('does not start command listener when protocol is incompatible', async () => {
+			const { instance } = setupMockCommandClient({
+				resolve: makePluginStatus({ protocol_version: 99 }),
+			});
+
+			const result = await handler.start(createMockApiClient());
+
+			expect(result).toBe(true); // plugin IS detected
+			expect(instance.start).not.toHaveBeenCalled();
+			expect(handler.getPluginStatus()).not.toBeNull();
+		});
+
+		it('stores warning suggesting MCP update when plugin version is higher', async () => {
+			setupMockCommandClient({
+				resolve: makePluginStatus({ protocol_version: 99 }),
+			});
+
+			await handler.start(createMockApiClient());
+
+			const warning = handler.getProtocolWarning();
+			expect(warning).toContain('protocol v99');
+			expect(warning).toContain('Update the MCP server.');
+		});
+
+		it('stores warning suggesting plugin update when MCP version is higher', async () => {
+			setupMockCommandClient({
+				resolve: makePluginStatus({ protocol_version: 0 }),
+			});
+
+			await handler.start(createMockApiClient());
+
+			const warning = handler.getProtocolWarning();
+			expect(warning).toContain('protocol v0');
+			expect(warning).toContain('Update the WordPress plugin.');
+		});
+
+		it('reports transport as disabled when protocol is incompatible', async () => {
+			setupMockCommandClient({
+				resolve: makePluginStatus({ protocol_version: 99 }),
+			});
+
+			await handler.start(createMockApiClient());
+
+			expect(handler.getTransport()).toBe('disabled');
+		});
+
+		it('clears protocol warning on stop', async () => {
+			setupMockCommandClient({
+				resolve: makePluginStatus({ protocol_version: 99 }),
+			});
+
+			await handler.start(createMockApiClient());
+			expect(handler.getProtocolWarning()).not.toBeNull();
+
+			handler.stop();
+			expect(handler.getProtocolWarning()).toBeNull();
 		});
 	});
 

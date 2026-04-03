@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { registerStatusTools } from '../../../src/tools/status.js';
 import {
 	createMockServer,
@@ -9,6 +9,25 @@ import {
 } from './helpers.js';
 import { assertDefined } from '../../test-utils.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+
+vi.mock('../../../src/wordpress/api-client.js', () => {
+	// eslint-disable-next-line @typescript-eslint/no-shadow -- must match the real export name
+	class WordPressApiError extends Error {
+		constructor(
+			message: string,
+			public readonly status: number,
+			public readonly body: string
+		) {
+			super(message);
+			this.name = 'WordPressApiError';
+		}
+	}
+
+	return {
+		WordPressApiClient: vi.fn(),
+		WordPressApiError,
+	};
+});
 
 describe('status tools', () => {
 	let server: ReturnType<typeof createMockServer>;
@@ -130,7 +149,70 @@ describe('status tools', () => {
 			expect(text).toContain('listener: sse');
 		});
 
-		it('shows plugin not detected when getPluginInfo returns null', async () => {
+		it('shows protocol warning when present', async () => {
+			const session = createMockSession({
+				state: 'connected',
+				user: fakeUser,
+				pluginInfo: {
+					version: '2.0.0',
+					protocolVersion: 99,
+					transport: 'disabled',
+					protocolWarning:
+						'Plugin protocol v99 is not compatible with this MCP server (supports v1). Update the MCP server.',
+				},
+			});
+			registerStatusTools(server as unknown as McpServer, session);
+
+			const tool = server.registeredTools.get('wp_status');
+			assertDefined(tool);
+			const result = await tool.handler({});
+			const text = result.content[0].text;
+
+			expect(text).toContain('Plugin: v2.0.0');
+			expect(text).toContain('listener: disabled');
+			expect(text).toContain('WARNING:');
+			expect(text).toContain('Update the MCP server.');
+		});
+
+		it('does not show warning when protocolWarning is null', async () => {
+			const session = createMockSession({
+				state: 'connected',
+				user: fakeUser,
+				pluginInfo: {
+					version: '1.0.0',
+					protocolVersion: 1,
+					transport: 'sse',
+				},
+			});
+			registerStatusTools(server as unknown as McpServer, session);
+
+			const tool = server.registeredTools.get('wp_status');
+			assertDefined(tool);
+			const result = await tool.handler({});
+
+			expect(result.content[0].text).not.toContain('WARNING');
+		});
+
+		it('does not attempt install when plugin is already detected', async () => {
+			const session = createMockSession({
+				state: 'connected',
+				user: fakeUser,
+				pluginInfo: {
+					version: '1.0.0',
+					protocolVersion: 1,
+					transport: 'sse',
+				},
+			});
+			registerStatusTools(server as unknown as McpServer, session);
+
+			const tool = server.registeredTools.get('wp_status');
+			assertDefined(tool);
+			await tool.handler({});
+
+			expect(session.detectEditorPlugin).not.toHaveBeenCalled();
+		});
+
+		it('shows download URL when plugin cannot be detected or installed', async () => {
 			const session = createMockSession({
 				state: 'connected',
 				user: fakeUser,
@@ -142,7 +224,11 @@ describe('status tools', () => {
 			assertDefined(tool);
 			const result = await tool.handler({});
 
-			expect(result.content[0].text).toContain('Plugin: not detected');
+			expect(result.content[0].text).toContain('Plugin: not installed');
+			expect(result.content[0].text).toContain('Download from');
+			expect(result.content[0].text).toContain(
+				'github.com/pento/claudaborative-editing'
+			);
 		});
 
 		it('reads title from Y.Doc via getTitle(), not from getCurrentPost()', async () => {
