@@ -25,7 +25,7 @@ import type { Command } from '../types';
 
 const mockedCreateReduxStore = createReduxStore as jest.Mock;
 const mockedCreateRegistrySelector = createRegistrySelector as jest.Mock;
-const mockedApiFetch = apiFetch as unknown as jest.Mock;
+const mockedApiFetch = apiFetch as jest.MockedFunction<typeof apiFetch>;
 
 const storeConfig = mockedCreateReduxStore.mock.calls[0][1] as any;
 const { reducer, actions, selectors, resolvers } = storeConfig;
