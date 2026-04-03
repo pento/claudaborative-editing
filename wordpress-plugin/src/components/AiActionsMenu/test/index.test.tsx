@@ -6,7 +6,7 @@ jest.mock('@wordpress/data', () => ({
 	useDispatch: jest.fn(() => ({})),
 }));
 
-jest.mock('@wordpress/notices', () => ({ store: 'notices-store' }));
+jest.mock('@wordpress/notices', () => ({ store: { name: 'core/notices' } }));
 
 jest.mock('@wordpress/components', () => {
 	const { createElement } = require('react');
@@ -46,7 +46,7 @@ jest.mock('../../../hooks/use-mcp-status', () => ({
 
 jest.mock('../../../store', () => ({
 	__esModule: true,
-	default: 'ai-actions-store',
+	default: { name: 'wpce/ai-actions' },
 }));
 
 import { render, screen, fireEvent, act } from '@testing-library/react';
@@ -61,10 +61,10 @@ const mockedUseDispatch = useDispatch as jest.Mock;
 const mockedUseMcpStatus = useMcpStatus as jest.Mock;
 
 function mockUseSelect(
-	stores: Record<string, Record<string, (...args: any[]) => any>>
+	stores: Map<unknown, Record<string, (...args: any[]) => any>>
 ) {
 	mockedUseSelect.mockImplementation((selector: any) => {
-		const select = (s: unknown) => stores[s as string] || {};
+		const select = (s: unknown) => stores.get(s) ?? {};
 		return selector(select);
 	});
 }
@@ -78,13 +78,10 @@ const DEFAULT_AI_STORE = {
 
 function defaultStores(
 	aiStoreOverrides: Record<string, (...args: any[]) => any> = {}
-) {
-	return {
-		[aiActionsStore as unknown as string]: {
-			...DEFAULT_AI_STORE,
-			...aiStoreOverrides,
-		},
-	};
+): Map<unknown, Record<string, (...args: any[]) => any>> {
+	return new Map([
+		[aiActionsStore, { ...DEFAULT_AI_STORE, ...aiStoreOverrides }],
+	]);
 }
 
 describe('AiActionsMenu', () => {

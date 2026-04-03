@@ -5,11 +5,11 @@ jest.mock('@wordpress/data', () => ({
 	useDispatch: jest.fn(() => ({})),
 }));
 
-jest.mock('@wordpress/core-data', () => ({ store: 'core-data-store' }));
-jest.mock('@wordpress/notices', () => ({ store: 'notices-store' }));
+jest.mock('@wordpress/core-data', () => ({ store: { name: 'core' } }));
+jest.mock('@wordpress/notices', () => ({ store: { name: 'core/notices' } }));
 jest.mock('../../../store', () => ({
 	__esModule: true,
-	default: 'ai-actions-store',
+	default: { name: 'wpce/ai-actions' },
 }));
 
 jest.mock('@wordpress/components', () => {
@@ -72,10 +72,10 @@ window.MutationObserver = class {
 } as any;
 
 function mockUseSelect(
-	stores: Record<string, Record<string, (...args: any[]) => any>>
+	stores: Map<unknown, Record<string, (...args: any[]) => any>>
 ) {
 	mockedUseSelect.mockImplementation((selector: any) => {
-		const select = (s: unknown) => stores[s as string] || {};
+		const select = (s: unknown) => stores.get(s) ?? {};
 		return selector(select);
 	});
 }
@@ -118,14 +118,12 @@ describe('ConnectionStatus', () => {
 			cancel: jest.fn(),
 		});
 
-		mockUseSelect({
-			[aiActionsStore as unknown as string]: {
-				getCurrentPostId: () => 100,
-			},
-			[coreDataStore as unknown as string]: {
-				getEntityRecord: () => null,
-			},
-		});
+		mockUseSelect(
+			new Map<unknown, Record<string, (...args: any[]) => any>>([
+				[aiActionsStore, { getCurrentPostId: () => 100 }],
+				[coreDataStore, { getEntityRecord: () => null }],
+			])
+		);
 	});
 
 	afterEach(() => {
@@ -227,16 +225,24 @@ describe('ConnectionStatus', () => {
 			cancel: jest.fn(),
 		});
 
-		mockUseSelect({
-			[aiActionsStore as unknown as string]: {
-				getCurrentPostId: () => 100,
-			},
-			[coreDataStore as unknown as string]: {
-				getEntityRecord: () => ({
-					title: { rendered: 'My Other Post' },
-				}),
-			},
-		});
+		mockUseSelect(
+			new Map<unknown, Record<string, (...args: any[]) => any>>([
+				[
+					aiActionsStore,
+					{
+						getCurrentPostId: () => 100,
+					},
+				],
+				[
+					coreDataStore,
+					{
+						getEntityRecord: () => ({
+							title: { rendered: 'My Other Post' },
+						}),
+					},
+				],
+			])
+		);
 
 		await act(async () => render(<ConnectionStatus />));
 
