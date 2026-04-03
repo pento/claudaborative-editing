@@ -3725,5 +3725,33 @@ describe('SessionManager', () => {
 				);
 			});
 		});
+
+		describe('activateEditorPlugin()', () => {
+			it('sends POST to the plugin endpoint', async () => {
+				await connectSession(session);
+
+				mockRequest.mockResolvedValue({});
+
+				await session.activateEditorPlugin(
+					'claudaborative-editing/claudaborative-editing'
+				);
+
+				expect(mockRequest).toHaveBeenCalledWith(
+					'/wp/v2/plugins/claudaborative-editing/claudaborative-editing',
+					expect.objectContaining({
+						method: 'POST',
+						body: JSON.stringify({ status: 'active' }),
+					})
+				);
+			});
+
+			it('throws when not connected', async () => {
+				await expect(
+					session.activateEditorPlugin(
+						'claudaborative-editing/claudaborative-editing'
+					)
+				).rejects.toThrow('requires state');
+			});
+		});
 	});
 });

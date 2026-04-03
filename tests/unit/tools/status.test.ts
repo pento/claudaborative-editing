@@ -194,6 +194,34 @@ describe('status tools', () => {
 			expect(result.content[0].text).not.toContain('WARNING');
 		});
 
+		it('detects plugin on re-probe without install attempt', async () => {
+			const session = createMockSession({
+				state: 'connected',
+				user: fakeUser,
+				pluginInfo: null,
+			});
+			// Re-probe succeeds on first try
+			(
+				session.detectEditorPlugin as ReturnType<typeof vi.fn>
+			).mockResolvedValueOnce(true);
+			(session.getPluginInfo as ReturnType<typeof vi.fn>)
+				.mockReturnValueOnce(null)
+				.mockReturnValue({
+					version: '1.0.0',
+					protocolVersion: 1,
+					transport: 'sse',
+					protocolWarning: null,
+				});
+			registerStatusTools(server as unknown as McpServer, session);
+
+			const tool = server.registeredTools.get('wp_status');
+			assertDefined(tool);
+			const result = await tool.handler({});
+
+			expect(session.getEditorPluginInstallStatus).not.toHaveBeenCalled();
+			expect(result.content[0].text).toContain('Plugin: v1.0.0');
+		});
+
 		it('does not attempt install when plugin is already detected', async () => {
 			const session = createMockSession({
 				state: 'connected',
@@ -367,6 +395,53 @@ describe('status tools', () => {
 
 			expect(result.content[0].text).toContain('Plugin: not installed');
 			expect(result.content[0].text).toContain('Download from');
+		});
+
+		it('falls back to download URL when plugin list check fails (403)', async () => {
+			const session = createMockSession({
+				state: 'connected',
+				user: fakeUser,
+				pluginInfo: null,
+			});
+			(
+				session.getEditorPluginInstallStatus as ReturnType<typeof vi.fn>
+			).mockRejectedValue(new WordPressApiError('Forbidden', 403, ''));
+			registerStatusTools(server as unknown as McpServer, session);
+
+			const tool = server.registeredTools.get('wp_status');
+			assertDefined(tool);
+			const result = await tool.handler({});
+
+			expect(result.content[0].text).toContain('Plugin: not installed');
+			expect(result.content[0].text).toContain('Download from');
+		});
+
+		it('falls back to download URL on non-404 install error', async () => {
+			const session = createMockSession({
+				state: 'connected',
+				user: fakeUser,
+				pluginInfo: null,
+			});
+			(
+				session.getEditorPluginInstallStatus as ReturnType<typeof vi.fn>
+			).mockResolvedValue({
+				installed: false,
+				active: false,
+				version: null,
+				pluginFile: null,
+			});
+			(
+				session.installEditorPlugin as ReturnType<typeof vi.fn>
+			).mockRejectedValue(
+				new WordPressApiError('Internal Server Error', 500, '')
+			);
+			registerStatusTools(server as unknown as McpServer, session);
+
+			const tool = server.registeredTools.get('wp_status');
+			assertDefined(tool);
+			const result = await tool.handler({});
+
+			expect(result.content[0].text).toContain('Plugin: not installed');
 		});
 
 		it('reads title from Y.Doc via getTitle(), not from getCurrentPost()', async () => {
