@@ -34,7 +34,7 @@
 	"packageManager": "npm@11.9.0",
 	"scripts": {
 		"build": "tsup",
-		"build:all": "npm run build && npm run generate:php-defs && npm --prefix wordpress-plugin run build",
+		"build:all": "npm run build && npm --prefix wordpress-plugin run build",
 		"check:php-defs": "npm run generate:php-defs && git diff --exit-code wordpress-plugin/includes/class-command-defs.php",
 		"dev": "tsup --watch",
 		"generate:php-defs": "node bin/generate-php-defs.js",
