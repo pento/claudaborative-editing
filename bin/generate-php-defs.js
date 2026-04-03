@@ -3,7 +3,6 @@
  * from shared/commands.ts.
  *
  * Run: npm run generate:php-defs
- * Requires: Node 22.6+ (uses --experimental-strip-types for .ts imports)
  */
 
 import { writeFileSync } from 'fs';
@@ -12,7 +11,6 @@ import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// tsx handles the TS import
 const { COMMAND_SLUGS, TERMINAL_STATUSES, VALID_TRANSITIONS } =
 	await import('../shared/commands.ts');
 

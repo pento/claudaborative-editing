@@ -22,7 +22,7 @@
 		"typescript": "^6.0.2"
 	},
 	"scripts": {
-		"prebuild": "node --experimental-strip-types --no-warnings=ExperimentalWarning ../bin/generate-php-defs.js",
+		"prebuild": "node ../bin/generate-php-defs.js",
 		"build": "wp-scripts build",
 		"start": "wp-scripts start",
 		"pretest:php": "npx wp-env --config .wp-env.test.json start",

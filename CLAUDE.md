@@ -32,7 +32,7 @@ Claude Code  <--stdio-->  MCP Server (Node.js)  <--HTTP polling-->  WordPress
 ### Source Layout
 
 - `shared/commands.ts` — Shared command definitions (slugs, args, statuses, transitions) consumed by MCP server, WP plugin TS, and WP plugin PHP (via generated file)
-- `bin/generate-php-defs.js` — Generates `wordpress-plugin/includes/class-command-defs.php` from `shared/commands.ts`. Requires Node 22.6+ (`--experimental-strip-types`). Run: `npm run generate:php-defs`
+- `bin/generate-php-defs.js` — Generates `wordpress-plugin/includes/class-command-defs.php` from `shared/commands.ts`. Run: `npm run generate:php-defs`
 - `src/index.ts` — Entry point: CLI flags (`--version`, `--help`, `setup`) then MCP server
 - `src/server.ts` — MCP server setup, tool/prompt registration, version export
 - `src/cli/setup.ts` — Interactive setup wizard (browser-based auth, multi-client config writing)
@@ -360,7 +360,7 @@ cd wordpress-plugin && npm run test:php # PHPUnit tests (requires wp-env)
 - `includes/class-sse-handler.php` — SSE streaming logic for real-time command delivery
 - `includes/class-command-defs.php` — Auto-generated PHP class with command slugs, status transitions, and terminal statuses (from `shared/commands.ts` via `bin/generate-php-defs.js`). Committed to git for standalone plugin distribution.
 - `src/` — Gutenberg editor plugin source (TypeScript, compiled by `@wordpress/scripts`)
-- `src/store/types.ts` — TypeScript interfaces (`Command`, `McpStatus`, `StoreState`, etc.) — `CommandPrompt` and `CommandStatus` re-exported from `shared/commands.ts`
+- `src/store/types.ts` — TypeScript interfaces (`Command`, `McpStatus`, `StoreState`, etc.)
 - `src/utils/command-i18n.ts` — WordPress i18n wrapper for command labels/descriptions/progress strings. Uses literal `__()` calls for makepot extraction.
 - `src/store/index.ts` — `@wordpress/data` store (`wpce/ai-actions`) for MCP status and command state
 - `src/hooks/use-mcp-status.ts` — Hook for MCP connection status polling (5s interval)
