@@ -954,13 +954,13 @@ class RestControllerTest extends \WP_UnitTestCase {
 
 		$command_id = $this->create_command_directly();
 
-		// Set an empty date string directly in the database — strtotime('')
-		// returns false on all PHP versions, exercising the fallback path.
+		// Set an unparseable date string directly in the database —
+		// strtotime('not-a-date') returns false on all PHP versions.
 		$wpdb->update(
 			$wpdb->posts,
 			[
-				'post_date_gmt'     => '',
-				'post_modified_gmt' => '',
+				'post_date_gmt'     => 'not-a-date',
+				'post_modified_gmt' => 'not-a-date',
 			],
 			[ 'ID' => $command_id ],
 			[ '%s', '%s' ],
