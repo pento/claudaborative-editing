@@ -67,38 +67,38 @@
 		]
 	},
 	"dependencies": {
-		"@modelcontextprotocol/sdk": "^1.27.1",
-		"@wordpress/block-serialization-default-parser": "^5.42.0",
+		"@modelcontextprotocol/sdk": "^1.29.0",
+		"@wordpress/block-serialization-default-parser": "^5.43.0",
 		"lib0": "0.2.99",
 		"y-protocols": "^1.0.7",
 		"yjs": "13.6.29",
-		"zod": "^3.25.76"
+		"zod": "^4.3.6"
 	},
 	"devDependencies": {
 		"@babel/core": "^7.29.0",
 		"@eslint/eslintrc": "^2.1.4",
 		"@eslint/js": "^8.57.1",
-		"@playwright/test": "^1.58.2",
+		"@playwright/test": "^1.59.1",
 		"@types/eslint__eslintrc": "^2.1.2",
 		"@types/eslint__js": "^8.42.3",
-		"@types/node": "^22.19.15",
-		"@vitest/coverage-v8": "^4.1.0",
-		"@wordpress/e2e-test-utils-playwright": "^1.42.0",
-		"@wordpress/env": "^11.2.0",
-		"@wordpress/eslint-plugin": "^24.4.0",
-		"@wordpress/prettier-config": "^4.42.0",
+		"@types/node": "^25.5.2",
+		"@vitest/coverage-v8": "^4.1.2",
+		"@wordpress/e2e-test-utils-playwright": "^1.43.0",
+		"@wordpress/env": "^11.3.0",
+		"@wordpress/eslint-plugin": "^24.5.0",
+		"@wordpress/prettier-config": "^4.43.0",
 		"eslint": "^8.57.1",
 		"eslint-config-prettier": "^10.1.8",
-		"eslint-plugin-package-json": "^0.91.0",
+		"eslint-plugin-package-json": "^0.91.1",
 		"globals": "^17.4.0",
 		"husky": "^9.1.7",
 		"lint-staged": "^16.4.0",
 		"markdownlint-cli2": "^0.22.0",
 		"prettier": "^3.8.1",
 		"tsup": "^8.5.1",
-		"typescript": "^5.9.3",
-		"typescript-eslint": "^8.57.1",
-		"vitest": "^4.1.0"
+		"typescript": "~6.0.2",
+		"typescript-eslint": "^8.58.0",
+		"vitest": "^4.1.2"
 	},
 	"overrides": {
 		"@wordpress/e2e-test-utils-playwright": {
