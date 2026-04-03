@@ -26,6 +26,6 @@
 			"#blocks/*": ["./src/blocks/*"]
 		}
 	},
-	"include": ["src/**/*", "tests/**/*", "*.config.*"],
+	"include": ["src/**/*", "shared/**/*", "tests/**/*", "*.config.*"],
 	"exclude": ["node_modules", "dist"]
 }

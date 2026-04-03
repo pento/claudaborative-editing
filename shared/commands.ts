@@ -1,0 +1,124 @@
+/**
+ * Shared command definitions.
+ *
+ * Single source of truth for command slugs, arguments, statuses, and metadata.
+ * Consumed by: MCP server (TS), WP plugin (TS), WP plugin (PHP via generated file).
+ */
+
+// --- Command types ---
+
+export type CommandSlug =
+	| 'proofread'
+	| 'review'
+	| 'respond-to-notes'
+	| 'respond-to-note'
+	| 'edit'
+	| 'translate';
+
+export interface CommandArgDef {
+	type: 'string' | 'number';
+	required: boolean;
+	description: string;
+}
+
+export interface CommandDefinition {
+	slug: CommandSlug;
+	label: string;
+	description: string;
+	progressLabel: string;
+	args: Record<string, CommandArgDef>;
+}
+
+// --- Command definitions ---
+
+export const COMMANDS: Record<CommandSlug, CommandDefinition> = {
+	proofread: {
+		slug: 'proofread',
+		label: 'Proofread',
+		description: 'Fix grammar, spelling, and punctuation',
+		progressLabel: 'Proofreading\u2026',
+		args: {},
+	},
+	review: {
+		slug: 'review',
+		label: 'Review',
+		description: 'Leave editorial notes on the post',
+		progressLabel: 'Reviewing\u2026',
+		args: {},
+	},
+	'respond-to-notes': {
+		slug: 'respond-to-notes',
+		label: 'Address All Notes',
+		description: 'Address existing editorial notes',
+		progressLabel: 'Responding to notes\u2026',
+		args: {},
+	},
+	'respond-to-note': {
+		slug: 'respond-to-note',
+		label: 'Address This Note',
+		description: 'Address a single editorial note',
+		progressLabel: 'Responding to note\u2026',
+		args: {
+			noteId: {
+				type: 'number',
+				required: true,
+				description: 'The ID of the note to address',
+			},
+		},
+	},
+	edit: {
+		slug: 'edit',
+		label: 'Edit',
+		description: 'Edit with an optional editing focus',
+		progressLabel: 'Editing\u2026',
+		args: {
+			editingFocus: {
+				type: 'string',
+				required: false,
+				description:
+					'Type of editing: tone, structure, expand, condense, rewrite, or custom',
+			},
+		},
+	},
+	translate: {
+		slug: 'translate',
+		label: 'Translate',
+		description: 'Translate post content into another language',
+		progressLabel: 'Translating\u2026',
+		args: {
+			language: {
+				type: 'string',
+				required: false,
+				description: 'Target language',
+			},
+		},
+	},
+};
+
+export const COMMAND_SLUGS: CommandSlug[] = Object.keys(
+	COMMANDS
+) as CommandSlug[];
+
+// --- Command statuses ---
+
+export type CommandStatus =
+	| 'pending'
+	| 'running'
+	| 'completed'
+	| 'failed'
+	| 'expired'
+	| 'cancelled';
+
+export const TERMINAL_STATUSES: readonly CommandStatus[] = [
+	'completed',
+	'failed',
+	'cancelled',
+	'expired',
+] as const;
+
+export const VALID_TRANSITIONS: Readonly<
+	Record<string, readonly CommandStatus[]>
+> = {
+	pending: ['running'],
+	running: ['completed', 'failed'],
+} as const;

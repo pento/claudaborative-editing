@@ -27,6 +27,7 @@ import { store as noticesStore } from '@wordpress/notices';
  */
 import { useMcpStatus } from '../../hooks/use-mcp-status';
 import { useCommands } from '../../hooks/use-commands';
+import { getCommandProgressLabel } from '../../utils/command-i18n';
 import aiActionsStore from '../../store';
 import SparkleIcon from '../SparkleIcon';
 
@@ -144,25 +145,7 @@ export default function ConnectionStatus() {
 		}
 
 		if (activeCommand) {
-			switch (activeCommand.prompt) {
-				case 'proofread':
-					statusLines.push(
-						__('Proofreading…', 'claudaborative-editing')
-					);
-					break;
-				case 'review':
-					statusLines.push(
-						__('Reviewing…', 'claudaborative-editing')
-					);
-					break;
-				case 'respond-to-notes':
-					statusLines.push(
-						__('Responding to notes…', 'claudaborative-editing')
-					);
-					break;
-				default:
-					statusLines.push(__('Working…', 'claudaborative-editing'));
-			}
+			statusLines.push(getCommandProgressLabel(activeCommand.prompt));
 		}
 	}
 

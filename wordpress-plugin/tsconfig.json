@@ -13,8 +13,11 @@
 		"isolatedModules": true,
 		"noUnusedLocals": true,
 		"noUnusedParameters": true,
-		"noFallthroughCasesInSwitch": true
+		"noFallthroughCasesInSwitch": true,
+		"paths": {
+			"#shared/*": ["../shared/*"]
+		}
 	},
-	"include": ["src/**/*"],
+	"include": ["src/**/*", "../shared/**/*"],
 	"exclude": ["node_modules", "src/**/test/**"]
 }

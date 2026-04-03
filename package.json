@@ -34,8 +34,10 @@
 	"packageManager": "npm@11.9.0",
 	"scripts": {
 		"build": "tsup",
-		"build:all": "npm run build && npm --prefix wordpress-plugin run build",
+		"build:all": "npm run build && npm run generate:php-defs && npm --prefix wordpress-plugin run build",
+		"check:php-defs": "npm run generate:php-defs && git diff --exit-code wordpress-plugin/includes/class-command-defs.php",
 		"dev": "tsup --watch",
+		"generate:php-defs": "node --experimental-strip-types --no-warnings=ExperimentalWarning bin/generate-php-defs.js",
 		"lint": "ESLINT_USE_FLAT_CONFIG=true eslint --max-warnings 0 . && npm --prefix wordpress-plugin run lint:style && markdownlint-cli2 && prettier --check -u .",
 		"lint:fix": "ESLINT_USE_FLAT_CONFIG=true eslint --fix --max-warnings 0 . && npm --prefix wordpress-plugin run lint:style:fix && markdownlint-cli2 --fix && prettier --write -u .",
 		"prepare": "husky",

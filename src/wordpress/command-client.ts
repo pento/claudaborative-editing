@@ -7,6 +7,7 @@
  */
 
 import type { WordPressApiClient } from './api-client.js';
+import type { CommandSlug, CommandStatus } from '../../shared/commands.js';
 
 // --- Types ---
 
@@ -20,9 +21,9 @@ export interface PluginStatus {
 export interface Command {
 	id: number;
 	post_id: number;
-	prompt: string;
+	prompt: CommandSlug;
 	arguments: Record<string, unknown>;
-	status: string;
+	status: CommandStatus;
 	user_id: number;
 	claimed_by: number | null;
 	message: string | null;

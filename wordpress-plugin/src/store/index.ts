@@ -19,10 +19,9 @@ import { store as editorStore } from '@wordpress/editor';
 /**
  * Internal dependencies
  */
+import { TERMINAL_STATUSES, type CommandSlug } from '#shared/commands';
 import type {
 	Command,
-	CommandPrompt,
-	CommandStatus,
 	StoreState,
 	StoreAction,
 	StatusApiResponse,
@@ -47,16 +46,6 @@ export const STORE_NAME = 'wpce/ai-actions' as const;
  * Maximum number of commands to keep in history.
  */
 const MAX_HISTORY = 10;
-
-/**
- * Terminal command statuses that indicate the command is no longer active.
- */
-const TERMINAL_STATUSES: readonly CommandStatus[] = [
-	'completed',
-	'failed',
-	'cancelled',
-	'expired',
-];
 
 /**
  * Default state for the store.
@@ -246,7 +235,7 @@ const actions = {
 	 */
 	submitCommand:
 		(
-			prompt: CommandPrompt,
+			prompt: CommandSlug,
 			postId: number,
 			args: Record<string, unknown> = {}
 		) =>
