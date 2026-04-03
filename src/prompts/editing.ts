@@ -9,14 +9,12 @@ export function registerEditingPrompts(
 	server.registerPrompt(
 		'edit',
 		{
-			description:
-				'Edit a WordPress post. Optionally specify an editing focus (tone, structure, expand, condense, rewrite, etc.).',
+			description: 'Edit a WordPress post with a specific editing focus.',
 			argsSchema: {
 				editingFocus: z
 					.string()
-					.optional()
 					.describe(
-						'Type of editing: "tone", "structure", "expand", "condense", "rewrite", or a custom focus'
+						'A brief description of the editing focus or intent (e.g., "Make it more formal", "Improve the flow", "Condense the intro")'
 					),
 			},
 		},
@@ -55,9 +53,7 @@ export function registerEditingPrompts(
 
 			// state === 'editing'
 			const postContent = session.readPost();
-			const focusInstruction = editingFocus
-				? `Focus on: ${editingFocus}`
-				: "Ask me what kind of editing I'd like (e.g., tone, structure, expand, condense, rewrite).";
+			const focusInstruction = `Focus on: ${editingFocus}`;
 
 			return {
 				description: `Edit "${session.getTitle()}"`,

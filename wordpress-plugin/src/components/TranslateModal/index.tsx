@@ -10,7 +10,7 @@
  */
 import { __ } from '@wordpress/i18n';
 import { Modal, TextControl, Button } from '@wordpress/components';
-import { useState } from '@wordpress/element';
+import { useState, type KeyboardEvent } from '@wordpress/element';
 
 import './style.scss';
 
@@ -63,7 +63,7 @@ export default function TranslateModal({
 				hideLabelFromVision
 				value={value}
 				onChange={setValue}
-				onKeyDown={(e: React.KeyboardEvent) => {
+				onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
 					if (e.key === 'Enter') {
 						handleSubmit();
 					}

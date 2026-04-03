@@ -5,22 +5,6 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { assertDefined } from '../../test-utils.js';
 
 describe('translate', () => {
-	describe('when language is empty', () => {
-		it('asks the user what language they want', async () => {
-			const server = createMockServer();
-			const session = createMockSession({ state: 'connected' });
-			registerAuthoringPrompts(server as unknown as McpServer, session);
-
-			const prompt = server.registeredPrompts.get('translate');
-			assertDefined(prompt);
-			const result = await prompt.handler({ language: '' });
-
-			expect(result.messages[0].content.text).toContain(
-				'Ask me what language'
-			);
-		});
-	});
-
 	describe('when disconnected', () => {
 		it('instructs to connect first', async () => {
 			const server = createMockServer();

@@ -97,12 +97,9 @@ export default function AiActionsMenu() {
 					popoverProps={{ placement: 'bottom-end' }}
 				>
 					{({ onClose }: { onClose: () => void }) => {
-						const handleSubmit = (
-							prompt: CommandSlug,
-							args?: Record<string, unknown>
-						): void => {
+						const handleSubmit = (prompt: CommandSlug): void => {
 							if (postId !== null) {
-								submitCommand(prompt, postId, args);
+								submitCommand(prompt, postId);
 							}
 							onClose();
 						};

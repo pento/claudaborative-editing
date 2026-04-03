@@ -332,21 +332,13 @@ describe('AiActionsMenu', () => {
 	it('click Proofread calls submitCommand', () => {
 		render(<AiActionsMenu />);
 		fireEvent.click(screen.getByText('Proofread'));
-		expect(mockSubmitCommand).toHaveBeenCalledWith(
-			'proofread',
-			123,
-			undefined
-		);
+		expect(mockSubmitCommand).toHaveBeenCalledWith('proofread', 123);
 	});
 
 	it('click Review calls submitCommand', () => {
 		render(<AiActionsMenu />);
 		fireEvent.click(screen.getByText('Review'));
-		expect(mockSubmitCommand).toHaveBeenCalledWith(
-			'review',
-			123,
-			undefined
-		);
+		expect(mockSubmitCommand).toHaveBeenCalledWith('review', 123);
 	});
 
 	it('renders Edit and Translate menu items', () => {

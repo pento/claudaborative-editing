@@ -1,15 +1,7 @@
 jest.mock('@wordpress/components', () => {
 	const { createElement } = require('react');
 	return {
-		Modal: ({
-			children,
-			title,
-			onRequestClose,
-		}: {
-			children: React.ReactNode;
-			title: string;
-			onRequestClose: () => void;
-		}) =>
+		Modal: ({ children, title, onRequestClose }: any) =>
 			createElement(
 				'div',
 				{ 'data-testid': 'modal', 'aria-label': title },
@@ -23,36 +15,15 @@ jest.mock('@wordpress/components', () => {
 				),
 				children
 			),
-		TextControl: ({
-			value,
-			onChange,
-			label,
-			onKeyDown,
-		}: {
-			value: string;
-			onChange: (v: string) => void;
-			label: string;
-			onKeyDown?: (e: React.KeyboardEvent) => void;
-		}) =>
+		TextControl: ({ value, onChange, label, onKeyDown }: any) =>
 			createElement('input', {
 				'data-testid': 'text-input',
 				'aria-label': label,
 				value,
-				onChange: (e: React.ChangeEvent<HTMLInputElement>) =>
-					onChange(e.target.value),
+				onChange: (e: any) => onChange(e.target.value),
 				onKeyDown,
 			}),
-		Button: ({
-			children,
-			disabled,
-			onClick,
-			variant,
-		}: {
-			children: React.ReactNode;
-			disabled?: boolean;
-			onClick?: () => void;
-			variant?: string;
-		}) =>
+		Button: ({ children, disabled, onClick, variant }: any) =>
 			createElement(
 				'button',
 				{

@@ -13,7 +13,6 @@ export function registerAuthoringPrompts(
 			argsSchema: {
 				language: z
 					.string()
-					.optional()
 					.describe(
 						'Target language (e.g., "Spanish", "French", "Japanese", "zh-CN")'
 					),
@@ -31,21 +30,6 @@ export function registerAuthoringPrompts(
 							content: {
 								type: 'text' as const,
 								text: 'I want to translate a WordPress post. Please connect to WordPress first using wp_connect, then open a post with wp_open_post.',
-							},
-						},
-					],
-				};
-			}
-
-			if (!language?.trim()) {
-				return {
-					description: 'Translate a WordPress post',
-					messages: [
-						{
-							role: 'user' as const,
-							content: {
-								type: 'text' as const,
-								text: "I want to translate a WordPress post. Ask me what language I'd like to translate it into.",
 							},
 						},
 					],
