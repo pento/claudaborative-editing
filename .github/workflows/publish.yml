@@ -28,37 +28,37 @@ jobs:
             - run: npm test
             - run: npm publish
 
-    wporg-deploy:
-        name: Deploy to WordPress.org
-        runs-on: ubuntu-latest
-        needs: [publish]
+    # wporg-deploy:
+    #     name: Deploy to WordPress.org
+    #     runs-on: ubuntu-latest
+    #     needs: [publish]
 
-        steps:
-            - uses: actions/checkout@v6
+    #     steps:
+    #         - uses: actions/checkout@v6
 
-            - uses: actions/setup-node@v6
-              with:
-                  node-version: 24
-                  cache: npm
-                  cache-dependency-path: wordpress-plugin/package-lock.json
+    #         - uses: actions/setup-node@v6
+    #           with:
+    #               node-version: 24
+    #               cache: npm
+    #               cache-dependency-path: wordpress-plugin/package-lock.json
 
-            - name: Install npm dependencies
-              run: npm ci
-              working-directory: wordpress-plugin
+    #         - name: Install npm dependencies
+    #           run: npm ci
+    #           working-directory: wordpress-plugin
 
-            - name: Build
-              run: npm run build
-              working-directory: wordpress-plugin
+    #         - name: Build
+    #           run: npm run build
+    #           working-directory: wordpress-plugin
 
-            - name: Deploy to WordPress.org
-              uses: 10up/action-wordpress-plugin-deploy@stable
-              env:
-                  SVN_USERNAME: ${{ secrets.SVN_USERNAME }}
-                  SVN_PASSWORD: ${{ secrets.SVN_PASSWORD }}
-              with:
-                  BUILD_DIR: wordpress-plugin
-                  ASSETS_DIR: wordpress-plugin/.wordpress-org
-                  SLUG: claudaborative-editing
+    #         - name: Deploy to WordPress.org
+    #           uses: 10up/action-wordpress-plugin-deploy@stable
+    #           env:
+    #               SVN_USERNAME: ${{ secrets.SVN_USERNAME }}
+    #               SVN_PASSWORD: ${{ secrets.SVN_PASSWORD }}
+    #           with:
+    #               BUILD_DIR: wordpress-plugin
+    #               ASSETS_DIR: wordpress-plugin/.wordpress-org
+    #               SLUG: claudaborative-editing
 
     plugin-release:
         name: Build Plugin & Create Release
@@ -76,8 +76,15 @@ jobs:
                   cache: npm
                   cache-dependency-path: wordpress-plugin/package-lock.json
 
+            - name: Install root npm dependencies
+              run: npm ci
+
             - name: Install npm dependencies
               run: npm ci
+              working-directory: wordpress-plugin
+
+            - name: Install Composer dependencies
+              run: composer install --no-interaction --prefer-dist
               working-directory: wordpress-plugin
 
             - name: Build
@@ -97,7 +104,6 @@ jobs:
               run: wp dist-archive --plugin-dirname=claudaborative-editing wordpress-plugin claudaborative-editing-plugin.zip
 
             - name: Extract changelog for this version
-              id: changelog
               run: |
                   VERSION="${GITHUB_REF_NAME#v}"
                   NOTES=$(awk -v ver="$VERSION" '
