@@ -305,6 +305,7 @@ export class WordPressApiClient {
 				type: 'note',
 				status: 'hold',
 				parent: data.parent ?? 0,
+				meta: { wpce_source: 'mcp' },
 			}),
 		});
 	}
