@@ -1,6 +1,6 @@
 {
 	"name": "claudaborative-editing",
-	"version": "0.2.0",
+	"version": "0.3.0",
 	"description": "MCP server for collaborative WordPress post editing via Yjs CRDT",
 	"type": "module",
 	"main": "dist/index.js",
@@ -63,7 +63,7 @@
 		"wordpress-plugin/src/**/*.scss": "npm --prefix wordpress-plugin run lint:style:fix",
 		"wordpress-plugin/**/*.php": [
 			"bash -c 'cd wordpress-plugin && (vendor/bin/phpcbf --no-cache || test $? -eq 1)'",
-			"bash -c 'cd wordpress-plugin && vendor/bin/phpstan analyse --no-progress --memory-limit=512M'"
+			"bash -c 'cd wordpress-plugin && vendor/bin/phpstan analyse --no-progress --memory-limit=1024M'"
 		]
 	},
 	"dependencies": {
