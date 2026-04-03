@@ -102,6 +102,22 @@ describe('WordPressApiClient', () => {
 		});
 	});
 
+	describe('createUrl', () => {
+		it('constructs full site URL from path', () => {
+			const client = createClient('https://example.com');
+			expect(client.createUrl('/wp-admin/plugins.php')).toBe(
+				'https://example.com/wp-admin/plugins.php'
+			);
+		});
+
+		it('handles site URL with trailing slash stripped', () => {
+			const client = createClient('https://example.com/');
+			expect(client.createUrl('/wp-admin')).toBe(
+				'https://example.com/wp-admin'
+			);
+		});
+	});
+
 	describe('validateConnection', () => {
 		it('returns the current user on success', async () => {
 			fetchMock.mockResolvedValue(mockResponse(fakeUser));

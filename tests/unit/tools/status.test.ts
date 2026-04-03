@@ -8,6 +8,7 @@ import {
 	fakeCollaborator,
 } from './helpers.js';
 import { assertDefined } from '../../test-utils.js';
+import { WordPressApiError } from '../../../src/wordpress/api-client.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 vi.mock('../../../src/wordpress/api-client.js', () => {
@@ -229,6 +230,143 @@ describe('status tools', () => {
 			expect(result.content[0].text).toContain(
 				'github.com/pento/claudaborative-editing'
 			);
+		});
+
+		it('activates installed-but-inactive plugin and detects it', async () => {
+			const session = createMockSession({
+				state: 'connected',
+				user: fakeUser,
+				pluginInfo: null,
+			});
+			// detectEditorPlugin: first call returns false, second (after activate) returns true
+			const detectMock = session.detectEditorPlugin as ReturnType<
+				typeof vi.fn
+			>;
+			detectMock.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+			// Plugin is installed but inactive
+			(
+				session.getEditorPluginInstallStatus as ReturnType<typeof vi.fn>
+			).mockResolvedValue({
+				installed: true,
+				active: false,
+				version: '1.0.0',
+				pluginFile: 'claudaborative-editing/claudaborative-editing',
+			});
+			// After activation + detection, getPluginInfo returns data
+			(session.getPluginInfo as ReturnType<typeof vi.fn>)
+				.mockReturnValueOnce(null) // first check
+				.mockReturnValue({
+					version: '1.0.0',
+					protocolVersion: 1,
+					transport: 'sse',
+					protocolWarning: null,
+				}); // after detection
+			registerStatusTools(server as unknown as McpServer, session);
+
+			const tool = server.registeredTools.get('wp_status');
+			assertDefined(tool);
+			const result = await tool.handler({});
+			const text = result.content[0].text;
+
+			expect(session.activateEditorPlugin).toHaveBeenCalledWith(
+				'claudaborative-editing/claudaborative-editing'
+			);
+			expect(text).toContain('Plugin: v1.0.0');
+			expect(text).not.toContain('not installed');
+		});
+
+		it('shows inactive message when activation fails', async () => {
+			const session = createMockSession({
+				state: 'connected',
+				user: fakeUser,
+				pluginInfo: null,
+			});
+			(
+				session.getEditorPluginInstallStatus as ReturnType<typeof vi.fn>
+			).mockResolvedValue({
+				installed: true,
+				active: false,
+				version: '1.0.0',
+				pluginFile: 'claudaborative-editing/claudaborative-editing',
+			});
+			(
+				session.activateEditorPlugin as ReturnType<typeof vi.fn>
+			).mockRejectedValue(new WordPressApiError('Forbidden', 403, ''));
+			registerStatusTools(server as unknown as McpServer, session);
+
+			const tool = server.registeredTools.get('wp_status');
+			assertDefined(tool);
+			const result = await tool.handler({});
+
+			expect(result.content[0].text).toContain(
+				'Plugin: installed but inactive'
+			);
+		});
+
+		it('installs plugin from wordpress.org when not installed', async () => {
+			const session = createMockSession({
+				state: 'connected',
+				user: fakeUser,
+				pluginInfo: null,
+			});
+			const detectMock = session.detectEditorPlugin as ReturnType<
+				typeof vi.fn
+			>;
+			// First detect fails, second (after install) succeeds
+			detectMock.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+			(
+				session.getEditorPluginInstallStatus as ReturnType<typeof vi.fn>
+			).mockResolvedValue({
+				installed: false,
+				active: false,
+				version: null,
+				pluginFile: null,
+			});
+			(session.getPluginInfo as ReturnType<typeof vi.fn>)
+				.mockReturnValueOnce(null)
+				.mockReturnValue({
+					version: '1.0.0',
+					protocolVersion: 1,
+					transport: 'sse',
+					protocolWarning: null,
+				});
+			registerStatusTools(server as unknown as McpServer, session);
+
+			const tool = server.registeredTools.get('wp_status');
+			assertDefined(tool);
+			const result = await tool.handler({});
+			const text = result.content[0].text;
+
+			expect(session.installEditorPlugin).toHaveBeenCalledOnce();
+			expect(text).toContain('Plugin: v1.0.0');
+			expect(text).not.toContain('not installed');
+		});
+
+		it('falls back to download URL when wordpress.org install returns 404', async () => {
+			const session = createMockSession({
+				state: 'connected',
+				user: fakeUser,
+				pluginInfo: null,
+			});
+			(
+				session.getEditorPluginInstallStatus as ReturnType<typeof vi.fn>
+			).mockResolvedValue({
+				installed: false,
+				active: false,
+				version: null,
+				pluginFile: null,
+			});
+			(
+				session.installEditorPlugin as ReturnType<typeof vi.fn>
+			).mockRejectedValue(new WordPressApiError('Not Found', 404, ''));
+			registerStatusTools(server as unknown as McpServer, session);
+
+			const tool = server.registeredTools.get('wp_status');
+			assertDefined(tool);
+			const result = await tool.handler({});
+
+			expect(result.content[0].text).toContain('Plugin: not installed');
+			expect(result.content[0].text).toContain('Download from');
 		});
 
 		it('reads title from Y.Doc via getTitle(), not from getCurrentPost()', async () => {

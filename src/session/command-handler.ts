@@ -69,7 +69,9 @@ export class CommandHandler {
 	/**
 	 * Detect the WordPress editor plugin and start listening for commands.
 	 *
-	 * @returns true if the plugin was detected and listening started.
+	 * @returns true if the plugin was detected. When the protocol version is
+	 *   incompatible, returns true (plugin detected) but does not start the
+	 *   command listener — check `getProtocolWarning()` for details.
 	 * @throws if the plugin status request fails for reasons other than 404.
 	 */
 	async start(apiClient: WordPressApiClient): Promise<boolean> {

@@ -1806,8 +1806,8 @@ export class SessionManager {
 	async activateEditorPlugin(pluginFile: string): Promise<void> {
 		this.requireState('connected', 'editing');
 
-		// WordPress REST API route uses the literal plugin path (folder/file.php)
-		// as a path segment — the slash must NOT be encoded.
+		// WordPress REST API route uses the plugin identifier (folder/file,
+		// without .php extension) as a path segment.
 		await this.apiClient.request(`/wp/v2/plugins/${pluginFile}`, {
 			method: 'POST',
 			body: JSON.stringify({ status: 'active' }),
