@@ -63,7 +63,6 @@ class SSEHandlerTest extends \WP_UnitTestCase {
 	 */
 	private static function invoke_static( $method, $args = [] ) {
 		$ref = new \ReflectionMethod( SSE_Handler::class, $method );
-		$ref->setAccessible( true );
 		return $ref->invokeArgs( null, $args );
 	}
 
