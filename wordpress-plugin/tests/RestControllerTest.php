@@ -911,4 +911,81 @@ class RestControllerTest extends \WP_UnitTestCase {
 
 		$this->assertSame( 403, $response->get_status() );
 	}
+
+	// -------------------------------------------------------------------------
+	// Edge cases: is_expired(), validate_status_transition(), format_date()
+	// -------------------------------------------------------------------------
+
+	/**
+	 * A pending command with no expires_at meta should not be treated as expired.
+	 */
+	public function test_update_command_without_expires_at_not_expired() {
+		$command_id = $this->create_command_directly();
+
+		// Remove the expires_at meta to exercise the is_expired() false path.
+		delete_post_meta( $command_id, 'wpce_expires_at' );
+
+		$request = new \WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
+		$request->set_body_params( [ 'status' => 'running' ] );
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'running', $response->get_data()['status'] );
+	}
+
+	/**
+	 * Transitioning from an unknown status should return 409.
+	 */
+	public function test_update_command_with_unknown_current_status() {
+		$command_id = $this->create_command_directly( [ 'status' => 'bogus_status' ] );
+
+		$request = new \WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
+		$request->set_body_params( [ 'status' => 'running' ] );
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 409, $response->get_status() );
+	}
+
+	/**
+	 * A command with an invalid MySQL date should still format without error.
+	 */
+	public function test_command_formatter_handles_invalid_date() {
+		global $wpdb;
+
+		$command_id = $this->create_command_directly();
+
+		// Set an invalid date directly in the database.
+		$wpdb->update(
+			$wpdb->posts,
+			[
+				'post_date_gmt'     => '0000-00-00 00:00:00',
+				'post_modified_gmt' => '0000-00-00 00:00:00',
+			],
+			[ 'ID' => $command_id ],
+			[ '%s', '%s' ],
+			[ '%d' ]
+		);
+		clean_post_cache( $command_id );
+
+		$command = get_post( $command_id );
+		$data    = Command_Formatter::format( $command );
+
+		// Should not error; the fallback produces epoch timestamps.
+		$this->assertArrayHasKey( 'created_at', $data );
+		$this->assertArrayHasKey( 'updated_at', $data );
+		$this->assertSame( '1970-01-01T00:00:00Z', $data['created_at'] );
+		$this->assertSame( '1970-01-01T00:00:00Z', $data['updated_at'] );
+	}
+
+	/**
+	 * The status endpoint should return a version string.
+	 */
+	public function test_status_returns_version_string() {
+		$request  = new \WP_REST_Request( 'GET', '/wpce/v1/status' );
+		$response = rest_get_server()->dispatch( $request );
+
+		$data = $response->get_data();
+		$this->assertIsString( $data['version'] );
+		$this->assertNotEmpty( $data['version'] );
+	}
 }
