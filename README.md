@@ -1,5 +1,7 @@
 # claudaborative-editing
 
+![Claudaborative Editing](wordpress-plugin/.wordpress-org/banner.svg)
+
 An MCP server that lets Claude Code collaboratively edit WordPress posts in real time, alongside human editors in the Gutenberg block editor.
 
 ## Quickstart

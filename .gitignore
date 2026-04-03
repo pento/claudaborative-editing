@@ -11,3 +11,5 @@ wordpress-plugin/vendor/
 wordpress-plugin/.phpcs-cache
 wordpress-plugin/.phpstan-cache
 wordpress-plugin/.phpunit.result.cache
+wordpress-plugin/.wordpress-org/icon-*.png
+wordpress-plugin/.wordpress-org/banner-*.png

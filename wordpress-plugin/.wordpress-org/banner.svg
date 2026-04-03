@@ -1,0 +1,139 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1544 500" width="1544" height="500">
+  <defs>
+    <radialGradient id="bg" cx="350" cy="250" r="800" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#1e293b"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </radialGradient>
+    <linearGradient id="line1" x1="460" y1="250" x2="780" y2="140" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#D97706"/>
+      <stop offset="100%" stop-color="#D97706" stop-opacity="0.15"/>
+    </linearGradient>
+    <linearGradient id="line2" x1="460" y1="250" x2="830" y2="250" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#D97706"/>
+      <stop offset="100%" stop-color="#D97706" stop-opacity="0.15"/>
+    </linearGradient>
+    <linearGradient id="line3" x1="460" y1="250" x2="780" y2="360" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#D97706"/>
+      <stop offset="100%" stop-color="#D97706" stop-opacity="0.8"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1544" height="500" fill="url(#bg)"/>
+
+  <!-- Connection lines from sparkle cluster to content blocks -->
+  <path d="M460,250 C580,220 680,170 780,140" stroke="url(#line1)" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <path d="M460,250 C580,250 700,250 830,250" stroke="url(#line2)" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <path d="M460,250 C580,280 680,330 780,360" stroke="url(#line3)" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+
+  <!-- ===== Main sparkle cluster (matches icon.svg layout) ===== -->
+
+  <!-- Main sparkle (centered at 350, 250) -->
+  <path
+    d="M350 186l14 50 50 14-50 14-14 50-14-50-50-14 50-14z"
+    fill="#D97706"/>
+
+  <!-- Small sparkle upper-right -->
+  <path
+    d="M414 190l5 15 15 5-15 5-5 15-5-15-15-5 15-5z"
+    fill="#D97706" opacity="0.7"/>
+
+  <!-- Small sparkle lower-left -->
+  <path
+    d="M294 300l4 12 12 4-12 4-4 12-4-12-12-4 12-4z"
+    fill="#D97706" opacity="0.5"/>
+
+  <!-- Tiny sparkle upper-left -->
+  <path
+    d="M302 206l3 9 9 3-9 3-3 9-3-9-9-3 9-3z"
+    fill="#D97706" opacity="0.35"/>
+
+  <!-- Tiny sparkle right -->
+  <path
+    d="M422 270l3 9 9 3-9 3-3 9-3-9-9-3 9-3z"
+    fill="#D97706" opacity="0.35"/>
+
+  <!-- ===== Traveling sparkles along line 1 (top) ===== -->
+  <path
+    d="M700 168l2 6 6 2-6 2-2 6-2-6-6-2 6-2z"
+    fill="#D97706" opacity="0.3"/>
+  <path
+    d="M740 155l3 9 9 3-9 3-3 9-3-9-9-3 9-3z"
+    fill="#D97706" opacity="0.5"/>
+
+  <!-- ===== Traveling sparkles along line 2 (middle) ===== -->
+  <path
+    d="M590 248l3 9 9 3-9 3-3 9-3-9-9-3 9-3z"
+    fill="#D97706" opacity="0.5"/>
+  <path
+    d="M700 248l2 6 6 2-6 2-2 6-2-6-6-2 6-2z"
+    fill="#D97706" opacity="0.3"/>
+
+  <!-- ===== Traveling sparkles along line 3 (bottom) — arrives at block ===== -->
+  <path
+    d="M690 327l3 9 9 3-9 3-3 9-3-9-9-3 9-3z"
+    fill="#D97706" opacity="0.5"/>
+  <path
+    d="M730 345l4 12 12 4-12 4-4 12-4-12-12-4 12-4z"
+    fill="#D97706" opacity="0.6"/>
+
+  <!-- Landing sparkle at block 3 -->
+  <path
+    d="M775 360l5 15 15 5-15 5-5 15-5-15-15-5 15-5z"
+    fill="#D97706" opacity="0.9"/>
+
+  <!-- ===== Burst sparkles radiating from block 3 landing ===== -->
+  <path
+    d="M800 335l3 9 9 3-9 3-3 9-3-9-9-3 9-3z"
+    fill="#D97706" opacity="0.7"/>
+  <path
+    d="M810 370l2 6 6 2-6 2-2 6-2-6-6-2 6-2z"
+    fill="#D97706" opacity="0.55"/>
+  <path
+    d="M790 390l3 9 9 3-9 3-3 9-3-9-9-3 9-3z"
+    fill="#D97706" opacity="0.6"/>
+  <path
+    d="M820 345l2 6 6 2-6 2-2 6-2-6-6-2 6-2z"
+    fill="#D97706" opacity="0.5"/>
+  <path
+    d="M760 340l2 6 6 2-6 2-2 6-2-6-6-2 6-2z"
+    fill="#D97706" opacity="0.4"/>
+  <path
+    d="M775 400l2 6 6 2-6 2-2 6-2-6-6-2 6-2z"
+    fill="#D97706" opacity="0.35"/>
+  <path
+    d="M830 360l2 6 6 2-6 2-2 6-2-6-6-2 6-2z"
+    fill="#D97706" opacity="0.3"/>
+
+  <!-- ===== Content blocks ===== -->
+
+  <!-- Content block 1 (top) -->
+  <g>
+    <rect x="780" y="75" width="340" height="130" rx="8" fill="white" fill-opacity="0.08"/>
+    <rect x="800" y="95" width="180" height="10" rx="5" fill="white" fill-opacity="0.25"/>
+    <rect x="800" y="115" width="300" height="8" rx="4" fill="white" fill-opacity="0.12"/>
+    <rect x="800" y="131" width="260" height="8" rx="4" fill="white" fill-opacity="0.12"/>
+    <rect x="800" y="147" width="280" height="8" rx="4" fill="white" fill-opacity="0.12"/>
+    <rect x="800" y="163" width="200" height="8" rx="4" fill="white" fill-opacity="0.12"/>
+  </g>
+
+  <!-- Content block 2 (middle, offset right) -->
+  <g>
+    <rect x="830" y="215" width="340" height="70" rx="8" fill="white" fill-opacity="0.08"/>
+    <rect x="850" y="235" width="300" height="8" rx="4" fill="white" fill-opacity="0.12"/>
+    <rect x="850" y="251" width="240" height="8" rx="4" fill="white" fill-opacity="0.12"/>
+  </g>
+
+  <!-- Content block 3 (bottom) — edited block with highlights -->
+  <g>
+    <rect x="780" y="295" width="340" height="130" rx="8" fill="white" fill-opacity="0.08"/>
+    <rect x="800" y="315" width="300" height="8" rx="4" fill="white" fill-opacity="0.12"/>
+    <rect x="800" y="331" width="280" height="8" rx="4" fill="#D97706" fill-opacity="0.3"/>
+    <rect x="800" y="347" width="260" height="8" rx="4" fill="#D97706" fill-opacity="0.3"/>
+    <rect x="800" y="363" width="300" height="8" rx="4" fill="white" fill-opacity="0.12"/>
+    <rect x="800" y="379" width="220" height="8" rx="4" fill="white" fill-opacity="0.12"/>
+  </g>
+
+  <!-- Cursor on edited block -->
+  <rect x="1060" y="329" width="2" height="12" rx="1" fill="#D97706" opacity="0.8"/>
+</svg>
