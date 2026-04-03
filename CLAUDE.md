@@ -34,7 +34,8 @@ Claude Code  <--stdio-->  MCP Server (Node.js)  <--HTTP polling-->  WordPress
 - `shared/commands.ts` — Shared command definitions (slugs, args, statuses, transitions) consumed by MCP server, WP plugin TS, and WP plugin PHP (via generated file)
 - `bin/generate-shared-defs.js` — Generates `wordpress-plugin/includes/class-command-defs.php` and `wordpress-plugin/src/utils/command-i18n.ts` from `shared/commands.ts`. Run: `npm run generate:defs`
 - `src/index.ts` — Entry point: CLI flags (`--version`, `--help`, `setup`) then MCP server
-- `src/server.ts` — MCP server setup, tool/prompt registration, version export
+- `src/version.ts` — VERSION constant (build-time injected via tsup `define`)
+- `src/server.ts` — MCP server setup, tool/prompt registration, version re-export
 - `src/cli/setup.ts` — Interactive setup wizard (browser-based auth, multi-client config writing)
 - `src/cli/types.ts` — Shared CLI types (McpClientType, McpClientConfig, WpCredentials, SetupOptions)
 - `src/cli/clients.ts` — MCP client registry, detection, platform path resolution
@@ -65,7 +66,7 @@ disconnected ──connect──→ connected ──openPost/createPost──→
 
 The MCP server declares the `claude/channel` experimental capability and includes instructions telling Claude how to handle channel notifications from the WordPress editor plugin. This enables users in the WordPress Gutenberg editor to trigger actions (proofread, review, edit, translate) that are forwarded to Claude Code.
 
-**Plugin detection**: During `connect()`, after validating the sync endpoint, the session manager probes `GET /wpce/v1/status`. If the plugin is detected, a `CommandHandler` is created and the command listener starts. If the plugin is not installed (404), command features are silently disabled.
+**Plugin detection**: During `connect()`, after validating the sync endpoint, the session manager probes `GET /wpce/v1/status`. If the plugin is detected and its protocol version is compatible, a `CommandHandler` is created and the command listener starts. If the protocol version is incompatible, the plugin is detected but the command listener is not started (a warning is stored for `wp_status`). If the plugin is not installed (404), command features are silently disabled.
 
 **Command listener lifecycle**:
 
@@ -298,7 +299,27 @@ Both tools replace all existing terms (not append).
 
 - `wp_update_command_status` — Update the status of a command received from the WordPress editor via a channel notification. Parameters: `commandId` (number), `status` (`running` | `completed` | `failed`), `message` (optional string). Called by Claude during command execution to report progress back to the browser.
 
-The `wp_status` tool reports plugin detection state, version, protocol version, and command listener transport (SSE/polling/disabled) when the WordPress editor plugin is connected.
+The `wp_status` tool reports plugin detection state, version, protocol version, command listener transport (SSE/polling/disabled), and protocol version compatibility warnings when the WordPress editor plugin is connected.
+
+## Protocol Version Negotiation
+
+The MCP server validates the plugin's `protocol_version` (from `GET /wpce/v1/status`) against `SUPPORTED_PROTOCOL_VERSIONS` in `src/wordpress/command-client.ts`. If incompatible:
+
+- The plugin is still reported as detected (so `wp_status` shows version info)
+- The command listener is NOT started (transport shows `disabled`)
+- A warning is stored in `CommandHandler._protocolWarning` and propagated through `SessionManager.getPluginInfo()` to `wp_status`
+- The warning indicates whether the user should update the MCP server or the WordPress plugin
+
+## Plugin Auto-Setup
+
+When `wp_status` finds the plugin not yet detected, it runs `ensureEditorPlugin()` (in `src/tools/status.ts`) which attempts, in order:
+
+1. **Re-probe** via `detectEditorPlugin()` — the plugin may have been installed/activated externally since `connect()`
+2. **Activate** via `activateEditorPlugin()` — if installed but inactive
+3. **Install** via `installEditorPlugin()` — from wordpress.org
+4. **Download URL fallback** — shows a GitHub release download link constructed from `VERSION` (`src/version.ts`): `https://github.com/pento/claudaborative-editing/releases/download/v{VERSION}/claudaborative-editing-plugin.zip`
+
+Each successful step calls `detectEditorPlugin()` to start the command listener. Failures (403 insufficient permissions, 404 not on wordpress.org) are handled gracefully — the user sees the download URL.
 
 ## Prompts
 

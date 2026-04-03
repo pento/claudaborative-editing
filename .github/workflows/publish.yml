@@ -62,7 +62,7 @@ jobs:
               run: wp package install wp-cli/dist-archive-command
 
             - name: Build distribution zip
-              run: wp dist-archive wordpress-plugin claudaborative-editing-plugin.zip
+              run: wp dist-archive --plugin-dirname=claudaborative-editing wordpress-plugin claudaborative-editing-plugin.zip
 
             - name: Create GitHub release
               env:

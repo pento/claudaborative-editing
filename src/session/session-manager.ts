@@ -362,7 +362,7 @@ export class SessionManager {
 
 	// --- Throwing getters for state-dependent fields ---
 
-	private get apiClient(): WordPressApiClient {
+	get apiClient(): WordPressApiClient {
 		if (!this._apiClient) throw new Error('No API client (not connected)');
 		return this._apiClient;
 	}
@@ -435,18 +435,7 @@ export class SessionManager {
 		}
 
 		// Detect WordPress editor plugin and start command listener
-		const handler = new CommandHandler();
-		if (this._channelNotifier) {
-			handler.setNotifier(this._channelNotifier);
-		}
-		try {
-			const detected = await handler.start(this.apiClient);
-			if (detected) {
-				this.commandHandler = handler;
-			}
-		} catch {
-			// Plugin detection failed — command features disabled
-		}
+		await this.probeEditorPlugin();
 
 		// Build awareness state from user info
 		this.awarenessState = buildAwarenessState(user);
@@ -1680,6 +1669,7 @@ export class SessionManager {
 		version: string;
 		protocolVersion: number;
 		transport: string;
+		protocolWarning: string | null;
 	} | null {
 		if (!this.commandHandler) return null;
 		const ps = this.commandHandler.getPluginStatus();
@@ -1688,7 +1678,140 @@ export class SessionManager {
 			version: ps.version,
 			protocolVersion: ps.protocol_version,
 			transport: this.commandHandler.getTransport(),
+			protocolWarning: this.commandHandler.getProtocolWarning(),
 		};
+	}
+
+	/**
+	 * Detect the WordPress editor plugin and start the command listener.
+	 * Stops any existing command handler first. Safe to call multiple times
+	 * (e.g., after installing the plugin while already connected).
+	 */
+	async detectEditorPlugin(): Promise<boolean> {
+		this.requireState('connected', 'editing');
+		return this.probeEditorPlugin();
+	}
+
+	/**
+	 * Core plugin detection logic, shared by connect() and detectEditorPlugin().
+	 * Does not check session state — callers are responsible for that.
+	 */
+	private async probeEditorPlugin(): Promise<boolean> {
+		// Stop existing handler if any
+		if (this.commandHandler) {
+			this.commandHandler.stop();
+			this.commandHandler = null;
+		}
+
+		const handler = new CommandHandler();
+		if (this._channelNotifier) {
+			handler.setNotifier(this._channelNotifier);
+		}
+		try {
+			const detected = await handler.start(this.apiClient);
+			if (detected) {
+				this.commandHandler = handler;
+			}
+			return detected;
+		} catch {
+			// Plugin detection failed — command features disabled
+			return false;
+		}
+	}
+
+	/**
+	 * Check whether the editor plugin is installed on the connected WordPress site.
+	 * Queries the WordPress plugins REST API.
+	 */
+	async getEditorPluginInstallStatus(): Promise<{
+		installed: boolean;
+		active: boolean;
+		version: string | null;
+		pluginFile: string | null;
+	}> {
+		this.requireState('connected', 'editing');
+
+		interface WPPlugin {
+			plugin: string;
+			status: string;
+			version: string;
+		}
+
+		const plugins =
+			await this.apiClient.request<WPPlugin[]>('/wp/v2/plugins');
+		const match = plugins.find(
+			(p) =>
+				p.plugin.startsWith('claudaborative-editing/') ||
+				p.plugin === 'claudaborative-editing'
+		);
+
+		if (!match) {
+			return {
+				installed: false,
+				active: false,
+				version: null,
+				pluginFile: null,
+			};
+		}
+
+		return {
+			installed: true,
+			active: match.status === 'active',
+			version: match.version,
+			// REST API returns "folder/file.php" but the plugin endpoint
+			// uses "folder/file" (without .php extension).
+			pluginFile: match.plugin.replace(/\.php$/, ''),
+		};
+	}
+
+	/**
+	 * Install the editor plugin from wordpress.org.
+	 * Requires install_plugins and activate_plugins capabilities.
+	 */
+	async installEditorPlugin(): Promise<{
+		installed: boolean;
+		activated: boolean;
+		version: string;
+	}> {
+		this.requireState('connected', 'editing');
+
+		interface WPPlugin {
+			plugin: string;
+			status: string;
+			version: string;
+		}
+
+		const result = await this.apiClient.request<WPPlugin>(
+			'/wp/v2/plugins',
+			{
+				method: 'POST',
+				body: JSON.stringify({
+					slug: 'claudaborative-editing',
+					status: 'active',
+				}),
+			}
+		);
+
+		return {
+			installed: true,
+			activated: result.status === 'active',
+			version: result.version,
+		};
+	}
+
+	/**
+	 * Activate an already-installed editor plugin.
+	 * Requires activate_plugins capability.
+	 */
+	async activateEditorPlugin(pluginFile: string): Promise<void> {
+		this.requireState('connected', 'editing');
+
+		// WordPress REST API route uses the plugin identifier (folder/file,
+		// without .php extension) as a path segment.
+		await this.apiClient.request(`/wp/v2/plugins/${pluginFile}`, {
+			method: 'POST',
+			body: JSON.stringify({ status: 'active' }),
+		});
 	}
 
 	getTitle(): string {

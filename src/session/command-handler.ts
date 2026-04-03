@@ -11,6 +11,8 @@
 import {
 	CommandClient,
 	DEFAULT_COMMAND_CLIENT_CONFIG,
+	SUPPORTED_PROTOCOL_VERSIONS,
+	isProtocolCompatible,
 } from '../wordpress/command-client.js';
 import { WordPressApiError } from '../wordpress/api-client.js';
 import type { WordPressApiClient } from '../wordpress/api-client.js';
@@ -31,6 +33,7 @@ export type ChannelNotifier = (params: {
 export class CommandHandler {
 	private commandClient: CommandClient | null = null;
 	private _pluginStatus: PluginStatus | null = null;
+	private _protocolWarning: string | null = null;
 	private pendingNotifications: Array<{
 		content: string;
 		meta: Record<string, string>;
@@ -66,7 +69,9 @@ export class CommandHandler {
 	/**
 	 * Detect the WordPress editor plugin and start listening for commands.
 	 *
-	 * @returns true if the plugin was detected and listening started.
+	 * @returns true if the plugin was detected. When the protocol version is
+	 *   incompatible, returns true (plugin detected) but does not start the
+	 *   command listener — check `getProtocolWarning()` for details.
 	 * @throws if the plugin status request fails for reasons other than 404.
 	 */
 	async start(apiClient: WordPressApiClient): Promise<boolean> {
@@ -85,6 +90,24 @@ export class CommandHandler {
 				return false;
 			}
 			throw error;
+		}
+
+		// Check protocol version compatibility
+		if (!isProtocolCompatible(this._pluginStatus.protocol_version)) {
+			const pluginV = this._pluginStatus.protocol_version;
+			const maxSupported = Math.max(...SUPPORTED_PROTOCOL_VERSIONS);
+			const direction =
+				pluginV > maxSupported
+					? 'Update the MCP server.'
+					: 'Update the WordPress plugin.';
+			const supported = (SUPPORTED_PROTOCOL_VERSIONS as readonly number[])
+				.map((v) => `v${v}`)
+				.join(', ');
+			this._protocolWarning =
+				`Plugin protocol v${pluginV} is not compatible with this MCP server ` +
+				`(supports ${supported}). ${direction}`;
+			// Plugin is detected but incompatible — don't start the command listener
+			return true;
 		}
 
 		this.commandClient = client;
@@ -107,6 +130,7 @@ export class CommandHandler {
 			this.commandClient = null;
 		}
 		this._pluginStatus = null;
+		this._protocolWarning = null;
 		this.pendingNotifications = [];
 	}
 
@@ -131,6 +155,13 @@ export class CommandHandler {
 	 */
 	getPluginStatus(): PluginStatus | null {
 		return this._pluginStatus;
+	}
+
+	/**
+	 * Protocol version incompatibility warning, if any.
+	 */
+	getProtocolWarning(): string | null {
+		return this._protocolWarning;
 	}
 
 	/**
