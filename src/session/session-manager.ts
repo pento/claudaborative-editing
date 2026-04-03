@@ -31,6 +31,7 @@ import {
 	type PostMetadata,
 } from '../blocks/renderer.js';
 import { buildAwarenessState, parseCollaborators } from './awareness.js';
+import type { CommandStatus } from '../../shared/commands.js';
 import { CommandHandler } from './command-handler.js';
 import type { ChannelNotifier } from './command-handler.js';
 import { DEFAULT_SYNC_CONFIG } from '../wordpress/types.js';
@@ -1657,7 +1658,7 @@ export class SessionManager {
 	 */
 	async updateCommandStatus(
 		commandId: number,
-		status: string,
+		status: CommandStatus,
 		message?: string
 	): Promise<void> {
 		if (!this.commandHandler) {

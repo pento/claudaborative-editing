@@ -112,7 +112,7 @@ export class CommandClient {
 
 	async updateCommandStatus(
 		id: number,
-		status: string,
+		status: CommandStatus,
 		message?: string
 	): Promise<Command> {
 		const body: Record<string, unknown> = { status };

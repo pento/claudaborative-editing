@@ -117,7 +117,7 @@ export const TERMINAL_STATUSES: readonly CommandStatus[] = [
 ] as const;
 
 export const VALID_TRANSITIONS: Readonly<
-	Record<string, readonly CommandStatus[]>
+	Partial<Record<CommandStatus, readonly CommandStatus[]>>
 > = {
 	pending: ['running'],
 	running: ['completed', 'failed'],
