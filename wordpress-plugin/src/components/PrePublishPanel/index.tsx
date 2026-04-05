@@ -199,6 +199,19 @@ async function resolveTermStatus(
 }
 
 /**
+ * Extract the leaf (last segment) from a potentially hierarchical
+ * category name. For "Technology > AI" returns "AI"; for plain
+ * names returns the name unchanged.
+ *
+ * @param name Category name, possibly in "Parent > Child" format.
+ * @return The leaf term name.
+ */
+function leafName(name: string): string {
+	const parts = name.split(' > ');
+	return parts[parts.length - 1].trim();
+}
+
+/**
  * Parse and validate raw result_data into PrePublishSuggestions.
  * Ignores fields with unexpected types so malformed AI responses
  * can't break the panel.
@@ -335,7 +348,7 @@ export default function PrePublishPanel() {
 		if (lastCheckResult && lastCheckResult.id !== lastResultIdRef.current) {
 			lastResultIdRef.current = lastCheckResult.id;
 			setRemovedSuggestions(new Set());
-			const sug = lastCheckResult.result_data as PrePublishSuggestions;
+			const sug = parseSuggestions(lastCheckResult.result_data);
 			setExcerptDraft(sug?.excerpt ?? '');
 		}
 	}, [lastCheckResult]);
@@ -442,8 +455,12 @@ export default function PrePublishPanel() {
 		}
 		if (suggestions?.categories) {
 			for (const resolved of resolvedCategories) {
+				// For hierarchical names ("Parent > Child"), compare the
+				// leaf segment against current names.
 				const alreadyExists = currentCategoryNames.some(
-					(n) => n.toLowerCase() === resolved.name.toLowerCase()
+					(n) =>
+						n.toLowerCase() ===
+						leafName(resolved.name).toLowerCase()
 				);
 				if (!alreadyExists) {
 					terms.push({
@@ -554,6 +571,8 @@ export default function PrePublishPanel() {
 
 	// For categories/tags, derive from post state: applied if all
 	// non-removed suggested names are in the current term names.
+	// For hierarchical categories ("Parent > Child"), compare the leaf
+	// segment since currentCategoryNames contains flat term names.
 	const categoriesApplied = !!(
 		suggestions?.categories &&
 		suggestions.categories.length > 0 &&
@@ -561,7 +580,7 @@ export default function PrePublishPanel() {
 			.filter((name) => !removedSuggestions.has(`cat:${name}`))
 			.every((name) =>
 				currentCategoryNames.some(
-					(n) => n.toLowerCase() === name.toLowerCase()
+					(n) => n.toLowerCase() === leafName(name).toLowerCase()
 				)
 			)
 	);
