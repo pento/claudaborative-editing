@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import type { ZodType } from 'zod';
 import { registerCommandTools } from '../../../src/tools/commands.js';
 import { createMockServer, createMockSession } from './helpers.js';
 import { assertDefined } from '../../test-utils.js';
@@ -121,6 +122,48 @@ describe('command tools', () => {
 			expect(result.content[0].text).toContain(
 				'Failed to update command status: What a weird error'
 			);
+		});
+
+		describe('resultData schema validation', () => {
+			function getResultDataSchema(): ZodType {
+				const session = createMockSession();
+				registerCommandTools(server as unknown as McpServer, session);
+				const tool = server.registeredTools.get(
+					'wp_update_command_status'
+				);
+				assertDefined(tool);
+				return tool.schema.resultData as ZodType;
+			}
+
+			it('accepts a valid JSON object string', () => {
+				const schema = getResultDataSchema();
+				const result = schema.safeParse('{"excerpt":"test"}');
+				expect(result.success).toBe(true);
+			});
+
+			it('accepts undefined (optional)', () => {
+				const schema = getResultDataSchema();
+				const result = schema.safeParse(undefined);
+				expect(result.success).toBe(true);
+			});
+
+			it('rejects invalid JSON', () => {
+				const schema = getResultDataSchema();
+				const result = schema.safeParse('not json');
+				expect(result.success).toBe(false);
+			});
+
+			it('rejects a JSON array', () => {
+				const schema = getResultDataSchema();
+				const result = schema.safeParse('["a","b"]');
+				expect(result.success).toBe(false);
+			});
+
+			it('rejects a JSON scalar', () => {
+				const schema = getResultDataSchema();
+				const result = schema.safeParse('"just a string"');
+				expect(result.success).toBe(false);
+			});
 		});
 
 		it('returns descriptive error when plugin is not connected', async () => {
