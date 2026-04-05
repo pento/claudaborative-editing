@@ -1397,6 +1397,311 @@ describe('PrePublishPanel', () => {
 		expect(screen.getByText('new-tag')).toBeTruthy();
 	});
 
+	it('includes parent parameter when resolving hierarchical child categories', async () => {
+		const editPost = jest.fn();
+		setupMocks({ editPost });
+
+		mockedApiFetch.mockImplementation(((options: {
+			path: string;
+			method?: string;
+			data?: any;
+		}) => {
+			// resolveTermStatus: parent "Tech" exists
+			if (
+				options.path.includes(
+					'/wp/v2/categories?search=Tech&per_page=100'
+				) &&
+				!options.path.includes('parent=')
+			) {
+				return Promise.resolve([{ id: 5, name: 'Tech', parent: 0 }]);
+			}
+			// resolveTermStatus: child "AI" with parent=5
+			if (
+				options.path.includes(
+					'/wp/v2/categories?search=AI&per_page=100&parent=5'
+				)
+			) {
+				return Promise.resolve([{ id: 15, name: 'AI', parent: 5 }]);
+			}
+			// resolveTermIds: parent "Tech" exists
+			if (
+				options.path.includes('/wp/v2/categories?search=Tech') &&
+				!options.path.includes('parent=')
+			) {
+				return Promise.resolve([{ id: 5, name: 'Tech', parent: 0 }]);
+			}
+			// resolveTermIds: child "AI" with parent=5
+			if (
+				options.path.includes('/wp/v2/categories?search=AI') &&
+				options.path.includes('parent=5')
+			) {
+				return Promise.resolve([{ id: 15, name: 'AI', parent: 5 }]);
+			}
+			return Promise.resolve([]);
+		}) as typeof apiFetch);
+
+		mockedUseCommands.mockReturnValue({
+			...defaultCommands,
+			history: [
+				{
+					id: 10,
+					prompt: 'pre-publish-check',
+					status: 'completed',
+					post_id: 123,
+					result_data: { categories: ['Tech > AI'] },
+					message: null,
+				},
+			],
+		});
+
+		await act(async () => {
+			render(<PrePublishPanel />);
+		});
+
+		await act(async () => {
+			fireEvent.click(screen.getByText('Apply'));
+		});
+
+		// Verify parent= parameter was used in the search
+		const fetchCalls = mockedApiFetch.mock.calls.map(
+			(c: any[]) => c[0]?.path ?? c[0]
+		);
+		expect(
+			fetchCalls.some(
+				(path: string) =>
+					path.includes('search=AI') && path.includes('parent=5')
+			)
+		).toBe(true);
+
+		expect(editPost).toHaveBeenCalledWith({ categories: [15] });
+	});
+
+	it('creates child category with parent ID when child does not exist', async () => {
+		const editPost = jest.fn();
+		setupMocks({ editPost });
+
+		mockedApiFetch.mockImplementation(((options: {
+			path: string;
+			method?: string;
+			data?: any;
+		}) => {
+			// resolveTermStatus + resolveTermIds: parent "Tech" exists
+			if (
+				options.path.includes('/wp/v2/categories?search=Tech') &&
+				!options.path.includes('parent=')
+			) {
+				return Promise.resolve([{ id: 5, name: 'Tech', parent: 0 }]);
+			}
+			// resolveTermStatus + resolveTermIds: child "AI" not found with parent=5
+			if (
+				options.path.includes('search=AI') &&
+				options.path.includes('parent=5')
+			) {
+				return Promise.resolve([]);
+			}
+			// resolveTermIds: create child with parent
+			if (
+				options.path === '/wp/v2/categories' &&
+				options.method === 'POST' &&
+				options.data?.name === 'AI'
+			) {
+				expect(options.data.parent).toBe(5);
+				return Promise.resolve({ id: 20 });
+			}
+			return Promise.resolve([]);
+		}) as typeof apiFetch);
+
+		mockedUseCommands.mockReturnValue({
+			...defaultCommands,
+			history: [
+				{
+					id: 10,
+					prompt: 'pre-publish-check',
+					status: 'completed',
+					post_id: 123,
+					result_data: { categories: ['Tech > AI'] },
+					message: null,
+				},
+			],
+		});
+
+		await act(async () => {
+			render(<PrePublishPanel />);
+		});
+
+		await act(async () => {
+			fireEvent.click(screen.getByText('Apply'));
+		});
+
+		// Verify the child was created with the parent ID
+		const postCalls = mockedApiFetch.mock.calls.filter(
+			(c: any[]) =>
+				(c[0]?.path ?? c[0]) === '/wp/v2/categories' &&
+				c[0]?.method === 'POST'
+		);
+		expect(postCalls.length).toBe(1);
+		expect(postCalls[0][0].data).toEqual({ name: 'AI', parent: 5 });
+
+		expect(editPost).toHaveBeenCalledWith({ categories: [20] });
+	});
+
+	it('falls back to isNew: true when resolveTermStatus API call rejects', async () => {
+		mockedApiFetch.mockImplementation(((options: { path: string }) => {
+			if (options.path.includes('search=')) {
+				return Promise.reject(new Error('Network error'));
+			}
+			return Promise.resolve([]);
+		}) as typeof apiFetch);
+
+		mockedUseCommands.mockReturnValue({
+			...defaultCommands,
+			history: [
+				{
+					id: 10,
+					prompt: 'pre-publish-check',
+					status: 'completed',
+					post_id: 123,
+					result_data: { categories: ['Broken'] },
+					message: null,
+				},
+			],
+		});
+
+		await act(async () => {
+			render(<PrePublishPanel />);
+		});
+
+		// Term should still be shown with "(new)" indicator
+		expect(screen.getByText('Broken')).toBeTruthy();
+		expect(screen.getByText('(new)')).toBeTruthy();
+	});
+
+	it('handles category name fetch failure gracefully', async () => {
+		setupMocks({
+			editorState: { currentCategoryIds: [1, 2] },
+		});
+
+		mockedApiFetch.mockImplementation(((options: { path: string }) => {
+			// The include= fetch for category names rejects
+			if (options.path.includes('/wp/v2/categories?include=')) {
+				return Promise.reject(new Error('Server error'));
+			}
+			if (options.path.includes('search=')) {
+				return Promise.resolve([]);
+			}
+			return Promise.resolve([]);
+		}) as typeof apiFetch);
+
+		mockedUseCommands.mockReturnValue({
+			...defaultCommands,
+			history: [
+				{
+					id: 10,
+					prompt: 'pre-publish-check',
+					status: 'completed',
+					post_id: 123,
+					result_data: { categories: ['Tech'] },
+					message: null,
+				},
+			],
+		});
+
+		await act(async () => {
+			render(<PrePublishPanel />);
+		});
+
+		// Existing category names should not appear (fetch failed)
+		// But suggested category should still show
+		expect(screen.getByText('Tech')).toBeTruthy();
+	});
+
+	it('handles tag name fetch failure gracefully', async () => {
+		setupMocks({
+			editorState: { currentTagIds: [10, 20] },
+		});
+
+		mockedApiFetch.mockImplementation(((options: { path: string }) => {
+			// The include= fetch for tag names rejects
+			if (options.path.includes('/wp/v2/tags?include=')) {
+				return Promise.reject(new Error('Server error'));
+			}
+			if (options.path.includes('search=')) {
+				return Promise.resolve([]);
+			}
+			return Promise.resolve([]);
+		}) as typeof apiFetch);
+
+		mockedUseCommands.mockReturnValue({
+			...defaultCommands,
+			history: [
+				{
+					id: 10,
+					prompt: 'pre-publish-check',
+					status: 'completed',
+					post_id: 123,
+					result_data: { tags: ['react'] },
+					message: null,
+				},
+			],
+		});
+
+		await act(async () => {
+			render(<PrePublishPanel />);
+		});
+
+		// Existing tag names should not appear (fetch failed)
+		// But suggested tag should still show
+		expect(screen.getByText('react')).toBeTruthy();
+	});
+
+	it('removes existing tag from post via editPost when remove button is clicked', async () => {
+		const editPost = jest.fn();
+		setupMocks({
+			editorState: { currentTagIds: [10, 20] },
+			editPost,
+		});
+
+		mockedApiFetch.mockImplementation(((options: { path: string }) => {
+			if (options.path.includes('/wp/v2/tags?include=10,20')) {
+				return Promise.resolve([
+					{ id: 10, name: 'keep-tag' },
+					{ id: 20, name: 'remove-tag' },
+				]);
+			}
+			if (options.path.includes('search=')) {
+				return Promise.resolve([]);
+			}
+			return Promise.resolve([]);
+		}) as typeof apiFetch);
+
+		mockedUseCommands.mockReturnValue({
+			...defaultCommands,
+			history: [
+				{
+					id: 10,
+					prompt: 'pre-publish-check',
+					status: 'completed',
+					post_id: 123,
+					result_data: {},
+					message: null,
+				},
+			],
+		});
+
+		await act(async () => {
+			render(<PrePublishPanel />);
+		});
+
+		expect(screen.getByText('keep-tag')).toBeTruthy();
+		expect(screen.getByText('remove-tag')).toBeTruthy();
+
+		fireEvent.click(
+			screen.getByRole('button', { name: 'Remove remove-tag' })
+		);
+
+		expect(editPost).toHaveBeenCalledWith({ tags: [10] });
+	});
+
 	it('does not show Apply button for categories when only existing terms are displayed', async () => {
 		setupMocks({
 			editorState: { currentCategoryIds: [1] },

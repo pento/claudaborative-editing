@@ -617,6 +617,30 @@ describe('CommandHandler', () => {
 			);
 		});
 
+		it('delegates resultData to CommandClient', async () => {
+			const { instance } = setupMockCommandClient({
+				resolve: makePluginStatus(),
+			});
+			instance.updateCommandStatus.mockResolvedValue(
+				makeCommand({ status: 'completed' })
+			);
+
+			await handler.start(createMockApiClient());
+			await handler.updateCommandStatus(
+				42,
+				'completed',
+				'Done',
+				'{"foo":"bar"}'
+			);
+
+			expect(instance.updateCommandStatus).toHaveBeenCalledWith(
+				42,
+				'completed',
+				'Done',
+				'{"foo":"bar"}'
+			);
+		});
+
 		it('delegates without message when not provided', async () => {
 			const { instance } = setupMockCommandClient({
 				resolve: makePluginStatus(),
