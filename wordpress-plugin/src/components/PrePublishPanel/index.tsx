@@ -950,7 +950,7 @@ export default function PrePublishPanel() {
 						: __(
 								'Run pre-publish checks',
 								'claudaborative-editing'
-						  )}
+							)}
 				</Button>
 			</div>
 		</PluginPrePublishPanel>
