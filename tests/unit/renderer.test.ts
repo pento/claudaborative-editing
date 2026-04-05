@@ -114,6 +114,9 @@ describe('renderPost with metadata', () => {
 			sticky: true,
 			commentStatus: 'closed',
 			excerpt: 'A brief summary.',
+			categories: ['Tech', 'News'],
+			tags: ['JavaScript', 'Rust'],
+			featuredImage: 42,
 		};
 
 		const output = renderPost('Full Meta', sampleBlocks, metadata);
@@ -125,6 +128,9 @@ describe('renderPost with metadata', () => {
 		expect(output).toContain('Sticky: yes');
 		expect(output).toContain('Comments: closed');
 		expect(output).toContain('Excerpt: "A brief summary."');
+		expect(output).toContain('Categories: Tech, News');
+		expect(output).toContain('Tags: JavaScript, Rust');
+		expect(output).toContain('Featured image: set (ID: 42)');
 	});
 
 	it('should render only the provided metadata fields (partial)', () => {
@@ -140,6 +146,9 @@ describe('renderPost with metadata', () => {
 		expect(output).not.toContain('Sticky:');
 		expect(output).not.toContain('Comments:');
 		expect(output).not.toContain('Excerpt:');
+		expect(output).not.toContain('Categories:');
+		expect(output).not.toContain('Tags:');
+		expect(output).not.toContain('Featured image:');
 	});
 
 	it('should not render extra lines for empty/falsy metadata values', () => {
@@ -150,6 +159,8 @@ describe('renderPost with metadata', () => {
 			sticky: false,
 			commentStatus: 'open',
 			excerpt: '',
+			categories: [],
+			tags: [],
 		};
 
 		const output = renderPost('Falsy Meta', sampleBlocks, metadata);
@@ -161,6 +172,8 @@ describe('renderPost with metadata', () => {
 		expect(output).not.toContain('Sticky:');
 		expect(output).not.toContain('Comments:');
 		expect(output).not.toContain('Excerpt:');
+		expect(output).not.toContain('Categories:');
+		expect(output).not.toContain('Tags:');
 	});
 
 	it('should be backward compatible when metadata is omitted', () => {
@@ -174,6 +187,9 @@ describe('renderPost with metadata', () => {
 		expect(output).not.toContain('Sticky:');
 		expect(output).not.toContain('Comments:');
 		expect(output).not.toContain('Excerpt:');
+		expect(output).not.toContain('Categories:');
+		expect(output).not.toContain('Tags:');
+		expect(output).not.toContain('Featured image:');
 	});
 
 	it('should show "Comments: closed" when commentStatus is closed', () => {
@@ -194,6 +210,66 @@ describe('renderPost with metadata', () => {
 		const output = renderPost('Open Comments', [], metadata);
 
 		expect(output).not.toContain('Comments:');
+	});
+
+	it('should render categories as comma-separated names', () => {
+		const metadata: PostMetadata = {
+			categories: ['Tech', 'News', 'Tutorials'],
+		};
+
+		const output = renderPost('With Categories', [], metadata);
+
+		expect(output).toContain('Categories: Tech, News, Tutorials');
+	});
+
+	it('should render a single category', () => {
+		const metadata: PostMetadata = {
+			categories: ['Uncategorized'],
+		};
+
+		const output = renderPost('Single Cat', [], metadata);
+
+		expect(output).toContain('Categories: Uncategorized');
+	});
+
+	it('should render tags as comma-separated names', () => {
+		const metadata: PostMetadata = {
+			tags: ['JavaScript', 'Rust'],
+		};
+
+		const output = renderPost('With Tags', [], metadata);
+
+		expect(output).toContain('Tags: JavaScript, Rust');
+	});
+
+	it('should render featured image as set with ID', () => {
+		const metadata: PostMetadata = {
+			featuredImage: 42,
+		};
+
+		const output = renderPost('With Featured', [], metadata);
+
+		expect(output).toContain('Featured image: set (ID: 42)');
+	});
+
+	it('should render featured image as not set when 0', () => {
+		const metadata: PostMetadata = {
+			featuredImage: 0,
+		};
+
+		const output = renderPost('No Featured', [], metadata);
+
+		expect(output).toContain('Featured image: not set');
+	});
+
+	it('should omit featured image line when undefined', () => {
+		const metadata: PostMetadata = {
+			status: 'draft',
+		};
+
+		const output = renderPost('No Featured Prop', [], metadata);
+
+		expect(output).not.toContain('Featured image:');
 	});
 });
 

@@ -24,11 +24,22 @@ export function registerCommandTools(
 					.string()
 					.optional()
 					.describe('Status message or error description'),
+				resultData: z
+					.string()
+					.optional()
+					.describe(
+						'Optional JSON string of structured result data for the command response'
+					),
 			},
 		},
-		async ({ commandId, status, message }) => {
+		async ({ commandId, status, message, resultData }) => {
 			try {
-				await session.updateCommandStatus(commandId, status, message);
+				await session.updateCommandStatus(
+					commandId,
+					status,
+					message,
+					resultData
+				);
 				return {
 					content: [
 						{

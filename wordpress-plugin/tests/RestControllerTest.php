@@ -507,6 +507,102 @@ class RestControllerTest extends \WP_UnitTestCase {
 		$this->assertSame( 409, $response->get_status() );
 	}
 
+	/**
+	 * Completing a command with result_data returns decoded JSON in the response.
+	 */
+	public function test_complete_with_result_data() {
+		$command_id = $this->create_command_directly( [ 'status' => 'running' ] );
+
+		$result_json = '{"checks":[{"name":"seo","passed":true}],"score":85}';
+
+		$request = new \WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
+		$request->set_body_params(
+			[
+				'status'      => 'completed',
+				'message'     => 'Check complete.',
+				'result_data' => $result_json,
+			]
+		);
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+
+		$data = $response->get_data();
+		$this->assertSame( 'completed', $data['status'] );
+		$this->assertSame( 'Check complete.', $data['message'] );
+
+		// result_data should be decoded JSON in the response.
+		$this->assertIsObject( $data['result_data'] );
+		$encoded = wp_json_encode( $data['result_data'] );
+		$this->assertIsString( $encoded );
+		$result_array = json_decode( $encoded, true );
+		$this->assertSame( 85, $result_array['score'] );
+		$this->assertIsArray( $result_array['checks'] );
+
+		// The stored meta value should be valid JSON.
+		$stored = get_post_meta( $command_id, 'wpce_result_data', true );
+		$this->assertNotEmpty( $stored );
+		$stored_array = json_decode( $stored, true );
+		$this->assertIsArray( $stored_array );
+		$this->assertSame( 85, $stored_array['score'] );
+	}
+
+	/**
+	 * Completing a command without result_data returns the default empty object.
+	 */
+	public function test_complete_without_result_data() {
+		$command_id = $this->create_command_directly( [ 'status' => 'running' ] );
+
+		$request = new \WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
+		$request->set_body_params(
+			[
+				'status'  => 'completed',
+				'message' => 'Done.',
+			]
+		);
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+
+		// The registered default for wpce_result_data is '{}', which the
+		// formatter decodes into an empty stdClass object.
+		$data = $response->get_data();
+		$this->assertIsObject( $data['result_data'] );
+		$this->assertEquals( new \stdClass(), $data['result_data'] );
+	}
+
+	/**
+	 * The pre-publish-check prompt should be accepted.
+	 */
+	public function test_create_command_with_pre_publish_check_prompt() {
+		$response = $this->create_command( [ 'prompt' => 'pre-publish-check' ] );
+
+		$this->assertSame( 201, $response->get_status() );
+		$this->assertSame( 'pre-publish-check', $response->get_data()['prompt'] );
+	}
+
+	/**
+	 * Invalid JSON sent as result_data should be sanitized to an empty object.
+	 */
+	public function test_result_data_sanitizes_invalid_json() {
+		$command_id = $this->create_command_directly( [ 'status' => 'running' ] );
+
+		$request = new \WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
+		$request->set_body_params(
+			[
+				'status'      => 'completed',
+				'result_data' => 'not valid json',
+			]
+		);
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+
+		// sanitize_json returns '{}' for invalid input.
+		$stored = get_post_meta( $command_id, 'wpce_result_data', true );
+		$this->assertSame( '{}', $stored );
+	}
+
 	// -------------------------------------------------------------------------
 	// DELETE /wpce/v1/commands/{id}
 	// -------------------------------------------------------------------------

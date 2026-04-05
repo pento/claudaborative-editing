@@ -322,6 +322,11 @@ export class SessionManager {
 		| ((update: Uint8Array, origin: unknown) => void)
 		| null = null;
 
+	/** Cached resolved category names (populated in openPost, updated in setCategories). */
+	private _cachedCategories: string[] = [];
+	/** Cached resolved tag names (populated in openPost, updated in setTags). */
+	private _cachedTags: string[] = [];
+
 	/** True when the post has been deleted or trashed externally. */
 	private postGone = false;
 	/** Human-readable reason for why the post is gone. */
@@ -711,6 +716,31 @@ export class SessionManager {
 		}
 
 		this.state = 'editing';
+
+		// Resolve category/tag IDs to names for display in readPost().
+		// Runs after state is set so it doesn't block the editing transition.
+		// Errors are swallowed — term names are informational, not critical.
+		try {
+			const catIds = post.categories ?? [];
+			if (catIds.length > 0) {
+				const cats = await this.apiClient.getTerms(
+					'categories',
+					catIds
+				);
+				this._cachedCategories = cats.map((t) => t.name);
+			}
+		} catch {
+			// Non-critical: readPost() will omit categories
+		}
+		try {
+			const tagIds = post.tags ?? [];
+			if (tagIds.length > 0) {
+				const tags = await this.apiClient.getTerms('tags', tagIds);
+				this._cachedTags = tags.map((t) => t.name);
+			}
+		} catch {
+			// Non-critical: readPost() will omit tags
+		}
 	}
 
 	/**
@@ -771,6 +801,8 @@ export class SessionManager {
 		this.commentDoc = null;
 		this._currentPost = null;
 		this.collaborators = [];
+		this._cachedCategories = [];
+		this._cachedTags = [];
 		this.postGone = false;
 		this.postGoneReason = null;
 		this.postGoneCheck = null;
@@ -817,6 +849,16 @@ export class SessionManager {
 				(this.documentManager.getProperty(this.doc, 'excerpt') as
 					| string
 					| undefined) || undefined,
+			categories:
+				this._cachedCategories.length > 0
+					? this._cachedCategories
+					: undefined,
+			tags: this._cachedTags.length > 0 ? this._cachedTags : undefined,
+			featuredImage:
+				(this.documentManager.getProperty(
+					this.doc,
+					'featured_media'
+				) as number | undefined) ?? this._currentPost?.featured_media,
 		};
 
 		return renderPost(title, blocks, metadata);
@@ -1303,6 +1345,7 @@ export class SessionManager {
 		const ids = resolved.map((r) => r.id);
 
 		const post = await this.updatePostMeta({ categories: ids });
+		this._cachedCategories = resolved.map((r) => r.name);
 		return { post, resolved };
 	}
 
@@ -1320,6 +1363,7 @@ export class SessionManager {
 		const ids = resolved.map((r) => r.id);
 
 		const post = await this.updatePostMeta({ tags: ids });
+		this._cachedTags = resolved.map((r) => r.name);
 		return { post, resolved };
 	}
 
@@ -1648,7 +1692,8 @@ export class SessionManager {
 	async updateCommandStatus(
 		commandId: number,
 		status: CommandStatus,
-		message?: string
+		message?: string,
+		resultData?: string
 	): Promise<void> {
 		if (!this.commandHandler) {
 			throw new Error(
@@ -1658,7 +1703,8 @@ export class SessionManager {
 		await this.commandHandler.updateCommandStatus(
 			commandId,
 			status,
-			message
+			message,
+			resultData
 		);
 	}
 

@@ -140,14 +140,20 @@ export class CommandHandler {
 	async updateCommandStatus(
 		id: number,
 		status: CommandStatus,
-		message?: string
+		message?: string,
+		resultData?: string
 	): Promise<void> {
 		if (!this.commandClient) {
 			throw new Error(
 				'WordPress editor plugin is not connected. Command features are not available.'
 			);
 		}
-		await this.commandClient.updateCommandStatus(id, status, message);
+		await this.commandClient.updateCommandStatus(
+			id,
+			status,
+			message,
+			resultData
+		);
 	}
 
 	/**

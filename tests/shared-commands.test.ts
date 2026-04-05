@@ -21,6 +21,7 @@ describe('shared/commands', () => {
 				'respond-to-note',
 				'edit',
 				'translate',
+				'pre-publish-check',
 			];
 
 			expect(Object.keys(COMMANDS)).toEqual(expectedSlugs);

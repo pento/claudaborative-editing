@@ -36,12 +36,45 @@ describe('command tools', () => {
 			expect(session.updateCommandStatus).toHaveBeenCalledWith(
 				7,
 				'completed',
-				'Done editing'
+				'Done editing',
+				undefined
 			);
 			expect(result.content[0].text).toContain(
 				'Command 7 status updated to "completed".'
 			);
 			expect(result.isError).toBeUndefined();
+		});
+
+		it('passes resultData parameter when provided', async () => {
+			const session = createMockSession();
+			registerCommandTools(server as unknown as McpServer, session);
+
+			const tool = server.registeredTools.get('wp_update_command_status');
+			assertDefined(tool);
+			const resultData = JSON.stringify({
+				checks: [
+					{
+						check: 'excerpt',
+						status: 'warning',
+						message: 'No excerpt',
+						fixable: true,
+					},
+				],
+				summary: 'One issue found',
+			});
+			await tool.handler({
+				commandId: 10,
+				status: 'completed',
+				message: '1 issue found',
+				resultData,
+			});
+
+			expect(session.updateCommandStatus).toHaveBeenCalledWith(
+				10,
+				'completed',
+				'1 issue found',
+				resultData
+			);
 		});
 
 		it('returns error when updateCommandStatus throws', async () => {

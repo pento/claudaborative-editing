@@ -25,6 +25,7 @@ const mockUploadMedia = vi.fn();
 const mockListTerms = vi.fn<() => Promise<WPTerm[]>>();
 const mockSearchTerms = vi.fn<() => Promise<WPTerm[]>>();
 const mockCreateTerm = vi.fn<() => Promise<WPTerm>>();
+const mockGetTerms = vi.fn<() => Promise<WPTerm[]>>();
 const mockGetWordPressVersion = vi.fn<() => Promise<string>>();
 const mockCheckNotesSupport = vi.fn<() => Promise<boolean>>();
 const mockListNotes = vi.fn<() => Promise<WPNote[]>>();
@@ -62,6 +63,7 @@ vi.mock('../../src/wordpress/api-client.js', () => {
 			this.listTerms = mockListTerms;
 			this.searchTerms = mockSearchTerms;
 			this.createTerm = mockCreateTerm;
+			this.getTerms = mockGetTerms;
 			this.getWordPressVersion = mockGetWordPressVersion;
 			this.checkNotesSupport = mockCheckNotesSupport;
 			this.listNotes = mockListNotes;
@@ -208,6 +210,7 @@ describe('SessionManager', () => {
 		mockGetBlockTypes.mockRejectedValue(new Error('Not available'));
 		mockGetWordPressVersion.mockResolvedValue('7.0');
 		mockCheckNotesSupport.mockResolvedValue(false);
+		mockGetTerms.mockResolvedValue([]);
 		mockCommandHandlerStart.mockResolvedValue(false);
 		session = new SessionManager();
 		session.syncWaitTimeout = 0; // Skip sync wait in tests
@@ -1927,26 +1930,50 @@ describe('SessionManager', () => {
 			mockValidateSyncEndpoint.mockResolvedValue(undefined);
 			await s.connect(fakeConfig);
 			mockGetPost.mockResolvedValue(fakePostWithMeta);
+			// Mock term resolution for openPost() category/tag name caching
+			mockGetTerms
+				.mockResolvedValueOnce([
+					{
+						id: 1,
+						name: 'Uncategorized',
+						slug: 'uncategorized',
+						taxonomy: 'category',
+					},
+					{
+						id: 3,
+						name: 'Tech',
+						slug: 'tech',
+						taxonomy: 'category',
+					},
+				])
+				.mockResolvedValueOnce([
+					{
+						id: 5,
+						name: 'JavaScript',
+						slug: 'javascript',
+						taxonomy: 'post_tag',
+					},
+				]);
 			await s.openPost(42);
 		}
 
 		describe('openPost() metadata loading', () => {
-			it('loads categories into Y.Doc', async () => {
+			it('loads and caches category names from REST API', async () => {
 				await connectAndOpenWithMeta(session);
-				session.readPost();
-				// categories and tags IDs are stored in Y.Doc but rendered output
-				// shows only the fields renderPost() exposes (status, date, slug, sticky, commentStatus, excerpt).
-				// We verify via the internal state rather than rendered output for array properties.
 				const postWithCats = session.getCurrentPost();
 				assertDefined(postWithCats);
 				expect(postWithCats.categories).toEqual([1, 3]);
+				// Verify getTerms was called to resolve category IDs to names
+				expect(mockGetTerms).toHaveBeenCalledWith('categories', [1, 3]);
 			});
 
-			it('loads tags into Y.Doc', async () => {
+			it('loads and caches tag names from REST API', async () => {
 				await connectAndOpenWithMeta(session);
 				const postWithTags = session.getCurrentPost();
 				assertDefined(postWithTags);
 				expect(postWithTags.tags).toEqual([5]);
+				// Verify getTerms was called to resolve tag IDs to names
+				expect(mockGetTerms).toHaveBeenCalledWith('tags', [5]);
 			});
 
 			it('loads featured_media into Y.Doc', async () => {
@@ -2029,6 +2056,69 @@ describe('SessionManager', () => {
 
 				const text = session.readPost();
 				expect(text).toContain('Comments: closed');
+			});
+
+			it('renders cached category names', async () => {
+				await connectAndOpenWithMeta(session);
+				const text = session.readPost();
+				expect(text).toContain('Categories: Uncategorized, Tech');
+			});
+
+			it('renders cached tag names', async () => {
+				await connectAndOpenWithMeta(session);
+				const text = session.readPost();
+				expect(text).toContain('Tags: JavaScript');
+			});
+
+			it('renders featured image when set', async () => {
+				await connectAndOpenWithMeta(session);
+				const text = session.readPost();
+				expect(text).toContain('Featured image: set (ID: 99)');
+			});
+
+			it('renders featured image not set when 0', async () => {
+				await connectSession(session);
+				const noFeaturedPost = {
+					...fakePostWithMeta,
+					featured_media: 0,
+				};
+				mockGetPost.mockResolvedValue(noFeaturedPost);
+				await session.openPost(42);
+
+				const text = session.readPost();
+				expect(text).toContain('Featured image: not set');
+			});
+
+			it('omits categories line when no categories cached', async () => {
+				await connectSession(session);
+				const noCatsPost = {
+					...fakePost,
+					featured_media: 0,
+				};
+				mockGetPost.mockResolvedValue(noCatsPost);
+				await session.openPost(42);
+
+				const text = session.readPost();
+				expect(text).not.toContain('Categories:');
+			});
+
+			it('omits tags line when no tags cached', async () => {
+				await connectSession(session);
+				mockGetPost.mockResolvedValue(fakePost);
+				await session.openPost(42);
+
+				const text = session.readPost();
+				expect(text).not.toContain('Tags:');
+			});
+
+			it('omits featured image line when undefined', async () => {
+				await connectSession(session);
+				// fakePost has no featured_media field
+				mockGetPost.mockResolvedValue(fakePost);
+				await session.openPost(42);
+
+				const text = session.readPost();
+				expect(text).not.toContain('Featured image:');
 			});
 		});
 
@@ -2327,6 +2417,23 @@ describe('SessionManager', () => {
 				});
 			});
 
+			it('updates cached category names in readPost()', async () => {
+				await connectAndOpenWithMeta(session);
+				mockSearchTerms.mockResolvedValue([
+					{ id: 3, name: 'Tech', slug: 'tech', taxonomy: 'category' },
+				]);
+				mockUpdatePost.mockResolvedValue(
+					updatedPost({ categories: [3] })
+				);
+
+				await session.setCategories(['Tech']);
+
+				const text = session.readPost();
+				expect(text).toContain('Categories: Tech');
+				// Original categories (Uncategorized, Tech) should be replaced
+				expect(text).not.toContain('Uncategorized');
+			});
+
 			it('throws when not editing', async () => {
 				await connectSession(session);
 				await expect(session.setCategories(['Tech'])).rejects.toThrow(
@@ -2376,6 +2483,26 @@ describe('SessionManager', () => {
 					{ name: 'Rust', id: 20, created: true },
 				]);
 				expect(mockCreateTerm).toHaveBeenCalledWith('tags', 'Rust');
+			});
+
+			it('updates cached tag names in readPost()', async () => {
+				await connectAndOpenWithMeta(session);
+				mockSearchTerms.mockResolvedValue([
+					{
+						id: 20,
+						name: 'Rust',
+						slug: 'rust',
+						taxonomy: 'post_tag',
+					},
+				]);
+				mockUpdatePost.mockResolvedValue(updatedPost({ tags: [20] }));
+
+				await session.setTags(['Rust']);
+
+				const text = session.readPost();
+				expect(text).toContain('Tags: Rust');
+				// Original tag (JavaScript) should be replaced
+				expect(text).not.toContain('JavaScript');
 			});
 
 			it('throws when not editing', async () => {
@@ -3443,7 +3570,7 @@ describe('SessionManager', () => {
 
 				expect(
 					mockCommandHandlerUpdateCommandStatus
-				).toHaveBeenCalledWith(123, 'completed', 'Done');
+				).toHaveBeenCalledWith(123, 'completed', 'Done', undefined);
 			});
 
 			it('delegates without message parameter', async () => {
@@ -3465,7 +3592,7 @@ describe('SessionManager', () => {
 
 				expect(
 					mockCommandHandlerUpdateCommandStatus
-				).toHaveBeenCalledWith(456, 'running', undefined);
+				).toHaveBeenCalledWith(456, 'running', undefined, undefined);
 			});
 
 			it('throws when no command handler exists', async () => {

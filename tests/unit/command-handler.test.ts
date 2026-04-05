@@ -62,7 +62,8 @@ function setupMockCommandClient(pluginStatusResult?: {
 				(
 					id: number,
 					status: string,
-					message?: string
+					message?: string,
+					resultData?: string
 				) => Promise<Command>
 			>()
 			.mockResolvedValue(makeCommand()),
@@ -611,7 +612,8 @@ describe('CommandHandler', () => {
 			expect(instance.updateCommandStatus).toHaveBeenCalledWith(
 				42,
 				'completed',
-				'All done'
+				'All done',
+				undefined
 			);
 		});
 
@@ -629,6 +631,7 @@ describe('CommandHandler', () => {
 			expect(instance.updateCommandStatus).toHaveBeenCalledWith(
 				42,
 				'running',
+				undefined,
 				undefined
 			);
 		});

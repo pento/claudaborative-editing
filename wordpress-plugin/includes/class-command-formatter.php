@@ -29,15 +29,17 @@ class Command_Formatter {
 	 *     user_id: int,
 	 *     claimed_by: int|null,
 	 *     message: string|null,
+	 *     result_data: \stdClass|null,
 	 *     created_at: string,
 	 *     updated_at: string,
 	 *     expires_at: string,
 	 * } Command object.
 	 */
 	public static function format( \WP_Post $post ) {
-		$claimed_by = get_post_meta( $post->ID, 'wpce_claimed_by', true );
-		$message    = get_post_meta( $post->ID, 'wpce_message', true );
-		$arguments  = get_post_meta( $post->ID, 'wpce_arguments', true );
+		$claimed_by  = get_post_meta( $post->ID, 'wpce_claimed_by', true );
+		$message     = get_post_meta( $post->ID, 'wpce_message', true );
+		$arguments   = get_post_meta( $post->ID, 'wpce_arguments', true );
+		$result_data = get_post_meta( $post->ID, 'wpce_result_data', true );
 
 		$decoded_args = json_decode( $arguments ? $arguments : '{}' );
 
@@ -50,17 +52,18 @@ class Command_Formatter {
 		}
 
 		return [
-			'id'         => $post->ID,
-			'post_id'    => (int) $post->post_parent,
-			'prompt'     => get_post_meta( $post->ID, 'wpce_prompt', true ),
-			'arguments'  => $decoded_args,
-			'status'     => get_post_meta( $post->ID, 'wpce_command_status', true ),
-			'user_id'    => (int) $post->post_author,
-			'claimed_by' => $claimed_by ? (int) $claimed_by : null,
-			'message'    => '' !== $message ? $message : null,
-			'created_at' => self::format_date( $post->post_date_gmt ),
-			'updated_at' => self::format_date( $post->post_modified_gmt ),
-			'expires_at' => get_post_meta( $post->ID, 'wpce_expires_at', true ),
+			'id'          => $post->ID,
+			'post_id'     => (int) $post->post_parent,
+			'prompt'      => get_post_meta( $post->ID, 'wpce_prompt', true ),
+			'arguments'   => $decoded_args,
+			'status'      => get_post_meta( $post->ID, 'wpce_command_status', true ),
+			'user_id'     => (int) $post->post_author,
+			'claimed_by'  => $claimed_by ? (int) $claimed_by : null,
+			'message'     => '' !== $message ? $message : null,
+			'result_data' => $result_data ? json_decode( $result_data ) : null,
+			'created_at'  => self::format_date( $post->post_date_gmt ),
+			'updated_at'  => self::format_date( $post->post_modified_gmt ),
+			'expires_at'  => get_post_meta( $post->ID, 'wpce_expires_at', true ),
 		];
 	}
 
