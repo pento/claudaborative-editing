@@ -103,9 +103,7 @@ async function resolveTermIds(
 				const exact = results.find(
 					(t) =>
 						t.name.toLowerCase() === part.toLowerCase() &&
-						(taxonomy !== 'categories' ||
-							!parentId ||
-							t.parent === parentId)
+						(taxonomy !== 'categories' || t.parent === parentId)
 				);
 
 				if (exact) {
@@ -178,9 +176,7 @@ async function resolveTermStatus(
 				const exact = results.find(
 					(t) =>
 						t.name.toLowerCase() === part.toLowerCase() &&
-						(taxonomy !== 'categories' ||
-							!parentId ||
-							t.parent === parentId)
+						(taxonomy !== 'categories' || t.parent === parentId)
 				);
 
 				if (exact) {
@@ -589,28 +585,29 @@ export default function PrePublishPanel() {
 	);
 
 	const applyAll = useCallback(async () => {
-		if (!suggestions) {
-			return;
-		}
 		setIsApplying(true);
 		try {
 			const edits: Record<string, unknown> = {};
 			const newApplied = new Set(applied);
 
-			if (suggestions.excerpt && !applied.has('excerpt')) {
+			if (
+				suggestions?.excerpt &&
+				excerptDraft &&
+				!applied.has('excerpt')
+			) {
 				edits.excerpt = excerptDraft;
 				newApplied.add('excerpt');
 			}
 			if (showSlugSuggestion && !applied.has('slug')) {
-				edits.slug = suggestions.slug;
+				edits.slug = suggestions?.slug;
 				newApplied.add('slug');
 			}
 
 			// Filter out removed suggestions before resolving.
-			const suggestedCatNames = (suggestions.categories ?? []).filter(
+			const suggestedCatNames = (suggestions?.categories ?? []).filter(
 				(name) => !removedSuggestions.has(`cat:${name}`)
 			);
-			const suggestedTagNames = (suggestions.tags ?? []).filter(
+			const suggestedTagNames = (suggestions?.tags ?? []).filter(
 				(name) => !removedSuggestions.has(`tag:${name}`)
 			);
 

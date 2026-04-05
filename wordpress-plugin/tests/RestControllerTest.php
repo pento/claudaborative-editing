@@ -582,9 +582,9 @@ class RestControllerTest extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Invalid JSON sent as result_data should be sanitized to an empty object.
+	 * Invalid JSON sent as result_data should be rejected.
 	 */
-	public function test_result_data_sanitizes_invalid_json() {
+	public function test_result_data_rejects_invalid_json() {
 		$command_id = $this->create_command_directly( [ 'status' => 'running' ] );
 
 		$request = new \WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
@@ -596,11 +596,27 @@ class RestControllerTest extends \WP_UnitTestCase {
 		);
 		$response = rest_get_server()->dispatch( $request );
 
-		$this->assertSame( 200, $response->get_status() );
+		// validate_callback rejects non-object JSON.
+		$this->assertSame( 400, $response->get_status() );
+	}
 
-		// sanitize_json returns '{}' for invalid input.
-		$stored = get_post_meta( $command_id, 'wpce_result_data', true );
-		$this->assertSame( '{}', $stored );
+	/**
+	 * JSON arrays sent as result_data should be rejected (only objects accepted).
+	 */
+	public function test_result_data_rejects_json_arrays() {
+		$command_id = $this->create_command_directly( [ 'status' => 'running' ] );
+
+		$request = new \WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
+		$request->set_body_params(
+			[
+				'status'      => 'completed',
+				'result_data' => '["an","array"]',
+			]
+		);
+		$response = rest_get_server()->dispatch( $request );
+
+		// validate_callback rejects JSON arrays.
+		$this->assertSame( 400, $response->get_status() );
 	}
 
 	// -------------------------------------------------------------------------

@@ -418,7 +418,9 @@ describe('PrePublishPanel', () => {
 					options.path.split('search=')[1].split('&')[0]
 				);
 				if (search === 'Tech') {
-					return Promise.resolve([{ id: 5, name: 'Tech' }]);
+					return Promise.resolve([
+						{ id: 5, name: 'Tech', parent: 0 },
+					]);
 				}
 				return Promise.resolve([]);
 			}
@@ -506,7 +508,9 @@ describe('PrePublishPanel', () => {
 					options.path.split('search=')[1].split('&')[0]
 				);
 				if (search === 'Tech') {
-					return Promise.resolve([{ id: 5, name: 'Tech' }]);
+					return Promise.resolve([
+						{ id: 5, name: 'Tech', parent: 0 },
+					]);
 				}
 				return Promise.resolve([]);
 			}
@@ -709,7 +713,7 @@ describe('PrePublishPanel', () => {
 			method?: string;
 		}) => {
 			if (options.path.includes('/wp/v2/categories?search=')) {
-				return Promise.resolve([{ id: 5, name: 'Tech' }]);
+				return Promise.resolve([{ id: 5, name: 'Tech', parent: 0 }]);
 			}
 			if (options.path.includes('/wp/v2/tags?search=')) {
 				return Promise.resolve([{ id: 10, name: 'javascript' }]);
@@ -1261,7 +1265,7 @@ describe('PrePublishPanel', () => {
 				return Promise.resolve([{ id: 1, name: 'Existing' }]);
 			}
 			if (options.path.includes('/wp/v2/categories?search=')) {
-				return Promise.resolve([{ id: 5, name: 'Tech' }]);
+				return Promise.resolve([{ id: 5, name: 'Tech', parent: 0 }]);
 			}
 			return Promise.resolve([]);
 		}) as typeof apiFetch);

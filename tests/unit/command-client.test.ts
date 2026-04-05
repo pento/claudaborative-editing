@@ -234,6 +234,45 @@ describe('CommandClient', () => {
 			const body = JSON.parse(callArgs.body) as Record<string, unknown>;
 			expect(body).not.toHaveProperty('message');
 		});
+
+		it('includes result_data when resultData is provided', async () => {
+			const updated = fakeCommand({ id: 5, status: 'completed' });
+			apiClient.request.mockResolvedValue(updated);
+
+			const resultData = JSON.stringify({ checks: [] });
+			await client.updateCommandStatus(
+				5,
+				'completed',
+				'Done',
+				resultData
+			);
+
+			expect(apiClient.request).toHaveBeenCalledWith(
+				'/wpce/v1/commands/5',
+				{
+					method: 'PATCH',
+					body: JSON.stringify({
+						status: 'completed',
+						message: 'Done',
+						result_data: resultData,
+					}),
+				}
+			);
+		});
+
+		it('does not include result_data key when resultData is undefined', async () => {
+			apiClient.request.mockResolvedValue(
+				fakeCommand({ id: 1, status: 'completed' })
+			);
+
+			await client.updateCommandStatus(1, 'completed', 'Done');
+
+			const callArgs = apiClient.request.mock.calls[0][1] as {
+				body: string;
+			};
+			const body = JSON.parse(callArgs.body) as Record<string, unknown>;
+			expect(body).not.toHaveProperty('result_data');
+		});
 	});
 
 	// -------------------------------------------------------
