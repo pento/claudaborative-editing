@@ -199,6 +199,49 @@ async function resolveTermStatus(
 }
 
 /**
+ * Parse and validate raw result_data into PrePublishSuggestions.
+ * Ignores fields with unexpected types so malformed AI responses
+ * can't break the panel.
+ *
+ * @param data Raw result_data from the command response.
+ * @return Validated suggestions, or null if data is not a valid object.
+ */
+function parseSuggestions(
+	data: Record<string, unknown> | null
+): PrePublishSuggestions | null {
+	if (!data || typeof data !== 'object' || Array.isArray(data)) {
+		return null;
+	}
+
+	const result: PrePublishSuggestions = {};
+
+	if (typeof data.excerpt === 'string' && data.excerpt) {
+		result.excerpt = data.excerpt;
+	}
+	if (typeof data.slug === 'string' && data.slug) {
+		result.slug = data.slug;
+	}
+	if (Array.isArray(data.categories)) {
+		const valid = data.categories.filter(
+			(c): c is string => typeof c === 'string' && c.length > 0
+		);
+		if (valid.length > 0) {
+			result.categories = valid;
+		}
+	}
+	if (Array.isArray(data.tags)) {
+		const valid = data.tags.filter(
+			(t): t is string => typeof t === 'string' && t.length > 0
+		);
+		if (valid.length > 0) {
+			result.tags = valid;
+		}
+	}
+
+	return result;
+}
+
+/**
  * PrePublishPanel component.
  *
  * Renders a panel in the pre-publish sidebar with AI-powered checks.
@@ -256,17 +299,14 @@ export default function PrePublishPanel() {
 	);
 	const lastCheckFailed = lastCheck?.status === 'failed' ? lastCheck : null;
 
-	// Validate result_data: must be a non-null, non-array object.
 	const lastCheckResult =
-		lastCheck?.status === 'completed' &&
-		lastCheck.result_data !== null &&
-		typeof lastCheck.result_data === 'object' &&
-		!Array.isArray(lastCheck.result_data)
+		lastCheck?.status === 'completed' && lastCheck.result_data
 			? lastCheck
 			: null;
 
-	const suggestions: PrePublishSuggestions | null =
-		(lastCheckResult?.result_data as PrePublishSuggestions | null) ?? null;
+	const suggestions: PrePublishSuggestions | null = lastCheckResult
+		? parseSuggestions(lastCheckResult.result_data)
+		: null;
 
 	const [isApplying, setIsApplying] = useState(false);
 	const [excerptDraft, setExcerptDraft] = useState('');

@@ -27,8 +27,24 @@ export function registerCommandTools(
 				resultData: z
 					.string()
 					.optional()
+					.refine(
+						(val) => {
+							if (val === undefined) return true;
+							try {
+								const parsed: unknown = JSON.parse(val);
+								return (
+									typeof parsed === 'object' &&
+									parsed !== null &&
+									!Array.isArray(parsed)
+								);
+							} catch {
+								return false;
+							}
+						},
+						{ message: 'resultData must be a JSON object string' }
+					)
 					.describe(
-						'Optional JSON string of structured result data for the command response'
+						'Optional JSON object string of structured result data for the command response'
 					),
 			},
 		},

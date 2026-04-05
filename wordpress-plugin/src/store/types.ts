@@ -23,7 +23,7 @@ export interface Command {
 	status: CommandStatus;
 	arguments: Record<string, unknown>;
 	message: string | null;
-	result_data: PrePublishSuggestions | null;
+	result_data: Record<string, unknown> | null;
 }
 
 export interface McpStatus {
