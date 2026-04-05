@@ -134,12 +134,8 @@ class REST_Controller extends \WP_REST_Controller {
 							'type'              => 'string',
 							'sanitize_callback' => [ Command_Store::class, 'sanitize_json' ],
 							'validate_callback' => static function ( $value ) {
-								if ( ! is_string( $value ) ) {
-									return false;
-								}
-								$decoded = json_decode( $value );
 								// Only accept JSON objects, not arrays or scalars.
-								return is_object( $decoded );
+								return is_object( json_decode( $value ) );
 							},
 						],
 					],

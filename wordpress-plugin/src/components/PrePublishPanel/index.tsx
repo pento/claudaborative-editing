@@ -246,6 +246,9 @@ export default function PrePublishPanel() {
 	const { editPost } = useDispatch('core/editor') as {
 		editPost: (edits: Record<string, unknown>) => void;
 	};
+	const { invalidateResolutionForStoreSelector } = useDispatch('core') as {
+		invalidateResolutionForStoreSelector: (selector: string) => void;
+	};
 
 	// Derive check results from command history.
 	const lastCheck = history.find(
@@ -265,7 +268,6 @@ export default function PrePublishPanel() {
 	const suggestions: PrePublishSuggestions | null =
 		(lastCheckResult?.result_data as PrePublishSuggestions | null) ?? null;
 
-	const [applied, setApplied] = useState<Set<string>>(new Set());
 	const [isApplying, setIsApplying] = useState(false);
 	const [excerptDraft, setExcerptDraft] = useState('');
 	const [resolvedCategories, setResolvedCategories] = useState<
@@ -288,11 +290,10 @@ export default function PrePublishPanel() {
 	// when new results arrive.
 	const lastResultIdRef = useRef<number | null>(null);
 
-	// Reset applied set, excerpt draft, and removed suggestions on new results.
+	// Reset excerpt draft and removed suggestions on new results.
 	useEffect(() => {
 		if (lastCheckResult && lastCheckResult.id !== lastResultIdRef.current) {
 			lastResultIdRef.current = lastCheckResult.id;
-			setApplied(new Set());
 			setRemovedSuggestions(new Set());
 			const sug = lastCheckResult.result_data as PrePublishSuggestions;
 			setExcerptDraft(sug?.excerpt ?? '');
@@ -472,6 +473,71 @@ export default function PrePublishPanel() {
 		(t) => t.source === 'suggested'
 	);
 
+	// Track applied state in a ref keyed by command ID — survives
+	// component remounts (closing/reopening the pre-publish panel).
+	const appliedRef = useRef<{ commandId: number; applied: Set<string> }>({
+		commandId: 0,
+		applied: new Set(),
+	});
+
+	// Reset when a new check completes.
+	if (
+		lastCheckResult &&
+		appliedRef.current.commandId !== lastCheckResult.id
+	) {
+		appliedRef.current = {
+			commandId: lastCheckResult.id,
+			applied: new Set(),
+		};
+	}
+
+	const [, forceUpdate] = useState(0);
+	const applied = appliedRef.current.applied;
+	const markApplied = useCallback((field: string) => {
+		appliedRef.current.applied = new Set(appliedRef.current.applied).add(
+			field
+		);
+		// Force re-render since ref mutations don't trigger updates.
+		forceUpdate((n) => n + 1);
+	}, []);
+
+	// Excerpt uses the ref-based applied tracking because the user can
+	// edit the suggestion before applying — content comparison would
+	// fail after a remount when excerptDraft resets to the original.
+	const excerptApplied = applied.has('excerpt');
+
+	// Derive slug applied state from current post data (no editing
+	// involved, so direct comparison works reliably).
+	const slugApplied = !!(
+		suggestions?.slug && currentSlug === suggestions.slug
+	);
+
+	// For categories/tags, derive from post state: applied if all
+	// non-removed suggested names are in the current term names.
+	const categoriesApplied = !!(
+		suggestions?.categories &&
+		suggestions.categories.length > 0 &&
+		suggestions.categories
+			.filter((name) => !removedSuggestions.has(`cat:${name}`))
+			.every((name) =>
+				currentCategoryNames.some(
+					(n) => n.toLowerCase() === name.toLowerCase()
+				)
+			)
+	);
+
+	const tagsApplied = !!(
+		suggestions?.tags &&
+		suggestions.tags.length > 0 &&
+		suggestions.tags
+			.filter((name) => !removedSuggestions.has(`tag:${name}`))
+			.every((name) =>
+				currentTagNames.some(
+					(n) => n.toLowerCase() === name.toLowerCase()
+				)
+			)
+	);
+
 	const hasSuggestions = !!(
 		suggestions?.excerpt ||
 		hasVisibleSuggestedCategories ||
@@ -481,32 +547,21 @@ export default function PrePublishPanel() {
 
 	// Count how many suggestion fields exist but haven't been applied yet.
 	let unappliedCount = 0;
-	if (suggestions) {
-		if (suggestions.excerpt && !applied.has('excerpt')) {
-			unappliedCount++;
-		}
-		if (hasVisibleSuggestedCategories && !applied.has('categories')) {
-			unappliedCount++;
-		}
-		if (hasVisibleSuggestedTags && !applied.has('tags')) {
-			unappliedCount++;
-		}
-		if (showSlugSuggestion && !applied.has('slug')) {
-			unappliedCount++;
-		}
-	}
+	if (suggestions?.excerpt && !excerptApplied) unappliedCount++;
+	if (hasVisibleSuggestedCategories && !categoriesApplied) unappliedCount++;
+	if (hasVisibleSuggestedTags && !tagsApplied) unappliedCount++;
+	if (showSlugSuggestion && !slugApplied) unappliedCount++;
 
 	const applyExcerpt = useCallback(() => {
 		if (excerptDraft) {
 			editPost({ excerpt: excerptDraft });
-			setApplied((prev) => new Set(prev).add('excerpt'));
+			markApplied('excerpt');
 		}
-	}, [excerptDraft, editPost]);
+	}, [excerptDraft, editPost, markApplied]);
 
 	const applySlug = useCallback(() => {
 		if (suggestions?.slug) {
 			editPost({ slug: suggestions.slug });
-			setApplied((prev) => new Set(prev).add('slug'));
 		}
 	}, [suggestions, editPost]);
 
@@ -526,13 +581,19 @@ export default function PrePublishPanel() {
 						...new Set([...currentCategoryIds, ...newIds]),
 					];
 					editPost({ categories: merged });
-					setApplied((prev) => new Set(prev).add('categories'));
+					invalidateResolutionForStoreSelector('getEntityRecords');
 				}
 			} finally {
 				setIsApplying(false);
 			}
 		}
-	}, [suggestions, removedSuggestions, currentCategoryIds, editPost]);
+	}, [
+		suggestions,
+		removedSuggestions,
+		currentCategoryIds,
+		editPost,
+		invalidateResolutionForStoreSelector,
+	]);
 
 	const applyTags = useCallback(async () => {
 		const suggestedNames = (suggestions?.tags ?? []).filter(
@@ -545,13 +606,19 @@ export default function PrePublishPanel() {
 				if (newIds.length > 0) {
 					const merged = [...new Set([...currentTagIds, ...newIds])];
 					editPost({ tags: merged });
-					setApplied((prev) => new Set(prev).add('tags'));
+					invalidateResolutionForStoreSelector('getEntityRecords');
 				}
 			} finally {
 				setIsApplying(false);
 			}
 		}
-	}, [suggestions, removedSuggestions, currentTagIds, editPost]);
+	}, [
+		suggestions,
+		removedSuggestions,
+		currentTagIds,
+		editPost,
+		invalidateResolutionForStoreSelector,
+	]);
 
 	const removeTerm = useCallback(
 		(taxonomy: 'categories' | 'tags', term: DisplayTerm) => {
@@ -588,19 +655,13 @@ export default function PrePublishPanel() {
 		setIsApplying(true);
 		try {
 			const edits: Record<string, unknown> = {};
-			const newApplied = new Set(applied);
 
-			if (
-				suggestions?.excerpt &&
-				excerptDraft &&
-				!applied.has('excerpt')
-			) {
+			if (suggestions?.excerpt && excerptDraft && !excerptApplied) {
 				edits.excerpt = excerptDraft;
-				newApplied.add('excerpt');
+				markApplied('excerpt');
 			}
-			if (showSlugSuggestion && !applied.has('slug')) {
+			if (showSlugSuggestion && !slugApplied) {
 				edits.slug = suggestions?.slug;
-				newApplied.add('slug');
 			}
 
 			// Filter out removed suggestions before resolving.
@@ -613,41 +674,49 @@ export default function PrePublishPanel() {
 
 			// Resolve categories and tags in parallel.
 			const [categoryIds, tagIds] = await Promise.all([
-				suggestedCatNames.length > 0 && !applied.has('categories')
+				suggestedCatNames.length > 0 && !categoriesApplied
 					? resolveTermIds(suggestedCatNames, 'categories')
 					: Promise.resolve(null),
-				suggestedTagNames.length > 0 && !applied.has('tags')
+				suggestedTagNames.length > 0 && !tagsApplied
 					? resolveTermIds(suggestedTagNames, 'tags')
 					: Promise.resolve(null),
 			]);
 
+			let termsChanged = false;
 			if (categoryIds && categoryIds.length > 0) {
 				edits.categories = [
 					...new Set([...currentCategoryIds, ...categoryIds]),
 				];
-				newApplied.add('categories');
+				termsChanged = true;
 			}
 			if (tagIds && tagIds.length > 0) {
 				edits.tags = [...new Set([...currentTagIds, ...tagIds])];
-				newApplied.add('tags');
+				termsChanged = true;
 			}
 
 			if (Object.keys(edits).length > 0) {
 				editPost(edits);
 			}
-			setApplied(newApplied);
+			if (termsChanged) {
+				invalidateResolutionForStoreSelector('getEntityRecords');
+			}
 		} finally {
 			setIsApplying(false);
 		}
 	}, [
 		suggestions,
-		applied,
+		excerptApplied,
+		slugApplied,
+		categoriesApplied,
+		tagsApplied,
 		excerptDraft,
 		showSlugSuggestion,
 		removedSuggestions,
 		currentCategoryIds,
 		currentTagIds,
 		editPost,
+		markApplied,
+		invalidateResolutionForStoreSelector,
 	]);
 
 	return (
@@ -726,7 +795,7 @@ export default function PrePublishPanel() {
 											'claudaborative-editing'
 										)}
 									</strong>
-									{applied.has('excerpt') ? (
+									{excerptApplied ? (
 										<Icon icon={checkIcon} />
 									) : (
 										<Button
@@ -741,7 +810,7 @@ export default function PrePublishPanel() {
 										</Button>
 									)}
 								</div>
-								{applied.has('excerpt') ? (
+								{excerptApplied ? (
 									<p className="wpce-pre-publish-panel__suggestion-value">
 										{excerptDraft}
 									</p>
@@ -764,7 +833,7 @@ export default function PrePublishPanel() {
 									<strong>
 										{__('Slug', 'claudaborative-editing')}
 									</strong>
-									{applied.has('slug') ? (
+									{slugApplied ? (
 										<Icon icon={checkIcon} />
 									) : (
 										<Button
@@ -796,7 +865,7 @@ export default function PrePublishPanel() {
 										)}
 									</strong>
 									{hasVisibleSuggestedCategories &&
-										(applied.has('categories') ? (
+										(categoriesApplied ? (
 											<Icon icon={checkIcon} />
 										) : (
 											<Button
@@ -860,7 +929,7 @@ export default function PrePublishPanel() {
 										{__('Tags', 'claudaborative-editing')}
 									</strong>
 									{hasVisibleSuggestedTags &&
-										(applied.has('tags') ? (
+										(tagsApplied ? (
 											<Icon icon={checkIcon} />
 										) : (
 											<Button

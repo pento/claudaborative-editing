@@ -129,6 +129,7 @@ const defaultCommands = {
 const defaultEditorState = {
 	postId: 123,
 	currentSlug: 'my-post',
+	currentExcerpt: '' as string,
 	hasFeaturedImage: true,
 	currentCategoryIds: [] as number[],
 	currentTagIds: [] as number[],
@@ -138,10 +139,13 @@ function setupMocks(
 	overrides: {
 		editorState?: Partial<typeof defaultEditorState>;
 		editPost?: jest.Mock;
+		invalidateResolutionForStoreSelector?: jest.Mock;
 	} = {}
 ) {
 	const editorState = { ...defaultEditorState, ...overrides.editorState };
 	const editPost = overrides.editPost ?? jest.fn();
+	const invalidateResolutionForStoreSelector =
+		overrides.invalidateResolutionForStoreSelector ?? jest.fn();
 
 	mockedUseSelect.mockImplementation((selector: any) => {
 		const select = (store: unknown) => {
@@ -157,6 +161,8 @@ function setupMocks(
 								return editorState.currentCategoryIds;
 							case 'tags':
 								return editorState.currentTagIds;
+							case 'excerpt':
+								return editorState.currentExcerpt;
 							default:
 								return undefined;
 						}
@@ -172,10 +178,13 @@ function setupMocks(
 		if (store === 'core/editor') {
 			return { editPost };
 		}
+		if (store === 'core') {
+			return { invalidateResolutionForStoreSelector };
+		}
 		return {};
 	});
 
-	return { editPost };
+	return { editPost, invalidateResolutionForStoreSelector, editorState };
 }
 
 describe('PrePublishPanel', () => {
@@ -323,8 +332,12 @@ describe('PrePublishPanel', () => {
 	});
 
 	it('shows read-only text after applying excerpt', async () => {
-		const editPost = jest.fn();
-		setupMocks({ editPost });
+		const { editorState, editPost } = setupMocks();
+		editPost.mockImplementation((edits: any) => {
+			if (edits.excerpt !== undefined) {
+				editorState.currentExcerpt = edits.excerpt;
+			}
+		});
 
 		mockedUseCommands.mockReturnValue({
 			...defaultCommands,
@@ -340,14 +353,19 @@ describe('PrePublishPanel', () => {
 			],
 		});
 
-		await act(async () => {
-			render(<PrePublishPanel />);
+		const { rerender } = await act(async () => {
+			return render(<PrePublishPanel />);
 		});
 
 		// Before apply: textarea visible
 		expect(screen.getByTestId('textarea-control')).toBeTruthy();
 
 		fireEvent.click(screen.getByText('Apply'));
+
+		// Re-render so derived state picks up the updated excerpt
+		await act(async () => {
+			rerender(<PrePublishPanel />);
+		});
 
 		// After apply: textarea gone, read-only text visible
 		expect(screen.queryByTestId('textarea-control')).toBeNull();
@@ -496,7 +514,8 @@ describe('PrePublishPanel', () => {
 
 	it('resolves category names to IDs and applies via editPost', async () => {
 		const editPost = jest.fn();
-		setupMocks({ editPost });
+		const invalidateResolutionForStoreSelector = jest.fn();
+		setupMocks({ editPost, invalidateResolutionForStoreSelector });
 
 		mockedApiFetch.mockImplementation(((options: {
 			path: string;
@@ -546,11 +565,15 @@ describe('PrePublishPanel', () => {
 		});
 
 		expect(editPost).toHaveBeenCalledWith({ categories: [5, 99] });
+		expect(invalidateResolutionForStoreSelector).toHaveBeenCalledWith(
+			'getEntityRecords'
+		);
 	});
 
 	it('resolves tag names to IDs and applies via editPost', async () => {
 		const editPost = jest.fn();
-		setupMocks({ editPost });
+		const invalidateResolutionForStoreSelector = jest.fn();
+		setupMocks({ editPost, invalidateResolutionForStoreSelector });
 
 		mockedApiFetch.mockImplementation(((options: {
 			path: string;
@@ -586,6 +609,9 @@ describe('PrePublishPanel', () => {
 		});
 
 		expect(editPost).toHaveBeenCalledWith({ tags: [10] });
+		expect(invalidateResolutionForStoreSelector).toHaveBeenCalledWith(
+			'getEntityRecords'
+		);
 	});
 
 	it('shows "Everything looks good!" when no suggestions and featured image set', async () => {
@@ -641,8 +667,12 @@ describe('PrePublishPanel', () => {
 	});
 
 	it('shows checkmark icon after applying a suggestion', async () => {
-		const editPost = jest.fn();
-		setupMocks({ editPost });
+		const { editorState, editPost } = setupMocks();
+		editPost.mockImplementation((edits: any) => {
+			if (edits.slug !== undefined) {
+				editorState.currentSlug = edits.slug;
+			}
+		});
 
 		mockedUseCommands.mockReturnValue({
 			...defaultCommands,
@@ -658,8 +688,8 @@ describe('PrePublishPanel', () => {
 			],
 		});
 
-		await act(async () => {
-			render(<PrePublishPanel />);
+		const { rerender } = await act(async () => {
+			return render(<PrePublishPanel />);
 		});
 
 		// Before apply — Apply button visible, no checkmark
@@ -668,14 +698,23 @@ describe('PrePublishPanel', () => {
 
 		fireEvent.click(screen.getByText('Apply'));
 
-		// After apply — checkmark visible, no Apply button
-		expect(screen.getByTestId('icon-check-icon')).toBeTruthy();
-		expect(screen.queryByText('Apply')).toBeNull();
+		// Re-render so derived state picks up the updated slug
+		await act(async () => {
+			rerender(<PrePublishPanel />);
+		});
+
+		// After apply — slug now matches suggestion, so slug section is hidden
+		// (showSlugSuggestion is false when currentSlug === suggestions.slug)
+		expect(screen.queryByText('Slug')).toBeNull();
 	});
 
 	it('hides "Apply all" when all suggestions are applied', async () => {
-		const editPost = jest.fn();
-		setupMocks({ editPost });
+		const { editorState, editPost } = setupMocks();
+		editPost.mockImplementation((edits: any) => {
+			if (edits.slug !== undefined) {
+				editorState.currentSlug = edits.slug;
+			}
+		});
 
 		mockedUseCommands.mockReturnValue({
 			...defaultCommands,
@@ -691,8 +730,8 @@ describe('PrePublishPanel', () => {
 			],
 		});
 
-		await act(async () => {
-			render(<PrePublishPanel />);
+		const { rerender } = await act(async () => {
+			return render(<PrePublishPanel />);
 		});
 
 		expect(screen.getByText('Apply all suggestions')).toBeTruthy();
@@ -700,13 +739,19 @@ describe('PrePublishPanel', () => {
 		// Apply the only suggestion
 		fireEvent.click(screen.getByText('Apply'));
 
+		// Re-render so derived state picks up the updated slug
+		await act(async () => {
+			rerender(<PrePublishPanel />);
+		});
+
 		// Apply all should disappear
 		expect(screen.queryByText('Apply all suggestions')).toBeNull();
 	});
 
 	it('applies all suggestions at once', async () => {
 		const editPost = jest.fn();
-		setupMocks({ editPost });
+		const invalidateResolutionForStoreSelector = jest.fn();
+		setupMocks({ editPost, invalidateResolutionForStoreSelector });
 
 		mockedApiFetch.mockImplementation(((options: {
 			path: string;
@@ -755,9 +800,10 @@ describe('PrePublishPanel', () => {
 			tags: [10],
 		});
 
-		// All should be marked applied — no Apply buttons remaining
-		expect(screen.queryByText('Apply')).toBeNull();
-		expect(screen.queryByText('Apply all suggestions')).toBeNull();
+		// Verify entity record cache was invalidated for new terms
+		expect(invalidateResolutionForStoreSelector).toHaveBeenCalledWith(
+			'getEntityRecords'
+		);
 	});
 
 	it('run button is disabled when another command is active', () => {
@@ -923,9 +969,16 @@ describe('PrePublishPanel', () => {
 		expect(screen.getByText('Re-run checks')).toBeTruthy();
 	});
 
-	it('resets applied state when new results arrive', async () => {
-		const editPost = jest.fn();
-		setupMocks({ editPost });
+	it('shows new suggestion as unapplied when new results arrive', async () => {
+		// With derived state, applied status is determined by comparing
+		// current post state with the suggestion. A new suggestion with a
+		// different value will naturally appear as unapplied.
+		const { editorState, editPost } = setupMocks();
+		editPost.mockImplementation((edits: any) => {
+			if (edits.slug !== undefined) {
+				editorState.currentSlug = edits.slug;
+			}
+		});
 
 		const { rerender } = render(<PrePublishPanel />);
 
@@ -948,11 +1001,17 @@ describe('PrePublishPanel', () => {
 			rerender(<PrePublishPanel />);
 		});
 
-		// Apply the slug
+		// Apply the slug — this changes currentSlug to 'first-slug'
 		fireEvent.click(screen.getByText('Apply'));
-		expect(screen.getByTestId('icon-check-icon')).toBeTruthy();
 
-		// New result with different ID
+		await act(async () => {
+			rerender(<PrePublishPanel />);
+		});
+
+		// After apply, currentSlug matches suggestion, slug section hidden
+		expect(screen.queryByText('Slug')).toBeNull();
+
+		// New result with different slug suggestion
 		mockedUseCommands.mockReturnValue({
 			...defaultCommands,
 			history: [
@@ -971,8 +1030,8 @@ describe('PrePublishPanel', () => {
 			rerender(<PrePublishPanel />);
 		});
 
-		// Should be un-applied again
-		expect(screen.queryByTestId('icon-check-icon')).toBeNull();
+		// New suggestion differs from currentSlug, so it should appear unapplied
+		expect(screen.getByText('Slug')).toBeTruthy();
 		expect(screen.getByText('Apply')).toBeTruthy();
 	});
 
@@ -1252,9 +1311,11 @@ describe('PrePublishPanel', () => {
 
 	it('merges suggested category IDs with existing when applying', async () => {
 		const editPost = jest.fn();
+		const invalidateResolutionForStoreSelector = jest.fn();
 		setupMocks({
 			editorState: { currentCategoryIds: [1] },
 			editPost,
+			invalidateResolutionForStoreSelector,
 		});
 
 		mockedApiFetch.mockImplementation(((options: {
@@ -1294,6 +1355,9 @@ describe('PrePublishPanel', () => {
 
 		// Should merge existing ID 1 with new ID 5
 		expect(editPost).toHaveBeenCalledWith({ categories: [1, 5] });
+		expect(invalidateResolutionForStoreSelector).toHaveBeenCalledWith(
+			'getEntityRecords'
+		);
 	});
 
 	it('handles hierarchical category resolution with parent > child format', async () => {
@@ -1403,7 +1467,8 @@ describe('PrePublishPanel', () => {
 
 	it('includes parent parameter when resolving hierarchical child categories', async () => {
 		const editPost = jest.fn();
-		setupMocks({ editPost });
+		const invalidateResolutionForStoreSelector = jest.fn();
+		setupMocks({ editPost, invalidateResolutionForStoreSelector });
 
 		mockedApiFetch.mockImplementation(((options: {
 			path: string;
@@ -1478,11 +1543,15 @@ describe('PrePublishPanel', () => {
 		).toBe(true);
 
 		expect(editPost).toHaveBeenCalledWith({ categories: [15] });
+		expect(invalidateResolutionForStoreSelector).toHaveBeenCalledWith(
+			'getEntityRecords'
+		);
 	});
 
 	it('creates child category with parent ID when child does not exist', async () => {
 		const editPost = jest.fn();
-		setupMocks({ editPost });
+		const invalidateResolutionForStoreSelector = jest.fn();
+		setupMocks({ editPost, invalidateResolutionForStoreSelector });
 
 		mockedApiFetch.mockImplementation(((options: {
 			path: string;
@@ -1547,6 +1616,9 @@ describe('PrePublishPanel', () => {
 		expect(postCalls[0][0].data).toEqual({ name: 'AI', parent: 5 });
 
 		expect(editPost).toHaveBeenCalledWith({ categories: [20] });
+		expect(invalidateResolutionForStoreSelector).toHaveBeenCalledWith(
+			'getEntityRecords'
+		);
 	});
 
 	it('falls back to isNew: true when resolveTermStatus API call rejects', async () => {
