@@ -16,6 +16,7 @@
  */
 import { Fill } from '@wordpress/components';
 import { createElement } from '@wordpress/element';
+import type { ReactNode } from 'react';
 
 /**
  * PinnedItems Fill component — renders children into the PinnedItems
@@ -30,7 +31,7 @@ function PinnedItems({
 	...props
 }: {
 	scope: string;
-	children?: React.ReactNode;
+	children?: ReactNode;
 }) {
 	return createElement(Fill, { name: `PinnedItems/${scope}`, ...props });
 }

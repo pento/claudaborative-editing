@@ -10,9 +10,7 @@ declare module '@wordpress/interface' {
 		children?: ReactNode;
 	}
 
-	export const PinnedItems: FC<PinnedItemsProps> & {
-		Slot: FC<{ scope: string; className?: string }>;
-	};
+	export const PinnedItems: FC<PinnedItemsProps>;
 }
 
 /**

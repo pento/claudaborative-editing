@@ -525,9 +525,13 @@ export default function PrePublishPanel() {
 					suggestedNames,
 					'categories'
 				);
-				const merged = [...new Set([...currentCategoryIds, ...newIds])];
-				editPost({ categories: merged });
-				setApplied((prev) => new Set(prev).add('categories'));
+				if (newIds.length > 0) {
+					const merged = [
+						...new Set([...currentCategoryIds, ...newIds]),
+					];
+					editPost({ categories: merged });
+					setApplied((prev) => new Set(prev).add('categories'));
+				}
 			} finally {
 				setIsApplying(false);
 			}
@@ -542,9 +546,11 @@ export default function PrePublishPanel() {
 			setIsApplying(true);
 			try {
 				const newIds = await resolveTermIds(suggestedNames, 'tags');
-				const merged = [...new Set([...currentTagIds, ...newIds])];
-				editPost({ tags: merged });
-				setApplied((prev) => new Set(prev).add('tags'));
+				if (newIds.length > 0) {
+					const merged = [...new Set([...currentTagIds, ...newIds])];
+					editPost({ tags: merged });
+					setApplied((prev) => new Set(prev).add('tags'));
+				}
 			} finally {
 				setIsApplying(false);
 			}
@@ -618,13 +624,13 @@ export default function PrePublishPanel() {
 					: Promise.resolve(null),
 			]);
 
-			if (categoryIds) {
+			if (categoryIds && categoryIds.length > 0) {
 				edits.categories = [
 					...new Set([...currentCategoryIds, ...categoryIds]),
 				];
 				newApplied.add('categories');
 			}
-			if (tagIds) {
+			if (tagIds && tagIds.length > 0) {
 				edits.tags = [...new Set([...currentTagIds, ...tagIds])];
 				newApplied.add('tags');
 			}
