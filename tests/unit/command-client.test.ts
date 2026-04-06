@@ -553,6 +553,116 @@ describe('CommandClient', () => {
 	});
 
 	// -------------------------------------------------------
+	// Initial scan priming (initialScanComplete guard)
+	// -------------------------------------------------------
+
+	describe('initial scan priming', () => {
+		it('does not call onResponse for running commands with messages already in the map', () => {
+			const { remoteDoc, localDoc, syncToLocal } = createSyncedDocs();
+
+			// Pre-populate a running command with user messages BEFORE observing
+			const remoteMap = remoteDoc.getMap('document');
+			remoteMap.set('commands', {
+				'200': fakeCommand({
+					id: 200,
+					status: 'running',
+					result_data: {
+						messages: [
+							{ role: 'user', content: 'Do something' },
+							{ role: 'assistant', content: 'Working on it' },
+						],
+					},
+				}),
+			});
+			syncToLocal();
+
+			const documentMap = localDoc.getMap('document');
+			client.startObserving(documentMap);
+
+			// onResponse should NOT be called — counts are primed during initial scan
+			expect(onResponse).not.toHaveBeenCalled();
+		});
+
+		it('calls onResponse for new messages arriving after initial scan', () => {
+			const { remoteDoc, localDoc, syncToLocal } = createSyncedDocs();
+
+			// Pre-populate a running command with one user message
+			const remoteMap = remoteDoc.getMap('document');
+			remoteMap.set('commands', {
+				'201': fakeCommand({
+					id: 201,
+					status: 'running',
+					result_data: {
+						messages: [
+							{ role: 'user', content: 'First message' },
+							{ role: 'assistant', content: 'Got it' },
+						],
+					},
+				}),
+			});
+			syncToLocal();
+
+			const documentMap = localDoc.getMap('document');
+			client.startObserving(documentMap);
+			expect(onResponse).not.toHaveBeenCalled();
+
+			// Now a NEW user message arrives via remote sync
+			remoteMap.set('commands', {
+				'201': fakeCommand({
+					id: 201,
+					status: 'running',
+					result_data: {
+						messages: [
+							{ role: 'user', content: 'First message' },
+							{ role: 'assistant', content: 'Got it' },
+							{ role: 'user', content: 'Second message' },
+						],
+					},
+				}),
+			});
+			syncToLocal();
+
+			expect(onResponse).toHaveBeenCalledOnce();
+			expect(onResponse).toHaveBeenCalledWith(
+				expect.objectContaining({ id: 201, status: 'running' })
+			);
+		});
+
+		it('primes counts for multiple running commands during initial scan', () => {
+			const { remoteDoc, localDoc, syncToLocal } = createSyncedDocs();
+
+			// Pre-populate multiple running commands with messages
+			const remoteMap = remoteDoc.getMap('document');
+			remoteMap.set('commands', {
+				'202': fakeCommand({
+					id: 202,
+					status: 'running',
+					result_data: {
+						messages: [{ role: 'user', content: 'Message A' }],
+					},
+				}),
+				'203': fakeCommand({
+					id: 203,
+					status: 'running',
+					result_data: {
+						messages: [
+							{ role: 'user', content: 'Message B' },
+							{ role: 'user', content: 'Message C' },
+						],
+					},
+				}),
+			});
+			syncToLocal();
+
+			const documentMap = localDoc.getMap('document');
+			client.startObserving(documentMap);
+
+			// Neither command should trigger onResponse
+			expect(onResponse).not.toHaveBeenCalled();
+		});
+	});
+
+	// -------------------------------------------------------
 	// Response detection
 	// -------------------------------------------------------
 

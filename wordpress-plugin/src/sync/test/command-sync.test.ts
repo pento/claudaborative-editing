@@ -653,6 +653,31 @@ describe('command-sync', () => {
 			expect(cmdRoom!.updates[0].data).toBe('existing');
 		});
 
+		it('does not double-wrap fetch when createAwareness is called twice', async () => {
+			const fetchSpy = jest.fn().mockResolvedValue({
+				ok: true,
+				text: () => Promise.resolve('ok'),
+			});
+			window.fetch = fetchSpy;
+
+			const mod = loadModule();
+			mod.initCommandSync();
+
+			const syncConfig = mockAddEntities.mock.calls[0][0][0].syncConfig;
+			const doc1 = new MockYDoc();
+			syncConfig.createAwareness(doc1);
+
+			// Capture the wrapped fetch after the first createAwareness call.
+			const wrappedFetchAfterFirst = window.fetch;
+
+			// Call createAwareness a second time (e.g., HMR re-init).
+			const doc2 = new MockYDoc();
+			syncConfig.createAwareness(doc2);
+
+			// window.fetch should not have been wrapped again.
+			expect(window.fetch).toBe(wrappedFetchAfterFirst);
+		});
+
 		it('passes non-wp-sync requests through unchanged', async () => {
 			const fetchSpy = jest.fn().mockResolvedValue({
 				ok: true,
@@ -738,6 +763,86 @@ describe('command-sync', () => {
 			>;
 			expect(commands['42']).toBeUndefined();
 			expect(commands['43']).toBeDefined();
+
+			jest.useRealTimers();
+		});
+	});
+
+	describe('stale command cleanup interval management', () => {
+		let originalFetch: typeof window.fetch;
+
+		beforeEach(() => {
+			originalFetch = window.fetch;
+		});
+
+		afterEach(() => {
+			window.fetch = originalFetch;
+		});
+
+		it('sets up periodic cleanup interval after initial run', async () => {
+			jest.useFakeTimers();
+			const setIntervalSpy = jest.spyOn(global, 'setInterval');
+
+			window.fetch = jest.fn().mockResolvedValue({
+				ok: true,
+				text: () => Promise.resolve('ok'),
+			});
+
+			// eslint-disable-next-line @typescript-eslint/no-require-imports
+			const apiFetchMock = require('@wordpress/api-fetch') as {
+				default: jest.Mock;
+			};
+			apiFetchMock.default.mockResolvedValue([]);
+
+			const mod = loadModule();
+			mod.initCommandSync();
+
+			const syncConfig = mockAddEntities.mock.calls[0][0][0].syncConfig;
+			const doc = new MockYDoc();
+			syncConfig.createAwareness(doc);
+
+			// Advance timers so the doc-wait resolves and cleanup runs.
+			jest.advanceTimersByTime(200);
+			await Promise.resolve();
+			await Promise.resolve();
+			await Promise.resolve();
+
+			// A 30-second interval should have been created for periodic cleanup.
+			const intervalCalls = setIntervalSpy.mock.calls.filter(
+				(call) => call[1] === 30_000
+			);
+			expect(intervalCalls.length).toBeGreaterThanOrEqual(1);
+
+			setIntervalSpy.mockRestore();
+			jest.useRealTimers();
+		});
+
+		it('bails out if doc never initializes within timeout', async () => {
+			jest.useFakeTimers();
+
+			window.fetch = jest.fn().mockResolvedValue({
+				ok: true,
+				text: () => Promise.resolve('ok'),
+			});
+
+			// eslint-disable-next-line @typescript-eslint/no-require-imports
+			const apiFetchMock = require('@wordpress/api-fetch') as {
+				default: jest.Mock;
+			};
+			apiFetchMock.default.mockResolvedValue([]);
+
+			const mod = loadModule();
+			mod.initCommandSync();
+
+			// Do NOT call createAwareness — the doc never becomes available.
+
+			// Advance past the 30-second timeout (150 × 200ms).
+			jest.advanceTimersByTime(31_000);
+			await Promise.resolve();
+			await Promise.resolve();
+
+			// apiFetch should never have been called since the doc timed out.
+			expect(apiFetchMock.default).not.toHaveBeenCalled();
 
 			jest.useRealTimers();
 		});

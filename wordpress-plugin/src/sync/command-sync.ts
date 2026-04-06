@@ -49,9 +49,6 @@ let commandAwareness: InstanceType<typeof Awareness> | null = null;
 /** The browserType value sent by the MCP server in awareness state. */
 const MCP_BROWSER_TYPE = 'Claudaborative Editing MCP';
 
-/** Interval ID for periodic stale command cleanup. */
-let staleCleanupInterval: ReturnType<typeof setInterval> | null = null;
-
 /**
  * Get the state map from the captured Y.Doc.
  */
@@ -225,12 +222,6 @@ async function startStaleCommandCleanup(): Promise<void> {
 	// If the doc never initialized, bail out
 	if (!getStateMap()) return;
 
-	// Clear any previous interval (e.g., from HMR re-initialization)
-	if (staleCleanupInterval) {
-		clearInterval(staleCleanupInterval);
-		staleCleanupInterval = null;
-	}
-
 	const runCleanup = async () => {
 		const stateMap = getStateMap();
 		if (!stateMap) return;
@@ -274,7 +265,7 @@ async function startStaleCommandCleanup(): Promise<void> {
 	// Run immediately, then every 30 seconds to catch data that
 	// arrives from the sync server after init or becomes stale over time.
 	await runCleanup();
-	staleCleanupInterval = setInterval(() => void runCleanup(), 30_000);
+	setInterval(() => void runCleanup(), 30_000);
 }
 
 /**
