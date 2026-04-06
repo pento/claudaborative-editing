@@ -802,7 +802,7 @@ class REST_Controller extends \WP_REST_Controller {
 
 		$result_data['messages'][] = array(
 			'role'      => $role,
-			'content'   => $content,
+			'content'   => wp_kses_post( $content ),
 			'timestamp' => gmdate( 'Y-m-d\TH:i:s\Z' ),
 		);
 
@@ -870,7 +870,8 @@ class REST_Controller extends \WP_REST_Controller {
 		$json = wp_json_encode( $result_data );
 
 		global $wpdb;
-		$wpdb->update(
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+		$updated = $wpdb->update(
 			$wpdb->postmeta,
 			array( 'meta_value' => $json ),
 			array(
@@ -881,6 +882,12 @@ class REST_Controller extends \WP_REST_Controller {
 			array( '%d', '%s' )
 		);
 
+		// Fallback: if the meta row doesn't exist yet, insert it.
+		if ( 0 === $updated ) {
+			add_post_meta( $post_id, 'wpce_result_data', $json, true );
+		}
+
+		// Update the object cache to match.
 		wp_cache_delete( $post_id, 'post_meta' );
 	}
 

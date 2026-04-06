@@ -29,6 +29,14 @@ export type ChannelNotifier = (params: {
 	meta: Record<string, string>;
 }) => Promise<void>;
 
+/** Strip HTML tags and normalize whitespace to produce plain text. */
+function stripHtml(html: string): string {
+	return html
+		.replace(/<[^>]*>/g, '')
+		.replace(/\s+/g, ' ')
+		.trim();
+}
+
 export class CommandHandler {
 	private commandClient: CommandClient | null = null;
 	private _pluginStatus: PluginStatus | null = null;
@@ -212,7 +220,7 @@ export class CommandHandler {
 			meta.messages = JSON.stringify(messages);
 		}
 		const notification = {
-			content: `User responded to ${command.prompt} command #${command.id}: "${userContent}"`,
+			content: `User responded to ${command.prompt} command #${command.id}: "${stripHtml(userContent)}"`,
 			meta,
 		};
 

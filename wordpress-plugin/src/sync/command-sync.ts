@@ -37,6 +37,9 @@ type YMapEvent = Y.YMapEvent<unknown>;
 /** Whether the entity has been registered and sync started. */
 let initialized = false;
 
+/** Whether the fetch interceptor has been installed. */
+let fetchInterceptorInstalled = false;
+
 /** Captured Y.Doc from the collection sync initialization. */
 let commandDoc: YDoc | null = null;
 
@@ -45,6 +48,9 @@ let commandAwareness: InstanceType<typeof Awareness> | null = null;
 
 /** The browserType value sent by the MCP server in awareness state. */
 const MCP_BROWSER_TYPE = 'Claudaborative Editing MCP';
+
+/** Interval ID for periodic stale command cleanup. */
+let staleCleanupInterval: ReturnType<typeof setInterval> | null = null;
 
 /**
  * Get the state map from the captured Y.Doc.
@@ -74,6 +80,10 @@ function uint8ToBase64(bytes: Uint8Array): string {
  * changed since the last injection.
  */
 function installFetchInterceptor(): void {
+	if (fetchInterceptorInstalled) {
+		return;
+	}
+
 	const origFetch = window.fetch;
 	let lastInjectedStateVector = '';
 
@@ -116,6 +126,8 @@ function installFetchInterceptor(): void {
 		}
 		return origFetch(...args);
 	}) as typeof fetch;
+
+	fetchInterceptorInstalled = true;
 }
 
 /**
@@ -191,21 +203,34 @@ export function initCommandSync(): void {
 }
 
 /**
- * Periodically check for stale commands in the Y.Doc and remove them.
+ * Check for stale commands in the Y.Doc and remove them.
+ * Runs once immediately, then every 30 seconds.
  * Validates against the REST API to ensure only active commands remain.
  */
 async function startStaleCommandCleanup(): Promise<void> {
-	// Wait for the doc to be available
+	// Wait for the doc to be available (timeout after ~30 seconds)
+	const DOC_WAIT_INTERVAL_MS = 200;
+	const DOC_WAIT_MAX_RETRIES = 150;
 	await new Promise<void>((resolve) => {
+		let retries = 0;
 		const check = setInterval(() => {
-			if (getStateMap()) {
+			retries++;
+			if (getStateMap() || retries >= DOC_WAIT_MAX_RETRIES) {
 				clearInterval(check);
 				resolve();
 			}
-		}, 200);
+		}, DOC_WAIT_INTERVAL_MS);
 	});
 
-	// Run cleanup now and whenever the state map changes
+	// If the doc never initialized, bail out
+	if (!getStateMap()) return;
+
+	// Clear any previous interval (e.g., from HMR re-initialization)
+	if (staleCleanupInterval) {
+		clearInterval(staleCleanupInterval);
+		staleCleanupInterval = null;
+	}
+
 	const runCleanup = async () => {
 		const stateMap = getStateMap();
 		if (!stateMap) return;
@@ -246,10 +271,10 @@ async function startStaleCommandCleanup(): Promise<void> {
 		}
 	};
 
-	// Run immediately, then again after a delay to catch data that
-	// arrives from the sync server after init.
+	// Run immediately, then every 30 seconds to catch data that
+	// arrives from the sync server after init or becomes stale over time.
 	await runCleanup();
-	setTimeout(() => void runCleanup(), 5000);
+	staleCleanupInterval = setInterval(() => void runCleanup(), 30_000);
 }
 
 /**

@@ -31,7 +31,7 @@ export interface UseCommandsReturn {
 	history: Command[];
 	submit: (prompt: CommandSlug, args?: Record<string, unknown>) => void;
 	cancel: (id: number) => void;
-	respondToCommand: (commandId: number, message: string) => void;
+	respondToCommand: (commandId: number, message: string) => Promise<void>;
 }
 
 /**
@@ -88,7 +88,7 @@ export function useCommands(postId: number | null): UseCommandsReturn {
 	const submit = useCallback(
 		(prompt: CommandSlug, args?: Record<string, unknown>) => {
 			if (postId !== null) {
-				submitCommand(prompt, postId, args);
+				return submitCommand(prompt, postId, args);
 			}
 		},
 		[submitCommand, postId]
@@ -96,14 +96,14 @@ export function useCommands(postId: number | null): UseCommandsReturn {
 
 	const cancel = useCallback(
 		(id: number) => {
-			cancelCommand(id);
+			return cancelCommand(id);
 		},
 		[cancelCommand]
 	);
 
 	const respond = useCallback(
 		(commandId: number, message: string) => {
-			dispatchRespondToCommand(commandId, message);
+			return dispatchRespondToCommand(commandId, message);
 		},
 		[dispatchRespondToCommand]
 	);

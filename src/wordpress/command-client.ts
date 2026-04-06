@@ -69,6 +69,8 @@ export class CommandClient {
 	private notifiedPendingIds = new Set<number>();
 	/** Track user message counts per command for response detection. */
 	private lastSeenUserMsgCounts = new Map<number, number>();
+	/** Guards against spurious onResponse() calls during initial sync. */
+	private initialScanComplete = false;
 
 	private _transport: CommandTransport = 'none';
 
@@ -87,10 +89,10 @@ export class CommandClient {
 	// --- Y.Map observation ---
 
 	/**
-	 * Start observing the document Y.Map for command changes.
-	 * The map follows core-data's convention: entity fields are stored in
-	 * doc.getMap('document'). The 'commands' key within that map contains
-	 * a plain object of command objects keyed by ID.
+	 * Start observing the provided Y.Map for command changes.
+	 * The concrete shared map is injected by the caller/session layer; this
+	 * method only depends on that map containing a 'commands' key whose value
+	 * is a plain object of command objects keyed by ID.
 	 *
 	 * Called by CommandHandler after the command doc is synced.
 	 */
@@ -126,8 +128,11 @@ export class CommandClient {
 		documentMap.observe(this.observer);
 
 		// Process any commands already in the map (e.g., from initial sync).
+		// The initial scan primes lastSeenUserMsgCounts without firing
+		// onResponse(), preventing spurious notifications on restart.
 		debugLog('cmd-client', 'Processing initial commands');
 		this.processAllCommands();
+		this.initialScanComplete = true;
 
 		this._transport = 'yjs';
 	}
@@ -144,6 +149,7 @@ export class CommandClient {
 		this._transport = 'none';
 		this.notifiedPendingIds.clear();
 		this.lastSeenUserMsgCounts.clear();
+		this.initialScanComplete = false;
 	}
 
 	// --- Y.Map writes ---
@@ -291,6 +297,15 @@ export class CommandClient {
 				role: string;
 			}>;
 			const userCount = messages.filter((m) => m.role === 'user').length;
+
+			if (!this.initialScanComplete) {
+				// Prime the counter during the initial scan so we don't
+				// fire onResponse() for conversations that already existed
+				// before we started observing.
+				this.lastSeenUserMsgCounts.set(id, userCount);
+				return;
+			}
+
 			const prevCount = this.lastSeenUserMsgCounts.get(id) ?? 0;
 
 			if (userCount > prevCount) {
