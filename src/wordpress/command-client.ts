@@ -8,7 +8,7 @@
  */
 
 import * as Y from 'yjs';
-import { debugLog } from '../debug-log.js';
+import { debugLog, isDebugEnabled } from '../debug-log.js';
 import type { WordPressApiClient } from './api-client.js';
 import {
 	TERMINAL_STATUSES,
@@ -98,22 +98,26 @@ export class CommandClient {
 	 */
 	startObserving(documentMap: Y.Map<unknown>): void {
 		this.commandMap = documentMap;
-		debugLog(
-			'cmd-client',
-			'startObserving, map size:',
-			documentMap.size,
-			'keys:',
-			Array.from(documentMap.keys())
-		);
-
-		this.observer = (event: Y.YMapEvent<unknown>) => {
+		if (isDebugEnabled) {
 			debugLog(
 				'cmd-client',
-				'Y.Map change event, local:',
-				event.transaction.local,
-				'changed keys:',
-				Array.from(event.changes.keys.keys())
+				'startObserving, map size:',
+				documentMap.size,
+				'keys:',
+				Array.from(documentMap.keys())
 			);
+		}
+
+		this.observer = (event: Y.YMapEvent<unknown>) => {
+			if (isDebugEnabled) {
+				debugLog(
+					'cmd-client',
+					'Y.Map change event, local:',
+					event.transaction.local,
+					'changed keys:',
+					Array.from(event.changes.keys.keys())
+				);
+			}
 
 			// Only process remote changes (from the browser via sync).
 			if (event.transaction.local) return;
@@ -248,13 +252,15 @@ export class CommandClient {
 		if (!this.commandMap) return;
 
 		const raw = this.commandMap.get('commands');
-		debugLog(
-			'cmd-client',
-			'processAllCommands, raw type:',
-			typeof raw,
-			'value:',
-			raw ? JSON.stringify(raw).slice(0, 200) : 'undefined'
-		);
+		if (isDebugEnabled) {
+			debugLog(
+				'cmd-client',
+				'processAllCommands, raw type:',
+				typeof raw,
+				'value:',
+				raw ? JSON.stringify(raw).slice(0, 200) : 'undefined'
+			);
+		}
 
 		const commands = raw as Record<string, unknown> | undefined;
 		if (!commands || typeof commands !== 'object') {
@@ -262,13 +268,15 @@ export class CommandClient {
 			return;
 		}
 
-		debugLog(
-			'cmd-client',
-			'Found',
-			Object.keys(commands).length,
-			'commands:',
-			Object.keys(commands)
-		);
+		if (isDebugEnabled) {
+			debugLog(
+				'cmd-client',
+				'Found',
+				Object.keys(commands).length,
+				'commands:',
+				Object.keys(commands)
+			);
+		}
 		for (const value of Object.values(commands)) {
 			if (value && typeof value === 'object') {
 				this.processCommand(value as Command);
