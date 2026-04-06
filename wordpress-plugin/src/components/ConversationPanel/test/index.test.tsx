@@ -702,9 +702,7 @@ describe('ConversationPanel', () => {
 			return { createNotice: mockCreateNotice };
 		});
 
-		const respondToCommand = jest
-			.fn()
-			.mockRejectedValue(new Error('fail'));
+		const respondToCommand = jest.fn().mockRejectedValue(new Error('fail'));
 		mockedUseCommands.mockReturnValue({
 			activeCommand: {
 				id: 1,
@@ -787,9 +785,7 @@ describe('ConversationPanel', () => {
 			return { createNotice: mockCreateNotice };
 		});
 
-		const respondToCommand = jest
-			.fn()
-			.mockRejectedValue(new Error('fail'));
+		const respondToCommand = jest.fn().mockRejectedValue(new Error('fail'));
 		mockedUseCommands.mockReturnValue({
 			activeCommand: {
 				id: 1,

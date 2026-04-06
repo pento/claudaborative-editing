@@ -550,12 +550,10 @@ describe('command-sync', () => {
 
 		it('injects compaction when command room has empty updates', async () => {
 			// Set up a spy as the original fetch before the interceptor captures it.
-			const fetchSpy = jest
-				.fn()
-				.mockResolvedValue({
-					ok: true,
-					text: () => Promise.resolve('ok'),
-				});
+			const fetchSpy = jest.fn().mockResolvedValue({
+				ok: true,
+				text: () => Promise.resolve('ok'),
+			});
 			window.fetch = fetchSpy;
 
 			const mod = loadModule();
@@ -608,12 +606,10 @@ describe('command-sync', () => {
 		});
 
 		it('does not inject when command room already has updates', async () => {
-			const fetchSpy = jest
-				.fn()
-				.mockResolvedValue({
-					ok: true,
-					text: () => Promise.resolve('ok'),
-				});
+			const fetchSpy = jest.fn().mockResolvedValue({
+				ok: true,
+				text: () => Promise.resolve('ok'),
+			});
 			window.fetch = fetchSpy;
 
 			const mod = loadModule();
@@ -658,12 +654,10 @@ describe('command-sync', () => {
 		});
 
 		it('passes non-wp-sync requests through unchanged', async () => {
-			const fetchSpy = jest
-				.fn()
-				.mockResolvedValue({
-					ok: true,
-					text: () => Promise.resolve('ok'),
-				});
+			const fetchSpy = jest.fn().mockResolvedValue({
+				ok: true,
+				text: () => Promise.resolve('ok'),
+			});
 			window.fetch = fetchSpy;
 
 			const mod = loadModule();
@@ -699,12 +693,10 @@ describe('command-sync', () => {
 			jest.useFakeTimers();
 
 			// Set up a no-op fetch so the interceptor doesn't fail.
-			window.fetch = jest
-				.fn()
-				.mockResolvedValue({
-					ok: true,
-					text: () => Promise.resolve('ok'),
-				});
+			window.fetch = jest.fn().mockResolvedValue({
+				ok: true,
+				text: () => Promise.resolve('ok'),
+			});
 
 			// Import apiFetch and configure it to return only command 43 as active.
 			const apiFetchMock =
@@ -765,12 +757,10 @@ describe('command-sync', () => {
 		it('removes awareness change handler on unsubscribe after polling attaches', () => {
 			jest.useFakeTimers();
 
-			window.fetch = jest
-				.fn()
-				.mockResolvedValue({
-					ok: true,
-					text: () => Promise.resolve('ok'),
-				});
+			window.fetch = jest.fn().mockResolvedValue({
+				ok: true,
+				text: () => Promise.resolve('ok'),
+			});
 
 			const mod = loadModule();
 			mod.initCommandSync();
