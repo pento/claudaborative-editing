@@ -20,10 +20,9 @@ import './store';
 
 import { initCommandSync } from './sync/command-sync';
 
-// Initialize command sync FIRST — registers root/wpce_commands with core-data.
-// This must happen before Gutenberg registers the post room, so that our room
-// becomes the "primary" room in the polling manager. The primary room's
-// collaborator detection controls queue resumption for ALL rooms.
+// Initialize command sync early — registers root/wpce_commands with core-data.
+// Gutenberg's polling manager pauses update queues for non-primary rooms;
+// a fetch interceptor in command-sync.ts works around this for our room.
 initCommandSync();
 
 import AiActionsMenu from './components/AiActionsMenu';

@@ -55,7 +55,7 @@ function getConversationData(
  *
  * Registers a PluginSidebar that shows conversation history and input
  * when the active command is in awaiting_input status. Auto-opens when
- * entering awaiting_input, and cancels the command when closed.
+ * entering awaiting_input.
  *
  * @return Rendered sidebar or null.
  */
@@ -147,16 +147,16 @@ export default function ConversationPanel() {
 			return;
 		}
 
-		try {
-			respondToCommand(activeCommand.id, trimmed);
-			setInputValue('');
-		} catch {
-			createNotice(
-				'error',
-				__('Failed to send response.', 'claudaborative-editing'),
-				{ type: 'snackbar' }
-			);
-		}
+		setInputValue('');
+		void Promise.resolve(respondToCommand(activeCommand.id, trimmed)).catch(
+			() => {
+				createNotice(
+					'error',
+					__('Failed to send response.', 'claudaborative-editing'),
+					{ type: 'snackbar' }
+				);
+			}
+		);
 	};
 
 	const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -168,7 +168,15 @@ export default function ConversationPanel() {
 
 	const handleApprove = () => {
 		if (activeCommand && !isResponding) {
-			respondToCommand(activeCommand.id, 'approve');
+			void Promise.resolve(
+				respondToCommand(activeCommand.id, 'approve')
+			).catch(() => {
+				createNotice(
+					'error',
+					__('Failed to approve outline.', 'claudaborative-editing'),
+					{ type: 'snackbar' }
+				);
+			});
 		}
 	};
 

@@ -813,7 +813,8 @@ class REST_Controller extends \WP_REST_Controller {
 		// update_post_meta to skip the write if the normalized value matches
 		// the old value.
 		global $wpdb;
-		$wpdb->update(
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+		$updated = $wpdb->update(
 			$wpdb->postmeta,
 			array( 'meta_value' => $json ),
 			array(
@@ -823,6 +824,11 @@ class REST_Controller extends \WP_REST_Controller {
 			array( '%s' ),
 			array( '%d', '%s' )
 		);
+
+		// Fallback: if the meta row doesn't exist yet, insert it.
+		if ( 0 === $updated ) {
+			add_post_meta( $post_id, 'wpce_result_data', $json, true );
+		}
 
 		// Update the object cache to match.
 		wp_cache_delete( $post_id, 'post_meta' );

@@ -9,10 +9,9 @@
  * The Y.Doc reference is captured via the syncConfig.createAwareness callback,
  * which receives the doc during loadCollection initialization.
  *
- * IMPORTANT: Gutenberg's polling manager pauses update queues for non-primary
- * rooms. Our command room is never primary (the post room registers first).
- * To work around this, we intercept fetch requests to inject our doc state
- * when the queue is empty but we have local changes to send.
+ * Gutenberg's polling manager pauses update queues for non-primary rooms.
+ * In practice, the post room registers as primary before our command room.
+ * A fetch interceptor injects our doc state when the queue is paused.
  */
 
 /**
@@ -29,6 +28,7 @@ import type { Command } from '../store/types';
 // Use dynamic import type to avoid bundling yjs (it's loaded by Gutenberg)
 type YDoc = import('yjs').Doc;
 type YMap = import('yjs').Map<unknown>;
+type YMapEvent = import('yjs').YMapEvent<unknown>;
 type YAwareness = import('y-protocols/awareness').Awareness;
 
 /** Whether the entity has been registered and sync started. */
@@ -48,6 +48,20 @@ const MCP_BROWSER_TYPE = 'Claudaborative Editing MCP';
  */
 function getStateMap(): YMap | null {
 	return commandDoc?.getMap('state') ?? null;
+}
+
+/**
+ * Base64-encode a Uint8Array without spreading (avoids stack overflow
+ * on large arrays from `String.fromCharCode(...arr)`).
+ *
+ * @param bytes The bytes to encode.
+ */
+function uint8ToBase64(bytes: Uint8Array): string {
+	let binary = '';
+	for (let i = 0; i < bytes.length; i++) {
+		binary += String.fromCharCode(bytes[i]);
+	}
+	return btoa(binary);
 }
 
 /**
@@ -79,15 +93,13 @@ function installFetchInterceptor(): void {
 				if (cmdRoom && cmdRoom.updates.length === 0) {
 					// eslint-disable-next-line @typescript-eslint/no-require-imports, import/no-extraneous-dependencies
 					const Y = require('yjs') as typeof import('yjs');
-					const sv = btoa(
-						String.fromCharCode(...Y.encodeStateVector(commandDoc))
-					);
+					const sv = uint8ToBase64(Y.encodeStateVector(commandDoc));
 					if (sv !== lastInjectedStateVector) {
 						const update = Y.encodeStateAsUpdateV2(commandDoc);
 						cmdRoom.updates = [
 							{
 								type: 'compaction',
-								data: btoa(String.fromCharCode(...update)),
+								data: uint8ToBase64(update),
 							},
 						];
 						args[1] = {
@@ -215,16 +227,20 @@ export function getCommandsFromSync(): Record<string, Command> {
 export function subscribeToCommandSync(
 	callback: (commands: Record<string, Command>) => void
 ): () => void {
+	let observer: ((event: YMapEvent) => void) | null = null;
+	let observedMap: YMap | null = null;
+
 	// Poll until the doc is available (it's created async during loadCollection)
 	const checkInterval = setInterval(() => {
 		const stateMap = getStateMap();
 		if (!stateMap) return;
 
 		clearInterval(checkInterval);
+		observedMap = stateMap;
 
 		let prev = JSON.stringify(stateMap.get('commands'));
 
-		stateMap.observe(() => {
+		observer = () => {
 			const current = JSON.stringify(stateMap.get('commands'));
 			if (current !== prev) {
 				prev = current;
@@ -232,10 +248,17 @@ export function subscribeToCommandSync(
 					(stateMap.get('commands') as Record<string, Command>) ?? {}
 				);
 			}
-		});
+		};
+
+		stateMap.observe(observer);
 	}, 100);
 
-	return () => clearInterval(checkInterval);
+	return () => {
+		clearInterval(checkInterval);
+		if (observedMap && observer) {
+			observedMap.unobserve(observer);
+		}
+	};
 }
 
 /**
@@ -270,22 +293,28 @@ export function isMcpConnected(): boolean {
 export function subscribeToMcpConnection(
 	callback: (connected: boolean) => void
 ): () => void {
+	const handler = () => callback(isMcpConnected());
+
 	if (!commandAwareness) {
 		// Awareness not yet initialized — poll until it is
+		let attached = false;
 		const checkInterval = setInterval(() => {
 			if (commandAwareness) {
 				clearInterval(checkInterval);
-				callback(isMcpConnected());
-				commandAwareness.on('change', () => {
-					callback(isMcpConnected());
-				});
+				attached = true;
+				handler();
+				commandAwareness.on('change', handler);
 			}
 		}, 100);
-		return () => clearInterval(checkInterval);
+		return () => {
+			clearInterval(checkInterval);
+			if (attached) {
+				commandAwareness?.off('change', handler);
+			}
+		};
 	}
 
-	callback(isMcpConnected());
-	const handler = () => callback(isMcpConnected());
+	handler();
 	commandAwareness.on('change', handler);
 	return () => commandAwareness?.off('change', handler);
 }
