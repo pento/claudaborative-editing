@@ -55,8 +55,14 @@ class MockYDoc {
 /** Simulated Awareness. */
 class MockAwareness {
 	clientID = 1;
+	document: unknown;
 	private listeners: Record<string, Array<() => void>> = {};
 	private states: Map<number, Record<string, unknown>> = new Map();
+
+	// Accept optional doc arg to match real Awareness constructor signature.
+	constructor(_doc?: unknown) {
+		this.document = _doc;
+	}
 
 	getStates(): Map<number, Record<string, unknown>> {
 		return this.states;
