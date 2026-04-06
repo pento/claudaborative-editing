@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import * as Y from 'yjs';
 import { CommandHandler } from '../../src/session/command-handler.js';
 import type { ChannelNotifier } from '../../src/session/command-handler.js';
 import { WordPressApiError } from '../../src/wordpress/api-client.js';
@@ -17,13 +18,6 @@ vi.mock('../../src/wordpress/command-client.js', async (importOriginal) => {
 		>();
 	return {
 		CommandClient: vi.fn(),
-		DEFAULT_COMMAND_CLIENT_CONFIG: {
-			pollInterval: 5000,
-			maxSseRetries: 3,
-			sseRetryFromPollingInterval: 60000,
-			sseBackoffBase: 1000,
-			sseBackoffMax: 30000,
-		},
 		SUPPORTED_PROTOCOL_VERSIONS: original.SUPPORTED_PROTOCOL_VERSIONS,
 		isProtocolCompatible: original.isProtocolCompatible,
 	};
@@ -43,19 +37,20 @@ function flushMicrotasks(): Promise<void> {
 
 /**
  * Helper: builds a mock CommandClient instance and wires it into the
- * constructor mock.  Returns the instance and a `dispatchCommand` helper
- * that invokes the captured `onCommand` callback and flushes microtasks
- * so the async `handleCommand` chain completes before assertions.
+ * constructor mock.  Returns the instance and `dispatchCommand` /
+ * `dispatchResponse` helpers that invoke the captured callbacks and
+ * flush microtasks so the async handler chains complete before assertions.
  */
 function setupMockCommandClient(pluginStatusResult?: {
 	resolve?: PluginStatus;
 	reject?: Error;
 }) {
 	let capturedOnCommand: ((command: Command) => void) | null = null;
+	let capturedOnResponse: ((command: Command) => void) | null = null;
 
 	const instance = {
 		getPluginStatus: vi.fn<() => Promise<PluginStatus>>(),
-		start: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+		startObserving: vi.fn(),
 		stop: vi.fn(),
 		updateCommandStatus: vi
 			.fn<
@@ -67,9 +62,7 @@ function setupMockCommandClient(pluginStatusResult?: {
 				) => Promise<Command>
 			>()
 			.mockResolvedValue(makeCommand()),
-		getTransport: vi
-			.fn<() => 'sse' | 'polling' | 'none'>()
-			.mockReturnValue('sse'),
+		getTransport: vi.fn<() => 'yjs' | 'none'>().mockReturnValue('yjs'),
 	};
 
 	if (pluginStatusResult?.resolve) {
@@ -81,16 +74,18 @@ function setupMockCommandClient(pluginStatusResult?: {
 	// Use a regular function so it can be called with `new`.
 	MockedCommandClient.mockImplementation(function mockCtor(
 		_api: WordPressApiClient,
-		onCommand: (command: Command) => void
+		onCommand: (command: Command) => void,
+		onResponse: (command: Command) => void
 	) {
 		capturedOnCommand = onCommand;
+		capturedOnResponse = onResponse;
 		return instance as unknown as CommandClient;
 	} as unknown as typeof CommandClient);
 
 	/**
 	 * Dispatch a command through the captured onCommand callback and
 	 * flush microtasks so the async `handleCommand` promise chain
-	 * (notify → catch) runs to completion before returning.
+	 * (notify -> catch) runs to completion before returning.
 	 */
 	async function dispatchCommand(command: Command): Promise<void> {
 		if (!capturedOnCommand) {
@@ -102,7 +97,22 @@ function setupMockCommandClient(pluginStatusResult?: {
 		await flushMicrotasks();
 	}
 
-	return { instance, dispatchCommand };
+	/**
+	 * Dispatch a response through the captured onResponse callback and
+	 * flush microtasks so the async `handleResponse` promise chain
+	 * runs to completion before returning.
+	 */
+	async function dispatchResponse(command: Command): Promise<void> {
+		if (!capturedOnResponse) {
+			throw new Error(
+				'onResponse callback was not captured — did you call handler.start()?'
+			);
+		}
+		capturedOnResponse(command);
+		await flushMicrotasks();
+	}
+
+	return { instance, dispatchCommand, dispatchResponse };
 }
 
 function makePluginStatus(overrides?: Partial<PluginStatus>): PluginStatus {
@@ -136,6 +146,11 @@ function createMockApiClient(): WordPressApiClient {
 	return {} as WordPressApiClient;
 }
 
+function createCommandMap(): Y.Map<unknown> {
+	const doc = new Y.Doc();
+	return doc.getMap('document');
+}
+
 // --- Tests ---
 
 describe('CommandHandler', () => {
@@ -158,20 +173,38 @@ describe('CommandHandler', () => {
 			const status = makePluginStatus();
 			setupMockCommandClient({ resolve: status });
 
-			const result = await handler.start(createMockApiClient());
+			const result = await handler.start(
+				createMockApiClient(),
+				createCommandMap()
+			);
 
 			expect(result).toBe(true);
 			expect(handler.getPluginStatus()).toEqual(status);
 		});
 
-		it('calls CommandClient.start() when plugin is detected', async () => {
+		it('calls CommandClient.startObserving() when plugin is detected', async () => {
 			const { instance } = setupMockCommandClient({
 				resolve: makePluginStatus(),
 			});
+			const commandMap = createCommandMap();
 
-			await handler.start(createMockApiClient());
+			await handler.start(createMockApiClient(), commandMap);
 
-			expect(instance.start).toHaveBeenCalledOnce();
+			expect(instance.startObserving).toHaveBeenCalledOnce();
+			expect(instance.startObserving).toHaveBeenCalledWith(commandMap);
+		});
+
+		it('passes apiClient and callbacks to CommandClient constructor', async () => {
+			setupMockCommandClient({ resolve: makePluginStatus() });
+			const apiClient = createMockApiClient();
+
+			await handler.start(apiClient, createCommandMap());
+
+			expect(MockedCommandClient).toHaveBeenCalledWith(
+				apiClient,
+				expect.any(Function),
+				expect.any(Function)
+			);
 		});
 
 		it('returns false when plugin returns 404 (not installed)', async () => {
@@ -179,7 +212,10 @@ describe('CommandHandler', () => {
 				reject: new WordPressApiError('Not Found', 404, ''),
 			});
 
-			const result = await handler.start(createMockApiClient());
+			const result = await handler.start(
+				createMockApiClient(),
+				createCommandMap()
+			);
 
 			expect(result).toBe(false);
 			expect(handler.getPluginStatus()).toBeNull();
@@ -190,9 +226,9 @@ describe('CommandHandler', () => {
 				reject: new WordPressApiError('Internal Server Error', 500, ''),
 			});
 
-			await expect(handler.start(createMockApiClient())).rejects.toThrow(
-				'Internal Server Error'
-			);
+			await expect(
+				handler.start(createMockApiClient(), createCommandMap())
+			).rejects.toThrow('Internal Server Error');
 		});
 
 		it('throws on generic errors', async () => {
@@ -200,9 +236,9 @@ describe('CommandHandler', () => {
 				reject: new Error('Network failure'),
 			});
 
-			await expect(handler.start(createMockApiClient())).rejects.toThrow(
-				'Network failure'
-			);
+			await expect(
+				handler.start(createMockApiClient(), createCommandMap())
+			).rejects.toThrow('Network failure');
 		});
 	});
 
@@ -210,27 +246,33 @@ describe('CommandHandler', () => {
 	// Protocol version negotiation
 	// ---------------------------------------------------------------
 	describe('protocol version negotiation', () => {
-		it('starts command listener when protocol version is compatible', async () => {
+		it('starts observation when protocol version is compatible', async () => {
 			const { instance } = setupMockCommandClient({
 				resolve: makePluginStatus({ protocol_version: 1 }),
 			});
 
-			const result = await handler.start(createMockApiClient());
+			const result = await handler.start(
+				createMockApiClient(),
+				createCommandMap()
+			);
 
 			expect(result).toBe(true);
-			expect(instance.start).toHaveBeenCalledOnce();
+			expect(instance.startObserving).toHaveBeenCalledOnce();
 			expect(handler.getProtocolWarning()).toBeNull();
 		});
 
-		it('does not start command listener when protocol is incompatible', async () => {
+		it('does not start observation when protocol is incompatible', async () => {
 			const { instance } = setupMockCommandClient({
 				resolve: makePluginStatus({ protocol_version: 99 }),
 			});
 
-			const result = await handler.start(createMockApiClient());
+			const result = await handler.start(
+				createMockApiClient(),
+				createCommandMap()
+			);
 
 			expect(result).toBe(true); // plugin IS detected
-			expect(instance.start).not.toHaveBeenCalled();
+			expect(instance.startObserving).not.toHaveBeenCalled();
 			expect(handler.getPluginStatus()).not.toBeNull();
 		});
 
@@ -239,7 +281,7 @@ describe('CommandHandler', () => {
 				resolve: makePluginStatus({ protocol_version: 99 }),
 			});
 
-			await handler.start(createMockApiClient());
+			await handler.start(createMockApiClient(), createCommandMap());
 
 			const warning = handler.getProtocolWarning();
 			expect(warning).toContain('protocol v99');
@@ -251,7 +293,7 @@ describe('CommandHandler', () => {
 				resolve: makePluginStatus({ protocol_version: 0 }),
 			});
 
-			await handler.start(createMockApiClient());
+			await handler.start(createMockApiClient(), createCommandMap());
 
 			const warning = handler.getProtocolWarning();
 			expect(warning).toContain('protocol v0');
@@ -263,7 +305,7 @@ describe('CommandHandler', () => {
 				resolve: makePluginStatus({ protocol_version: 99 }),
 			});
 
-			await handler.start(createMockApiClient());
+			await handler.start(createMockApiClient(), createCommandMap());
 
 			expect(handler.getTransport()).toBe('disabled');
 		});
@@ -273,7 +315,7 @@ describe('CommandHandler', () => {
 				resolve: makePluginStatus({ protocol_version: 99 }),
 			});
 
-			await handler.start(createMockApiClient());
+			await handler.start(createMockApiClient(), createCommandMap());
 			expect(handler.getProtocolWarning()).not.toBeNull();
 
 			handler.stop();
@@ -294,7 +336,7 @@ describe('CommandHandler', () => {
 				.fn<ChannelNotifier>()
 				.mockResolvedValue(undefined);
 			handler.setNotifier(notifier);
-			await handler.start(createMockApiClient());
+			await handler.start(createMockApiClient(), createCommandMap());
 
 			const command = makeCommand({
 				id: 7,
@@ -325,7 +367,7 @@ describe('CommandHandler', () => {
 				.fn<ChannelNotifier>()
 				.mockResolvedValue(undefined);
 			handler.setNotifier(notifier);
-			await handler.start(createMockApiClient());
+			await handler.start(createMockApiClient(), createCommandMap());
 
 			const command = makeCommand({
 				id: 10,
@@ -353,7 +395,7 @@ describe('CommandHandler', () => {
 				.fn<ChannelNotifier>()
 				.mockResolvedValue(undefined);
 			handler.setNotifier(notifier);
-			await handler.start(createMockApiClient());
+			await handler.start(createMockApiClient(), createCommandMap());
 
 			await dispatchCommand(makeCommand({ arguments: {} }));
 
@@ -372,7 +414,7 @@ describe('CommandHandler', () => {
 			});
 
 			// Start without setting a notifier
-			await handler.start(createMockApiClient());
+			await handler.start(createMockApiClient(), createCommandMap());
 
 			// Dispatch a command — should be buffered
 			await dispatchCommand(
@@ -396,7 +438,7 @@ describe('CommandHandler', () => {
 				resolve: makePluginStatus(),
 			});
 
-			await handler.start(createMockApiClient());
+			await handler.start(createMockApiClient(), createCommandMap());
 
 			await dispatchCommand(
 				makeCommand({ id: 1, prompt: 'proofread', post_id: 10 })
@@ -425,7 +467,7 @@ describe('CommandHandler', () => {
 				resolve: makePluginStatus(),
 			});
 
-			await handler.start(createMockApiClient());
+			await handler.start(createMockApiClient(), createCommandMap());
 			await dispatchCommand(makeCommand({ id: 5 }));
 
 			const notifier = vi
@@ -446,7 +488,7 @@ describe('CommandHandler', () => {
 				.fn<ChannelNotifier>()
 				.mockResolvedValue(undefined);
 			handler.setNotifier(notifier);
-			await handler.start(createMockApiClient());
+			await handler.start(createMockApiClient(), createCommandMap());
 
 			await dispatchCommand(
 				makeCommand({ id: 11, prompt: 'edit', post_id: 300 })
@@ -463,7 +505,7 @@ describe('CommandHandler', () => {
 				resolve: makePluginStatus(),
 			});
 
-			await handler.start(createMockApiClient());
+			await handler.start(createMockApiClient(), createCommandMap());
 			await dispatchCommand(makeCommand({ id: 1 }));
 			await dispatchCommand(makeCommand({ id: 2 }));
 
@@ -489,7 +531,7 @@ describe('CommandHandler', () => {
 				.fn<ChannelNotifier>()
 				.mockRejectedValue(new Error('delivery failed'));
 			handler.setNotifier(notifier);
-			await handler.start(createMockApiClient());
+			await handler.start(createMockApiClient(), createCommandMap());
 
 			// The onCommand callback uses `void this.handleCommand(command)`,
 			// so dispatchCommand flushes microtasks to let the async chain
@@ -513,7 +555,7 @@ describe('CommandHandler', () => {
 				resolve: makePluginStatus(),
 			});
 
-			await handler.start(createMockApiClient());
+			await handler.start(createMockApiClient(), createCommandMap());
 			handler.stop();
 
 			expect(instance.stop).toHaveBeenCalledOnce();
@@ -522,7 +564,7 @@ describe('CommandHandler', () => {
 		it('returns transport as disabled after stop', async () => {
 			setupMockCommandClient({ resolve: makePluginStatus() });
 
-			await handler.start(createMockApiClient());
+			await handler.start(createMockApiClient(), createCommandMap());
 			handler.stop();
 
 			expect(handler.getTransport()).toBe('disabled');
@@ -531,7 +573,7 @@ describe('CommandHandler', () => {
 		it('clears plugin status after stop', async () => {
 			setupMockCommandClient({ resolve: makePluginStatus() });
 
-			await handler.start(createMockApiClient());
+			await handler.start(createMockApiClient(), createCommandMap());
 			expect(handler.getPluginStatus()).not.toBeNull();
 
 			handler.stop();
@@ -547,7 +589,7 @@ describe('CommandHandler', () => {
 				.fn<ChannelNotifier>()
 				.mockResolvedValue(undefined);
 			handler.setNotifier(notifier);
-			await handler.start(createMockApiClient());
+			await handler.start(createMockApiClient(), createCommandMap());
 			handler.stop();
 
 			// Dispatch after stop — should be silently ignored
@@ -561,7 +603,7 @@ describe('CommandHandler', () => {
 				resolve: makePluginStatus(),
 			});
 
-			await handler.start(createMockApiClient());
+			await handler.start(createMockApiClient(), createCommandMap());
 			await dispatchCommand(makeCommand());
 
 			handler.stop();
@@ -580,7 +622,7 @@ describe('CommandHandler', () => {
 				resolve: makePluginStatus(),
 			});
 
-			await handler.start(createMockApiClient());
+			await handler.start(createMockApiClient(), createCommandMap());
 			handler.stop();
 			handler.stop(); // second call should not throw
 
@@ -606,7 +648,7 @@ describe('CommandHandler', () => {
 				makeCommand({ status: 'completed' })
 			);
 
-			await handler.start(createMockApiClient());
+			await handler.start(createMockApiClient(), createCommandMap());
 			await handler.updateCommandStatus(42, 'completed', 'All done');
 
 			expect(instance.updateCommandStatus).toHaveBeenCalledWith(
@@ -625,7 +667,7 @@ describe('CommandHandler', () => {
 				makeCommand({ status: 'completed' })
 			);
 
-			await handler.start(createMockApiClient());
+			await handler.start(createMockApiClient(), createCommandMap());
 			await handler.updateCommandStatus(
 				42,
 				'completed',
@@ -649,7 +691,7 @@ describe('CommandHandler', () => {
 				makeCommand({ status: 'running' })
 			);
 
-			await handler.start(createMockApiClient());
+			await handler.start(createMockApiClient(), createCommandMap());
 			await handler.updateCommandStatus(42, 'running');
 
 			expect(instance.updateCommandStatus).toHaveBeenCalledWith(
@@ -671,7 +713,7 @@ describe('CommandHandler', () => {
 		it('throws when commandClient is null (after stop)', async () => {
 			setupMockCommandClient({ resolve: makePluginStatus() });
 
-			await handler.start(createMockApiClient());
+			await handler.start(createMockApiClient(), createCommandMap());
 			handler.stop();
 
 			await expect(
@@ -697,7 +739,7 @@ describe('CommandHandler', () => {
 			});
 			setupMockCommandClient({ resolve: status });
 
-			await handler.start(createMockApiClient());
+			await handler.start(createMockApiClient(), createCommandMap());
 
 			expect(handler.getPluginStatus()).toEqual(status);
 		});
@@ -707,7 +749,7 @@ describe('CommandHandler', () => {
 				reject: new WordPressApiError('Not Found', 404, ''),
 			});
 
-			await handler.start(createMockApiClient());
+			await handler.start(createMockApiClient(), createCommandMap());
 
 			expect(handler.getPluginStatus()).toBeNull();
 		});
@@ -726,7 +768,7 @@ describe('CommandHandler', () => {
 				reject: new WordPressApiError('Not Found', 404, ''),
 			});
 
-			await handler.start(createMockApiClient());
+			await handler.start(createMockApiClient(), createCommandMap());
 
 			expect(handler.getTransport()).toBe('disabled');
 		});
@@ -735,47 +777,306 @@ describe('CommandHandler', () => {
 			const { instance } = setupMockCommandClient({
 				resolve: makePluginStatus(),
 			});
-			instance.getTransport.mockReturnValue('polling');
+			instance.getTransport.mockReturnValue('yjs');
 
-			await handler.start(createMockApiClient());
+			await handler.start(createMockApiClient(), createCommandMap());
 
-			expect(handler.getTransport()).toBe('polling');
+			expect(handler.getTransport()).toBe('yjs');
 		});
 	});
 
 	// ---------------------------------------------------------------
-	// Constructor config
+	// Response notification
 	// ---------------------------------------------------------------
-	describe('constructor config', () => {
-		it('passes custom config to CommandClient', async () => {
-			setupMockCommandClient({ resolve: makePluginStatus() });
-
-			const customHandler = new CommandHandler({
-				pollInterval: 10000,
+	describe('response notification', () => {
+		it('sends notification for incoming response with user message', async () => {
+			const { dispatchResponse } = setupMockCommandClient({
+				resolve: makePluginStatus(),
 			});
-			await customHandler.start(createMockApiClient());
-			customHandler.stop();
 
-			expect(MockedCommandClient).toHaveBeenCalledWith(
-				expect.anything(),
-				expect.any(Function),
-				expect.objectContaining({ pollInterval: 10000 })
+			const notifier = vi
+				.fn<ChannelNotifier>()
+				.mockResolvedValue(undefined);
+			handler.setNotifier(notifier);
+			await handler.start(createMockApiClient(), createCommandMap());
+
+			const command = makeCommand({
+				id: 7,
+				post_id: 55,
+				prompt: 'proofread',
+				status: 'running',
+				result_data: {
+					messages: [
+						{ role: 'assistant', content: 'I fixed the typos.' },
+						{
+							role: 'user',
+							content: 'Can you also check paragraph 3?',
+						},
+					],
+				},
+			});
+			await dispatchResponse(command);
+
+			expect(notifier).toHaveBeenCalledOnce();
+
+			const notification = notifier.mock.calls[0][0];
+			expect(notification.content).toBe(
+				'User responded to proofread command #7: "Can you also check paragraph 3?"'
+			);
+			expect(notification.meta).toEqual({
+				command_id: '7',
+				prompt: 'proofread',
+				post_id: '55',
+				event_type: 'response',
+				messages: JSON.stringify([
+					{ role: 'assistant', content: 'I fixed the typos.' },
+					{
+						role: 'user',
+						content: 'Can you also check paragraph 3?',
+					},
+				]),
+			});
+		});
+
+		it('uses "(no message)" when messages array has no user role', async () => {
+			const { dispatchResponse } = setupMockCommandClient({
+				resolve: makePluginStatus(),
+			});
+
+			const notifier = vi
+				.fn<ChannelNotifier>()
+				.mockResolvedValue(undefined);
+			handler.setNotifier(notifier);
+			await handler.start(createMockApiClient(), createCommandMap());
+
+			const command = makeCommand({
+				id: 8,
+				post_id: 60,
+				prompt: 'review',
+				status: 'running',
+				result_data: {
+					messages: [
+						{ role: 'assistant', content: 'Review complete.' },
+					],
+				},
+			});
+			await dispatchResponse(command);
+
+			const notification = notifier.mock.calls[0][0];
+			expect(notification.content).toBe(
+				'User responded to review command #8: "(no message)"'
 			);
 		});
 
-		it('uses default config when none provided', async () => {
-			setupMockCommandClient({ resolve: makePluginStatus() });
+		it('uses "(no message)" when result_data has no messages', async () => {
+			const { dispatchResponse } = setupMockCommandClient({
+				resolve: makePluginStatus(),
+			});
 
-			await handler.start(createMockApiClient());
+			const notifier = vi
+				.fn<ChannelNotifier>()
+				.mockResolvedValue(undefined);
+			handler.setNotifier(notifier);
+			await handler.start(createMockApiClient(), createCommandMap());
 
-			expect(MockedCommandClient).toHaveBeenCalledWith(
-				expect.anything(),
-				expect.any(Function),
-				expect.objectContaining({
-					pollInterval: 5000,
-					maxSseRetries: 3,
+			const command = makeCommand({
+				id: 9,
+				post_id: 70,
+				prompt: 'edit',
+				status: 'running',
+				result_data: { some_other_field: true },
+			});
+			await dispatchResponse(command);
+
+			const notification = notifier.mock.calls[0][0];
+			expect(notification.content).toBe(
+				'User responded to edit command #9: "(no message)"'
+			);
+			// meta should not have messages key when messages is undefined
+			expect(notification.meta).not.toHaveProperty('messages');
+		});
+
+		it('extracts the last user message from multiple user messages', async () => {
+			const { dispatchResponse } = setupMockCommandClient({
+				resolve: makePluginStatus(),
+			});
+
+			const notifier = vi
+				.fn<ChannelNotifier>()
+				.mockResolvedValue(undefined);
+			handler.setNotifier(notifier);
+			await handler.start(createMockApiClient(), createCommandMap());
+
+			const command = makeCommand({
+				id: 11,
+				post_id: 80,
+				prompt: 'translate',
+				status: 'running',
+				result_data: {
+					messages: [
+						{ role: 'user', content: 'Translate to French' },
+						{ role: 'assistant', content: 'Done.' },
+						{
+							role: 'user',
+							content: 'Actually, translate to Spanish instead',
+						},
+					],
+				},
+			});
+			await dispatchResponse(command);
+
+			const notification = notifier.mock.calls[0][0];
+			expect(notification.content).toBe(
+				'User responded to translate command #11: "Actually, translate to Spanish instead"'
+			);
+		});
+
+		it('includes event_type: response in meta', async () => {
+			const { dispatchResponse } = setupMockCommandClient({
+				resolve: makePluginStatus(),
+			});
+
+			const notifier = vi
+				.fn<ChannelNotifier>()
+				.mockResolvedValue(undefined);
+			handler.setNotifier(notifier);
+			await handler.start(createMockApiClient(), createCommandMap());
+
+			await dispatchResponse(
+				makeCommand({
+					id: 12,
+					post_id: 90,
+					prompt: 'proofread',
+					status: 'running',
+					result_data: {
+						messages: [{ role: 'user', content: 'Thanks' }],
+					},
 				})
 			);
+
+			const notification = notifier.mock.calls[0][0];
+			expect(notification.meta.event_type).toBe('response');
+		});
+
+		it('falls back to command.message when no user messages exist', async () => {
+			const { dispatchResponse } = setupMockCommandClient({
+				resolve: makePluginStatus(),
+			});
+
+			const notifier = vi
+				.fn<ChannelNotifier>()
+				.mockResolvedValue(undefined);
+			handler.setNotifier(notifier);
+			await handler.start(createMockApiClient(), createCommandMap());
+
+			await dispatchResponse(
+				makeCommand({
+					id: 13,
+					post_id: 100,
+					prompt: 'edit',
+					status: 'running',
+					message: 'Please fix the intro',
+					result_data: {
+						messages: [
+							{ role: 'assistant', content: 'Working on it.' },
+						],
+					},
+				})
+			);
+
+			const notification = notifier.mock.calls[0][0];
+			expect(notification.content).toBe(
+				'User responded to edit command #13: "Please fix the intro"'
+			);
+		});
+	});
+
+	// ---------------------------------------------------------------
+	// Response notification buffering
+	// ---------------------------------------------------------------
+	describe('response notification buffering', () => {
+		it('buffers response notifications when no notifier is set', async () => {
+			const { dispatchResponse } = setupMockCommandClient({
+				resolve: makePluginStatus(),
+			});
+
+			await handler.start(createMockApiClient(), createCommandMap());
+
+			await dispatchResponse(
+				makeCommand({
+					id: 1,
+					prompt: 'proofread',
+					post_id: 10,
+					status: 'running',
+					result_data: {
+						messages: [{ role: 'user', content: 'Fix this' }],
+					},
+				})
+			);
+
+			const notifier = vi
+				.fn<ChannelNotifier>()
+				.mockResolvedValue(undefined);
+			handler.setNotifier(notifier);
+
+			expect(notifier).toHaveBeenCalledOnce();
+			expect(notifier.mock.calls[0][0].meta.event_type).toBe('response');
+		});
+
+		it('handles notifier errors gracefully on direct response send', async () => {
+			const { dispatchResponse } = setupMockCommandClient({
+				resolve: makePluginStatus(),
+			});
+
+			const consoleSpy = vi
+				.spyOn(console, 'error')
+				.mockImplementation(() => {});
+			const notifier = vi
+				.fn<ChannelNotifier>()
+				.mockRejectedValue(new Error('delivery failed'));
+			handler.setNotifier(notifier);
+			await handler.start(createMockApiClient(), createCommandMap());
+
+			await dispatchResponse(
+				makeCommand({
+					id: 77,
+					status: 'running',
+					result_data: {
+						messages: [{ role: 'user', content: 'Hi' }],
+					},
+				})
+			);
+
+			expect(notifier).toHaveBeenCalledOnce();
+			expect(consoleSpy).toHaveBeenCalledWith(
+				'Failed to send response notification for command 77'
+			);
+			consoleSpy.mockRestore();
+		});
+
+		it('silently ignores response dispatched after stop', async () => {
+			const { dispatchResponse } = setupMockCommandClient({
+				resolve: makePluginStatus(),
+			});
+
+			const notifier = vi
+				.fn<ChannelNotifier>()
+				.mockResolvedValue(undefined);
+			handler.setNotifier(notifier);
+			await handler.start(createMockApiClient(), createCommandMap());
+			handler.stop();
+
+			await dispatchResponse(
+				makeCommand({
+					id: 99,
+					status: 'running',
+					result_data: {
+						messages: [{ role: 'user', content: 'Hello' }],
+					},
+				})
+			);
+
+			expect(notifier).not.toHaveBeenCalled();
 		});
 	});
 });

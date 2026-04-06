@@ -10,7 +10,7 @@ export function registerCommandTools(
 		'wp_update_command_status',
 		{
 			description:
-				'Update the status of a command received from the WordPress editor. Call this when starting, completing, or failing a command from a channel notification.',
+				'Update the status of a command received from the WordPress editor. Call this when starting, completing, or failing a command from a channel notification. For awaiting_input: only send status and message — do NOT send resultData (WordPress manages conversation history automatically).',
 			inputSchema: {
 				commandId: z
 					.number()
@@ -18,12 +18,14 @@ export function registerCommandTools(
 						'The command ID from the channel notification metadata'
 					),
 				status: z
-					.enum(['running', 'completed', 'failed'])
+					.enum(['running', 'completed', 'failed', 'awaiting_input'])
 					.describe('New status for the command'),
 				message: z
 					.string()
 					.optional()
-					.describe('Status message or error description'),
+					.describe(
+						'Status message, error description, or question for the user. For awaiting_input: format as HTML (use <p> for paragraphs, <strong> for emphasis, <ol>/<ul>/<li> for lists, colons for labels).'
+					),
 				resultData: z
 					.string()
 					.optional()
@@ -44,16 +46,23 @@ export function registerCommandTools(
 						{ message: 'resultData must be a JSON object string' }
 					)
 					.describe(
-						'Optional JSON object string of structured result data for the command response'
+						'Optional JSON object string of structured result data. For awaiting_input: conversation messages are managed automatically — only send flags here (e.g., {"planReady": true} when the outline is ready for approval). The planReady flag adds an Approve button in the editor.'
 					),
 			},
 		},
 		async ({ commandId, status, message, resultData }) => {
+			// Strip CDATA wrappers that Claude Code may add to prevent
+			// HTML in the message from being parsed as XML.
+			const cleanMessage = message?.replace(
+				/^<!\[CDATA\[([\s\S]*)\]\]>$/,
+				'$1'
+			);
+
 			try {
 				await session.updateCommandStatus(
 					commandId,
 					status,
-					message,
+					cleanMessage,
 					resultData
 				);
 				return {

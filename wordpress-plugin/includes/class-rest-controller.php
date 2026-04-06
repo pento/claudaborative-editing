@@ -46,116 +46,134 @@ class REST_Controller extends \WP_REST_Controller {
 		register_rest_route(
 			self::API_NAMESPACE,
 			'/commands',
-			[
-				[
+			array(
+				array(
 					'methods'             => \WP_REST_Server::CREATABLE,
-					'callback'            => [ $this, 'create_command' ],
-					'permission_callback' => [ $this, 'create_command_permissions' ],
-					'args'                => [
-						'post_id'   => [
+					'callback'            => array( $this, 'create_command' ),
+					'permission_callback' => array( $this, 'create_command_permissions' ),
+					'args'                => array(
+						'post_id'   => array(
 							'required'          => true,
 							'type'              => 'integer',
 							'validate_callback' => 'rest_validate_request_arg',
 							'sanitize_callback' => 'absint',
-						],
-						'prompt'    => [
+						),
+						'prompt'    => array(
 							'required'          => true,
 							'type'              => 'string',
 							'enum'              => Command_Defs::ALLOWED_PROMPTS,
 							'validate_callback' => 'rest_validate_request_arg',
 							'sanitize_callback' => 'sanitize_text_field',
-						],
-						'arguments' => [
+						),
+						'arguments' => array(
 							'required' => false,
 							'type'     => 'object',
 							'default'  => new \stdClass(),
-						],
-					],
-				],
-				[
+						),
+					),
+				),
+				array(
 					'methods'             => \WP_REST_Server::READABLE,
-					'callback'            => [ $this, 'list_commands' ],
-					'permission_callback' => [ $this, 'edit_posts_permissions' ],
-					'args'                => [
-						'post_id' => [
+					'callback'            => array( $this, 'list_commands' ),
+					'permission_callback' => array( $this, 'edit_posts_permissions' ),
+					'args'                => array(
+						'post_id' => array(
 							'required'          => false,
 							'type'              => 'integer',
 							'sanitize_callback' => 'absint',
-						],
-						'status'  => [
+						),
+						'status'  => array(
 							'required'          => false,
 							'type'              => 'string',
 							'sanitize_callback' => 'sanitize_text_field',
-						],
-						'since'   => [
+						),
+						'since'   => array(
 							'required'          => false,
 							'type'              => 'string',
-							'validate_callback' => [ $this, 'validate_since_param' ],
+							'validate_callback' => array( $this, 'validate_since_param' ),
 							'sanitize_callback' => 'sanitize_text_field',
-						],
-					],
-				],
-			]
-		);
-
-		// The /commands/{id} route only matches digits via [\d]+, so "stream"
-		// never conflicts.
-		register_rest_route(
-			self::API_NAMESPACE,
-			'/commands/stream',
-			[
-				'methods'             => \WP_REST_Server::READABLE,
-				'callback'            => [ $this, 'stream_commands' ],
-				'permission_callback' => [ $this, 'edit_posts_permissions' ],
-			]
+						),
+					),
+				),
+			)
 		);
 
 		register_rest_route(
 			self::API_NAMESPACE,
 			'/commands/(?P<id>[\d]+)',
-			[
-				[
+			array(
+				array(
 					'methods'             => 'PATCH',
-					'callback'            => [ $this, 'update_command' ],
-					'permission_callback' => [ $this, 'edit_posts_permissions' ],
-					'args'                => [
-						'status'      => [
+					'callback'            => array( $this, 'update_command' ),
+					'permission_callback' => array( $this, 'edit_posts_permissions' ),
+					'args'                => array(
+						'status'      => array(
 							'required'          => true,
 							'type'              => 'string',
 							'sanitize_callback' => 'sanitize_text_field',
-						],
-						'message'     => [
+						),
+						'message'     => array(
 							'required'          => false,
 							'type'              => 'string',
-							'sanitize_callback' => 'sanitize_textarea_field',
-						],
-						'result_data' => [
+							'sanitize_callback' => 'wp_kses_post',
+						),
+						'result_data' => array(
 							'required'          => false,
 							'type'              => 'string',
-							'sanitize_callback' => [ Command_Store::class, 'sanitize_json' ],
+							'sanitize_callback' => array( Command_Store::class, 'sanitize_json' ),
 							'validate_callback' => static function ( $value ) {
 								// Only accept JSON objects, not arrays or scalars.
 								return is_object( json_decode( $value ) );
 							},
-						],
-					],
-				],
-				[
+						),
+					),
+				),
+				array(
 					'methods'             => \WP_REST_Server::DELETABLE,
-					'callback'            => [ $this, 'delete_command' ],
-					'permission_callback' => [ $this, 'delete_command_permissions' ],
-				],
-			]
+					'callback'            => array( $this, 'delete_command' ),
+					'permission_callback' => array( $this, 'delete_command_permissions' ),
+				),
+			)
+		);
+
+		register_rest_route(
+			self::API_NAMESPACE,
+			'/commands/(?P<id>[\d]+)/respond',
+			array(
+				'methods'             => \WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'respond_to_command' ),
+				'permission_callback' => array( $this, 'respond_command_permissions' ),
+				'args'                => array(
+					'message' => array(
+						'required'          => true,
+						'type'              => 'string',
+						'sanitize_callback' => 'wp_kses_post',
+					),
+				),
+			)
 		);
 
 		register_rest_route(
 			self::API_NAMESPACE,
 			'/status',
-			[
+			array(
 				'methods'             => \WP_REST_Server::READABLE,
-				'callback'            => [ $this, 'get_status' ],
-				'permission_callback' => [ $this, 'edit_posts_permissions' ],
-			]
+				'callback'            => array( $this, 'get_status' ),
+				'permission_callback' => array( $this, 'edit_posts_permissions' ),
+			)
+		);
+
+		// Lightweight endpoint for the core-data entity resolver.
+		// Returns an empty array so getEntityRecords() succeeds and
+		// triggers collection Yjs sync for the root/wpce_commands room.
+		register_rest_route(
+			self::API_NAMESPACE,
+			'/sync-entity',
+			array(
+				'methods'             => \WP_REST_Server::READABLE,
+				'callback'            => array( $this, 'get_sync_entity' ),
+				'permission_callback' => array( $this, 'edit_posts_permissions' ),
+			)
 		);
 	}
 
@@ -172,7 +190,7 @@ class REST_Controller extends \WP_REST_Controller {
 			return new \WP_Error(
 				'rest_forbidden',
 				__( 'You are not allowed to create commands for this post.', 'claudaborative-editing' ),
-				[ 'status' => 403 ]
+				array( 'status' => 403 )
 			);
 		}
 
@@ -190,7 +208,7 @@ class REST_Controller extends \WP_REST_Controller {
 			return new \WP_Error(
 				'rest_forbidden',
 				__( 'You are not allowed to manage commands.', 'claudaborative-editing' ),
-				[ 'status' => 403 ]
+				array( 'status' => 403 )
 			);
 		}
 
@@ -208,7 +226,7 @@ class REST_Controller extends \WP_REST_Controller {
 			return new \WP_Error(
 				'rest_forbidden',
 				__( 'You are not allowed to manage commands.', 'claudaborative-editing' ),
-				[ 'status' => 403 ]
+				array( 'status' => 403 )
 			);
 		}
 
@@ -218,7 +236,7 @@ class REST_Controller extends \WP_REST_Controller {
 			return new \WP_Error(
 				'rest_not_found',
 				__( 'Command not found.', 'claudaborative-editing' ),
-				[ 'status' => 404 ]
+				array( 'status' => 404 )
 			);
 		}
 
@@ -226,7 +244,43 @@ class REST_Controller extends \WP_REST_Controller {
 			return new \WP_Error(
 				'rest_forbidden',
 				__( 'You can only cancel your own commands.', 'claudaborative-editing' ),
-				[ 'status' => 403 ]
+				array( 'status' => 403 )
+			);
+		}
+
+		return true;
+	}
+
+	/**
+	 * Permission check: user can edit posts and owns the command.
+	 *
+	 * @param \WP_REST_Request $request The request object.
+	 * @return true|\WP_Error True if permitted, \WP_Error otherwise.
+	 */
+	public function respond_command_permissions( $request ) {
+		if ( ! current_user_can( 'edit_posts' ) ) {
+			return new \WP_Error(
+				'rest_forbidden',
+				__( 'You are not allowed to manage commands.', 'claudaborative-editing' ),
+				array( 'status' => 403 )
+			);
+		}
+
+		$command = get_post( (int) $request['id'] );
+
+		if ( ! $command || Command_Store::POST_TYPE !== $command->post_type ) {
+			return new \WP_Error(
+				'rest_not_found',
+				__( 'Command not found.', 'claudaborative-editing' ),
+				array( 'status' => 404 )
+			);
+		}
+
+		if ( get_current_user_id() !== (int) $command->post_author ) {
+			return new \WP_Error(
+				'rest_forbidden',
+				__( 'You can only respond to your own commands.', 'claudaborative-editing' ),
+				array( 'status' => 403 )
 			);
 		}
 
@@ -250,7 +304,7 @@ class REST_Controller extends \WP_REST_Controller {
 					__( '%s is not a valid date.', 'claudaborative-editing' ),
 					$param
 				),
-				[ 'status' => 400 ]
+				array( 'status' => 400 )
 			);
 		}
 
@@ -269,12 +323,12 @@ class REST_Controller extends \WP_REST_Controller {
 		$arguments = $request->get_param( 'arguments' );
 
 		$command_id = wp_insert_post(
-			[
+			array(
 				'post_type'   => Command_Store::POST_TYPE,
 				'post_status' => 'publish',
 				'post_author' => get_current_user_id(),
 				'post_parent' => $post_id,
-			],
+			),
 			true
 		);
 
@@ -287,6 +341,7 @@ class REST_Controller extends \WP_REST_Controller {
 		update_post_meta( $command_id, 'wpce_prompt', $prompt );
 		update_post_meta( $command_id, 'wpce_arguments', wp_json_encode( $arguments ) );
 		update_post_meta( $command_id, 'wpce_command_status', 'pending' );
+		update_post_meta( $command_id, 'wpce_result_data', '{}' );
 		update_post_meta( $command_id, 'wpce_expires_at', $expires_at );
 
 		$command = get_post( $command_id );
@@ -306,7 +361,7 @@ class REST_Controller extends \WP_REST_Controller {
 		// Lazily expire stale commands before returning results.
 		Command_Store::expire_stale_commands( $user_id );
 
-		$args = [
+		$args = array(
 			'post_type'      => Command_Store::POST_TYPE,
 			'post_status'    => 'any',
 			'author'         => $user_id,
@@ -314,7 +369,7 @@ class REST_Controller extends \WP_REST_Controller {
 			'no_found_rows'  => true,
 			'orderby'        => 'date',
 			'order'          => 'DESC',
-		];
+		);
 
 		$post_id = $request->get_param( 'post_id' );
 		if ( $post_id ) {
@@ -322,47 +377,33 @@ class REST_Controller extends \WP_REST_Controller {
 		}
 
 		$status = $request->get_param( 'status' );
+
 		if ( $status ) {
-			$args['meta_query'] = [
-				[
+			$args['meta_query'] = array(
+				array(
 					'key'   => 'wpce_command_status',
 					'value' => $status,
-				],
-			];
+				),
+			);
 		}
 
 		$since = $request->get_param( 'since' );
 		if ( $since ) {
-			$args['date_query'] = [
-				[
+			$args['date_query'] = array(
+				array(
 					'after'     => $since,
 					'inclusive' => true,
 					'column'    => 'post_modified_gmt',
-				],
-			];
+				),
+			);
 		}
 
 		$query = new \WP_Query( $args );
 		/** @var \WP_Post[] $posts */
 		$posts    = $query->posts;
-		$commands = array_map( [ '\Claudaborative_Editing\Command_Formatter', 'format' ], $posts );
+		$commands = array_map( array( '\Claudaborative_Editing\Command_Formatter', 'format' ), $posts );
 
 		return rest_ensure_response( $commands );
-	}
-
-	/**
-	 * GET /wpce/v1/commands/stream — SSE stream of pending commands.
-	 *
-	 * @param \WP_REST_Request $request The request object.
-	 * @return void
-	 */
-	public function stream_commands( $request ) {
-		$user_id       = get_current_user_id();
-		$last_event_id = $request->get_header( 'Last-Event-ID' );
-
-		$this->update_mcp_last_seen( $user_id );
-
-		SSE_Handler::handle( $user_id, $last_event_id ? $last_event_id : '' );
 	}
 
 	/**
@@ -378,7 +419,7 @@ class REST_Controller extends \WP_REST_Controller {
 			return new \WP_Error(
 				'rest_not_found',
 				__( 'Command not found.', 'claudaborative-editing' ),
-				[ 'status' => 404 ]
+				array( 'status' => 404 )
 			);
 		}
 
@@ -387,7 +428,7 @@ class REST_Controller extends \WP_REST_Controller {
 			return new \WP_Error(
 				'rest_forbidden',
 				__( 'You can only update your own commands.', 'claudaborative-editing' ),
-				[ 'status' => 403 ]
+				array( 'status' => 403 )
 			);
 		}
 
@@ -397,12 +438,12 @@ class REST_Controller extends \WP_REST_Controller {
 		// Check if the command has expired.
 		if ( $this->is_expired( $command->ID ) && 'pending' === $current_status ) {
 			update_post_meta( $command->ID, 'wpce_command_status', 'expired' );
-			wp_update_post( [ 'ID' => $command->ID ] );
+			wp_update_post( array( 'ID' => $command->ID ) );
 
 			return new \WP_Error(
 				'rest_command_expired',
 				__( 'This command has expired.', 'claudaborative-editing' ),
-				[ 'status' => 409 ]
+				array( 'status' => 409 )
 			);
 		}
 
@@ -416,7 +457,7 @@ class REST_Controller extends \WP_REST_Controller {
 					$current_status,
 					$new_status
 				),
-				[ 'status' => 409 ]
+				array( 'status' => 409 )
 			);
 		}
 
@@ -429,21 +470,21 @@ class REST_Controller extends \WP_REST_Controller {
 
 			$updated_rows = $wpdb->update(
 				$wpdb->postmeta,
-				[ 'meta_value' => $new_status ],
-				[
+				array( 'meta_value' => $new_status ),
+				array(
 					'post_id'    => $command->ID,
 					'meta_key'   => 'wpce_command_status',
 					'meta_value' => 'pending',
-				],
-				[ '%s' ],
-				[ '%d', '%s', '%s' ]
+				),
+				array( '%s' ),
+				array( '%d', '%s', '%s' )
 			);
 
 			if ( false === $updated_rows ) {
 				return new \WP_Error(
 					'rest_update_failed',
 					__( 'Failed to update command status.', 'claudaborative-editing' ),
-					[ 'status' => 500 ]
+					array( 'status' => 500 )
 				);
 			}
 
@@ -451,7 +492,7 @@ class REST_Controller extends \WP_REST_Controller {
 				return new \WP_Error(
 					'rest_conflict',
 					__( 'This command is no longer pending.', 'claudaborative-editing' ),
-					[ 'status' => 409 ]
+					array( 'status' => 409 )
 				);
 			}
 
@@ -466,9 +507,24 @@ class REST_Controller extends \WP_REST_Controller {
 			update_post_meta( $command->ID, 'wpce_message', $message );
 		}
 
-		$result_data = $request->get_param( 'result_data' );
-		if ( null !== $result_data ) {
-			update_post_meta( $command->ID, 'wpce_result_data', $result_data );
+		// When transitioning to awaiting_input, WordPress manages the
+		// conversation history — append the message as an assistant entry.
+		// Any non-messages fields from client result_data (e.g., planReady)
+		// are merged into the existing result_data.
+		if ( 'awaiting_input' === $new_status ) {
+			if ( null !== $message ) {
+				$this->append_conversation_message( $command->ID, 'assistant', $message );
+			}
+
+			$result_data = $request->get_param( 'result_data' );
+			if ( null !== $result_data ) {
+				$this->merge_result_data_flags( $command->ID, $result_data );
+			}
+		} else {
+			$result_data = $request->get_param( 'result_data' );
+			if ( null !== $result_data ) {
+				update_post_meta( $command->ID, 'wpce_result_data', $result_data );
+			}
 		}
 
 		if ( 'running' === $new_status && 'pending' === $current_status ) {
@@ -477,7 +533,7 @@ class REST_Controller extends \WP_REST_Controller {
 		}
 
 		// Touch the post to update post_modified_gmt.
-		wp_update_post( [ 'ID' => $command->ID ] );
+		wp_update_post( array( 'ID' => $command->ID ) );
 
 		return rest_ensure_response( Command_Formatter::format( get_post( $command->ID ) ) );
 	}
@@ -494,8 +550,9 @@ class REST_Controller extends \WP_REST_Controller {
 		// Ownership and existence already validated in delete_command_permissions.
 
 		$current_status = get_post_meta( $command->ID, 'wpce_command_status', true );
+		$cancellable    = array( 'pending', 'awaiting_input' );
 
-		if ( 'pending' !== $current_status ) {
+		if ( ! in_array( $current_status, $cancellable, true ) ) {
 			return new \WP_Error(
 				'rest_invalid_transition',
 				sprintf(
@@ -503,48 +560,140 @@ class REST_Controller extends \WP_REST_Controller {
 					__( 'Cannot cancel a command with status "%s".', 'claudaborative-editing' ),
 					$current_status
 				),
-				[ 'status' => 400 ]
+				array( 'status' => 400 )
 			);
 		}
 
-		// Atomic cancel: only update if still pending to prevent overwriting
-		// a concurrent pending → running transition.
+		// Atomic cancel: only update if still in a cancellable status to
+		// prevent overwriting a concurrent status transition.
 		global $wpdb;
 
 		$updated_rows = $wpdb->update(
 			$wpdb->postmeta,
-			[ 'meta_value' => 'cancelled' ],
-			[
+			array( 'meta_value' => 'cancelled' ),
+			array(
 				'post_id'    => $command->ID,
 				'meta_key'   => 'wpce_command_status',
-				'meta_value' => 'pending',
-			],
-			[ '%s' ],
-			[ '%d', '%s', '%s' ]
+				'meta_value' => $current_status,
+			),
+			array( '%s' ),
+			array( '%d', '%s', '%s' )
 		);
 
 		if ( false === $updated_rows ) {
 			return new \WP_Error(
 				'rest_update_failed',
 				__( 'Failed to cancel command.', 'claudaborative-editing' ),
-				[ 'status' => 500 ]
+				array( 'status' => 500 )
 			);
 		}
 
 		if ( 0 === $updated_rows ) {
 			return new \WP_Error(
 				'rest_conflict',
-				__( 'This command is no longer pending.', 'claudaborative-editing' ),
-				[ 'status' => 409 ]
+				__( 'This command can no longer be cancelled.', 'claudaborative-editing' ),
+				array( 'status' => 409 )
 			);
 		}
 
 		wp_cache_delete( $command->ID, 'post_meta' );
 
 		// Touch the post to update post_modified_gmt.
-		wp_update_post( [ 'ID' => $command->ID ] );
+		wp_update_post( array( 'ID' => $command->ID ) );
 
 		return rest_ensure_response( Command_Formatter::format( get_post( $command->ID ) ) );
+	}
+
+	/**
+	 * POST /wpce/v1/commands/{id}/respond — submit a user response to an awaiting_input command.
+	 *
+	 * @param \WP_REST_Request $request The request object.
+	 * @return \WP_REST_Response|\WP_Error Response or error.
+	 */
+	public function respond_to_command( $request ) {
+		$command = get_post( (int) $request['id'] );
+
+		if ( ! $command || Command_Store::POST_TYPE !== $command->post_type ) {
+			return new \WP_Error(
+				'rest_not_found',
+				__( 'Command not found.', 'claudaborative-editing' ),
+				array( 'status' => 404 )
+			);
+		}
+
+		// Ownership already verified in respond_command_permissions.
+
+		$current_status = get_post_meta( $command->ID, 'wpce_command_status', true );
+
+		if ( 'awaiting_input' !== $current_status ) {
+			return new \WP_Error(
+				'rest_invalid_status',
+				sprintf(
+					/* translators: %s: current status */
+					__( 'Command is not awaiting input (current status: "%s").', 'claudaborative-editing' ),
+					$current_status
+				),
+				array( 'status' => 409 )
+			);
+		}
+
+		// Atomic CAS: awaiting_input → running.
+		global $wpdb;
+
+		$updated_rows = $wpdb->update(
+			$wpdb->postmeta,
+			array( 'meta_value' => 'running' ),
+			array(
+				'post_id'    => $command->ID,
+				'meta_key'   => 'wpce_command_status',
+				'meta_value' => 'awaiting_input',
+			),
+			array( '%s' ),
+			array( '%d', '%s', '%s' )
+		);
+
+		if ( false === $updated_rows ) {
+			return new \WP_Error(
+				'rest_update_failed',
+				__( 'Failed to update command status.', 'claudaborative-editing' ),
+				array( 'status' => 500 )
+			);
+		}
+
+		if ( 0 === $updated_rows ) {
+			return new \WP_Error(
+				'rest_conflict',
+				__( 'This command is no longer awaiting input.', 'claudaborative-editing' ),
+				array( 'status' => 409 )
+			);
+		}
+
+		// Clear the cached meta so subsequent reads reflect the DB state.
+		wp_cache_delete( $command->ID, 'post_meta' );
+
+		// Append the user's response to the conversation history.
+		// Run through wpautop to preserve line/paragraph breaks as HTML.
+		$this->append_conversation_message( $command->ID, 'user', wpautop( $request->get_param( 'message' ) ) );
+
+		// Keep MCP connection alive during conversation.
+		$this->update_mcp_last_seen( get_current_user_id() );
+
+		// Touch the post to update post_modified_gmt.
+		wp_update_post( array( 'ID' => $command->ID ) );
+
+		return rest_ensure_response( Command_Formatter::format( get_post( $command->ID ) ) );
+	}
+
+	/**
+	 * GET /wpce/v1/sync-entity — minimal record for core-data entity resolver.
+	 *
+	 * Returns an empty array so that getEntityRecords() succeeds and
+	 * triggers collection Yjs sync for the root/wpce_commands room.
+	 *
+	 * @return \WP_REST_Response Response.
+	 */
+	public function get_sync_entity() {
+		return rest_ensure_response( array() );
 	}
 
 	/**
@@ -564,12 +713,12 @@ class REST_Controller extends \WP_REST_Controller {
 		}
 
 		return rest_ensure_response(
-			[
+			array(
 				'version'          => self::get_plugin_version(),
 				'protocol_version' => self::PROTOCOL_VERSION,
 				'mcp_connected'    => $connected,
 				'mcp_last_seen_at' => $last_seen_at ? $last_seen_at : null,
-			]
+			)
 		);
 	}
 
@@ -626,6 +775,107 @@ class REST_Controller extends \WP_REST_Controller {
 	 */
 	private function get_mcp_last_seen( $user_id ) {
 		return get_transient( 'wpce_mcp_last_seen_' . $user_id );
+	}
+
+	/**
+	 * Append a message to the conversation history in result_data.
+	 *
+	 * Reads the current result_data, ensures a messages array exists,
+	 * appends the new message, and writes it back to post meta.
+	 *
+	 * @param int    $post_id The command post ID.
+	 * @param string $role    Message role ('assistant' or 'user').
+	 * @param string $content The message content.
+	 * @return void
+	 */
+	private function append_conversation_message( $post_id, $role, $content ) {
+		$result_data_raw = get_post_meta( $post_id, 'wpce_result_data', true );
+		$result_data     = json_decode( $result_data_raw ? $result_data_raw : '{}', true );
+
+		if ( ! is_array( $result_data ) ) {
+			$result_data = array();
+		}
+
+		if ( ! isset( $result_data['messages'] ) || ! is_array( $result_data['messages'] ) ) {
+			$result_data['messages'] = array();
+		}
+
+		$result_data['messages'][] = array(
+			'role'      => $role,
+			'content'   => $content,
+			'timestamp' => gmdate( 'Y-m-d\TH:i:s\Z' ),
+		);
+
+		$json = wp_json_encode( $result_data );
+
+		// Write directly via $wpdb to bypass the register_post_meta
+		// sanitize_json callback, which re-encodes the JSON and can cause
+		// update_post_meta to skip the write if the normalized value matches
+		// the old value.
+		global $wpdb;
+		$wpdb->update(
+			$wpdb->postmeta,
+			array( 'meta_value' => $json ),
+			array(
+				'post_id'  => $post_id,
+				'meta_key' => 'wpce_result_data',
+			),
+			array( '%s' ),
+			array( '%d', '%s' )
+		);
+
+		// Update the object cache to match.
+		wp_cache_delete( $post_id, 'post_meta' );
+	}
+
+	/**
+	 * Merge non-messages fields from client result_data into the stored
+	 * result_data. This allows the client to set flags (e.g., planReady)
+	 * without overwriting the server-managed messages array.
+	 *
+	 * @param int    $post_id     The command post ID.
+	 * @param string $client_json JSON string from the client's resultData parameter.
+	 * @return void
+	 */
+	private function merge_result_data_flags( $post_id, $client_json ) {
+		$client_data = json_decode( $client_json, true );
+
+		if ( ! is_array( $client_data ) ) {
+			return;
+		}
+
+		// Remove messages — those are managed by append_conversation_message.
+		unset( $client_data['messages'] );
+
+		if ( empty( $client_data ) ) {
+			return;
+		}
+
+		$result_data_raw = get_post_meta( $post_id, 'wpce_result_data', true );
+		$result_data     = json_decode( $result_data_raw ? $result_data_raw : '{}', true );
+
+		if ( ! is_array( $result_data ) ) {
+			$result_data = array();
+		}
+
+		// Merge client flags into result_data (messages are preserved).
+		$result_data = array_merge( $result_data, $client_data );
+
+		$json = wp_json_encode( $result_data );
+
+		global $wpdb;
+		$wpdb->update(
+			$wpdb->postmeta,
+			array( 'meta_value' => $json ),
+			array(
+				'post_id'  => $post_id,
+				'meta_key' => 'wpce_result_data',
+			),
+			array( '%s' ),
+			array( '%d', '%s' )
+		);
+
+		wp_cache_delete( $post_id, 'post_meta' );
 	}
 
 	/**

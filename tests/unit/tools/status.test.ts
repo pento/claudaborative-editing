@@ -517,7 +517,7 @@ describe('status tools', () => {
 			const text = result.content[0].text;
 
 			expect(text).toContain('Active collaborators:');
-			expect(text).toContain('Gary (AI, Claude Code MCP)');
+			expect(text).toContain('Gary (AI, Claudaborative Editing MCP)');
 			expect(text).toContain('Alice (Human, Chrome)');
 		});
 

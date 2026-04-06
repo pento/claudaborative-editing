@@ -33,6 +33,7 @@ class Command_Defs {
 		'edit',
 		'translate',
 		'pre-publish-check',
+		'compose',
 	];
 
 	/**
@@ -41,12 +42,17 @@ class Command_Defs {
 	 * @var array<string, string[]>
 	 */
 	const VALID_TRANSITIONS = [
-		'pending' => [
+		'pending'        => [
 			'running',
 		],
-		'running' => [
+		'running'        => [
 			'completed',
 			'failed',
+			'awaiting_input',
+		],
+		'awaiting_input' => [
+			'running',
+			'cancelled',
 		],
 	];
 

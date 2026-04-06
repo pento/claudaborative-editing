@@ -40,6 +40,7 @@ function mockUseSelect(
 describe('useCommands', () => {
 	let submitCommand: jest.Mock;
 	let cancelCommand: jest.Mock;
+	let respondToCommand: jest.Mock;
 	let fetchActiveCommand: jest.Mock;
 	let pollActiveCommand: jest.Mock;
 
@@ -49,12 +50,14 @@ describe('useCommands', () => {
 
 		submitCommand = jest.fn();
 		cancelCommand = jest.fn();
+		respondToCommand = jest.fn();
 		fetchActiveCommand = jest.fn();
 		pollActiveCommand = jest.fn();
 
 		mockUseSelect({
 			getActiveCommand: () => null,
 			isSubmitting: () => false,
+			isResponding: () => false,
 			getCommandError: () => null,
 			getCommandHistory: () => [],
 		});
@@ -62,6 +65,7 @@ describe('useCommands', () => {
 		mockedUseDispatch.mockReturnValue({
 			submitCommand,
 			cancelCommand,
+			respondToCommand,
 			fetchActiveCommand,
 			pollActiveCommand,
 		});
@@ -75,6 +79,7 @@ describe('useCommands', () => {
 		mockUseSelect({
 			getActiveCommand: () => MOCK_COMMAND,
 			isSubmitting: () => true,
+			isResponding: () => false,
 			getCommandError: () => 'some error',
 			getCommandHistory: () => [{ ...MOCK_COMMAND, status: 'completed' }],
 		});
@@ -83,6 +88,7 @@ describe('useCommands', () => {
 
 		expect(result.current.activeCommand).toEqual(MOCK_COMMAND);
 		expect(result.current.isSubmitting).toBe(true);
+		expect(result.current.isResponding).toBe(false);
 		expect(result.current.error).toBe('some error');
 		expect(result.current.history).toHaveLength(1);
 	});
@@ -103,6 +109,7 @@ describe('useCommands', () => {
 		mockUseSelect({
 			getActiveCommand: () => MOCK_COMMAND,
 			isSubmitting: () => false,
+			isResponding: () => false,
 			getCommandError: () => null,
 			getCommandHistory: () => [],
 		});
@@ -130,6 +137,7 @@ describe('useCommands', () => {
 		mockUseSelect({
 			getActiveCommand: () => MOCK_COMMAND,
 			isSubmitting: () => false,
+			isResponding: () => false,
 			getCommandError: () => null,
 			getCommandHistory: () => [],
 		});
@@ -165,5 +173,29 @@ describe('useCommands', () => {
 		});
 
 		expect(cancelCommand).toHaveBeenCalledWith(42);
+	});
+
+	it('respondToCommand() calls store respondToCommand', () => {
+		const { result } = renderHook(() => useCommands(123));
+
+		act(() => {
+			result.current.respondToCommand(42, 'Yes, go ahead');
+		});
+
+		expect(respondToCommand).toHaveBeenCalledWith(42, 'Yes, go ahead');
+	});
+
+	it('returns isResponding state from useSelect', () => {
+		mockUseSelect({
+			getActiveCommand: () => MOCK_COMMAND,
+			isSubmitting: () => false,
+			isResponding: () => true,
+			getCommandError: () => null,
+			getCommandHistory: () => [],
+		});
+
+		const { result } = renderHook(() => useCommands(123));
+
+		expect(result.current.isResponding).toBe(true);
 	});
 });

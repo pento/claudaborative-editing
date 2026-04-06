@@ -1,64 +1,41 @@
 /**
  * Custom hook for MCP connection status.
  *
- * Provides reactive access to the MCP server connection state,
- * with automatic polling to keep the status up to date.
+ * Detects MCP connection via Yjs awareness in the command sync room.
+ * The MCP server sends awareness with browserType 'Claudaborative Editing MCP'.
  */
 
 /**
  * WordPress dependencies
  */
-import { useEffect } from '@wordpress/element';
-import { useSelect, useDispatch } from '@wordpress/data';
+import { useState, useEffect } from '@wordpress/element';
 
 /**
  * Internal dependencies
  */
-import store from '../store';
-import type { McpStatus } from '../store/types';
+import { isMcpConnected, subscribeToMcpConnection } from '../sync/command-sync';
 
 /**
- * Polling interval for MCP status refresh (milliseconds).
+ * Return type for the useMcpStatus hook.
  */
-const STATUS_POLL_INTERVAL = 5000;
+export interface McpStatus {
+	mcpConnected: boolean;
+}
 
 /**
- * Hook that provides MCP connection status with automatic polling.
+ * Hook that provides MCP connection status via Yjs awareness.
  *
- * On first render, the store resolver fetches the status from the
- * REST API. Subsequent updates are fetched every 5 seconds via
- * `setInterval`.
+ * Subscribes to awareness changes in the root/wpce_commands room.
+ * The MCP server's presence is detected by its browserType field.
  *
- * @return Status object with `mcpConnected`, `mcpLastSeenAt`, `isLoading`, and `error` properties.
+ * @return Status object with `mcpConnected`.
  */
 export function useMcpStatus(): McpStatus {
-	const {
-		mcpConnected,
-		mcpLastSeenAt,
-		version,
-		protocolVersion,
-		isLoading,
-		error,
-	} = useSelect((select) => select(store).getMcpStatus(), []);
-
-	const { refreshStatus } = useDispatch(store);
+	const [mcpConnected, setMcpConnected] = useState(() => isMcpConnected());
 
 	useEffect(() => {
-		const intervalId = window.setInterval(() => {
-			refreshStatus();
-		}, STATUS_POLL_INTERVAL);
+		return subscribeToMcpConnection(setMcpConnected);
+	}, []);
 
-		return () => {
-			window.clearInterval(intervalId);
-		};
-	}, [refreshStatus]);
-
-	return {
-		mcpConnected,
-		mcpLastSeenAt,
-		version,
-		protocolVersion,
-		isLoading,
-		error,
-	};
+	return { mcpConnected };
 }

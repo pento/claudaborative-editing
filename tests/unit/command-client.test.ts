@@ -1,12 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import * as Y from 'yjs';
 import {
 	CommandClient,
-	DEFAULT_COMMAND_CLIENT_CONFIG,
+	SUPPORTED_PROTOCOL_VERSIONS,
+	isProtocolCompatible,
 } from '../../src/wordpress/command-client.js';
-import type {
-	Command,
-	CommandClientConfig,
-} from '../../src/wordpress/command-client.js';
+import type { Command } from '../../src/wordpress/command-client.js';
 import type { WordPressApiClient } from '../../src/wordpress/api-client.js';
 
 // --- Helpers ---
@@ -14,69 +13,9 @@ import type { WordPressApiClient } from '../../src/wordpress/api-client.js';
 function createMockApiClient() {
 	return {
 		request: vi.fn(),
-		requestStream: vi.fn(),
 	} as unknown as WordPressApiClient & {
 		request: ReturnType<typeof vi.fn>;
-		requestStream: ReturnType<typeof vi.fn>;
 	};
-}
-
-function createSSEStream(text: string): ReadableStream<Uint8Array> {
-	const encoder = new TextEncoder();
-	return new ReadableStream({
-		start(controller) {
-			controller.enqueue(encoder.encode(text));
-			controller.close();
-		},
-	});
-}
-
-function createMultiChunkSSEStream(
-	chunks: string[]
-): ReadableStream<Uint8Array> {
-	const encoder = new TextEncoder();
-	return new ReadableStream({
-		start(controller) {
-			for (const chunk of chunks) {
-				controller.enqueue(encoder.encode(chunk));
-			}
-			controller.close();
-		},
-	});
-}
-
-/**
- * Creates an SSE stream that stays open until the returned cancel function
- * is called.  This prevents processSSEStream from completing and triggering
- * automatic reconnection, which would create infinite loops under fake timers.
- */
-function createHangingSSEStream(
-	initialText: string
-): [ReadableStream<Uint8Array>, () => void] {
-	const encoder = new TextEncoder();
-	let controllerRef: ReadableStreamDefaultController<Uint8Array>;
-
-	const stream = new ReadableStream<Uint8Array>({
-		start(controller) {
-			controllerRef = controller;
-			if (initialText) {
-				controller.enqueue(encoder.encode(initialText));
-			}
-		},
-		cancel() {
-			// Called when the reader is cancelled (e.g. via abort)
-		},
-	});
-
-	const close = () => {
-		try {
-			controllerRef.close();
-		} catch {
-			// Already closed
-		}
-	};
-
-	return [stream, close];
 }
 
 function fakeCommand(overrides?: Partial<Command>): Command {
@@ -96,22 +35,25 @@ function fakeCommand(overrides?: Partial<Command>): Command {
 	};
 }
 
-function fakeSSEResponse(body: ReadableStream<Uint8Array>): Response {
-	return {
-		ok: true,
-		status: 200,
-		statusText: 'OK',
-		body,
-		headers: new Headers({ 'content-type': 'text/event-stream' }),
-	} as unknown as Response;
-}
+/**
+ * Creates a pair of Y.Docs that simulate remote/local sync.
+ * Changes on `remoteDoc` can be synced to `localDoc` via `syncToLocal()`.
+ */
+function createSyncedDocs() {
+	const remoteDoc = new Y.Doc();
+	const localDoc = new Y.Doc();
 
-/** Access the private parseSSEStream method for direct testing. */
-function getParser(c: CommandClient) {
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
-	return (c as any).parseSSEStream.bind(c) as (
-		stream: ReadableStream<Uint8Array>
-	) => AsyncGenerator<{ event: string; data: string; id?: string }>;
+	function syncToLocal() {
+		const update = Y.encodeStateAsUpdate(remoteDoc);
+		Y.applyUpdate(localDoc, update);
+	}
+
+	function syncToRemote() {
+		const update = Y.encodeStateAsUpdate(localDoc);
+		Y.applyUpdate(remoteDoc, update);
+	}
+
+	return { remoteDoc, localDoc, syncToLocal, syncToRemote };
 }
 
 // --- Tests ---
@@ -119,27 +61,37 @@ function getParser(c: CommandClient) {
 describe('CommandClient', () => {
 	let apiClient: ReturnType<typeof createMockApiClient>;
 	let onCommand: ReturnType<typeof vi.fn<(command: Command) => void>>;
-	let config: CommandClientConfig;
+	let onResponse: ReturnType<typeof vi.fn<(command: Command) => void>>;
 	let client: CommandClient;
 
 	beforeEach(() => {
-		vi.useFakeTimers();
 		apiClient = createMockApiClient();
 		onCommand = vi.fn();
-		config = {
-			...DEFAULT_COMMAND_CLIENT_CONFIG,
-			// Use short intervals for tests
-			pollInterval: 100,
-			sseBackoffBase: 50,
-			sseBackoffMax: 200,
-			sseRetryFromPollingInterval: 500,
-		};
-		client = new CommandClient(apiClient, onCommand, config);
+		onResponse = vi.fn();
+		client = new CommandClient(apiClient, onCommand, onResponse);
 	});
 
 	afterEach(() => {
 		client.stop();
-		vi.useRealTimers();
+	});
+
+	// -------------------------------------------------------
+	// Protocol version constants
+	// -------------------------------------------------------
+
+	describe('protocol version', () => {
+		it('SUPPORTED_PROTOCOL_VERSIONS includes 1', () => {
+			expect(SUPPORTED_PROTOCOL_VERSIONS).toContain(1);
+		});
+
+		it('isProtocolCompatible returns true for supported version', () => {
+			expect(isProtocolCompatible(1)).toBe(true);
+		});
+
+		it('isProtocolCompatible returns false for unsupported version', () => {
+			expect(isProtocolCompatible(99)).toBe(false);
+			expect(isProtocolCompatible(0)).toBe(false);
+		});
 	});
 
 	// -------------------------------------------------------
@@ -163,20 +115,6 @@ describe('CommandClient', () => {
 		});
 	});
 
-	describe('listPendingCommands()', () => {
-		it('calls apiClient.request with status=pending query', async () => {
-			const commands = [fakeCommand({ id: 1 }), fakeCommand({ id: 2 })];
-			apiClient.request.mockResolvedValue(commands);
-
-			const result = await client.listPendingCommands();
-
-			expect(apiClient.request).toHaveBeenCalledWith(
-				'/wpce/v1/commands?status=pending'
-			);
-			expect(result).toEqual(commands);
-		});
-	});
-
 	describe('updateCommandStatus()', () => {
 		it('sends PATCH with status only', async () => {
 			const updated = fakeCommand({ id: 3, status: 'running' });
@@ -196,55 +134,16 @@ describe('CommandClient', () => {
 
 		it('sends PATCH with status and message', async () => {
 			const updated = fakeCommand({
-				id: 7,
+				id: 5,
 				status: 'completed',
-				message: 'Done!',
+				message: 'All done',
 			});
 			apiClient.request.mockResolvedValue(updated);
 
 			const result = await client.updateCommandStatus(
-				7,
-				'completed',
-				'Done!'
-			);
-
-			expect(apiClient.request).toHaveBeenCalledWith(
-				'/wpce/v1/commands/7',
-				{
-					method: 'PATCH',
-					body: JSON.stringify({
-						status: 'completed',
-						message: 'Done!',
-					}),
-				}
-			);
-			expect(result).toEqual(updated);
-		});
-
-		it('does not include message key when message is undefined', async () => {
-			apiClient.request.mockResolvedValue(
-				fakeCommand({ id: 1, status: 'failed' })
-			);
-
-			await client.updateCommandStatus(1, 'failed');
-
-			const callArgs = apiClient.request.mock.calls[0][1] as {
-				body: string;
-			};
-			const body = JSON.parse(callArgs.body) as Record<string, unknown>;
-			expect(body).not.toHaveProperty('message');
-		});
-
-		it('includes result_data when resultData is provided', async () => {
-			const updated = fakeCommand({ id: 5, status: 'completed' });
-			apiClient.request.mockResolvedValue(updated);
-
-			const resultData = JSON.stringify({ checks: [] });
-			await client.updateCommandStatus(
 				5,
 				'completed',
-				'Done',
-				resultData
+				'All done'
 			);
 
 			expect(apiClient.request).toHaveBeenCalledWith(
@@ -253,979 +152,617 @@ describe('CommandClient', () => {
 					method: 'PATCH',
 					body: JSON.stringify({
 						status: 'completed',
+						message: 'All done',
+					}),
+				}
+			);
+			expect(result).toEqual(updated);
+		});
+
+		it('sends PATCH with status, message, and resultData', async () => {
+			const updated = fakeCommand({ id: 6, status: 'completed' });
+			apiClient.request.mockResolvedValue(updated);
+
+			await client.updateCommandStatus(
+				6,
+				'completed',
+				'Done',
+				'{"foo":"bar"}'
+			);
+
+			expect(apiClient.request).toHaveBeenCalledWith(
+				'/wpce/v1/commands/6',
+				{
+					method: 'PATCH',
+					body: JSON.stringify({
+						status: 'completed',
 						message: 'Done',
-						result_data: resultData,
+						result_data: '{"foo":"bar"}',
 					}),
 				}
 			);
 		});
 
-		it('does not include result_data key when resultData is undefined', async () => {
-			apiClient.request.mockResolvedValue(
-				fakeCommand({ id: 1, status: 'completed' })
+		it('writes the updated command to the Y.Map', async () => {
+			const { localDoc } = createSyncedDocs();
+			const documentMap = localDoc.getMap('document');
+			client.startObserving(documentMap);
+
+			const updated = fakeCommand({ id: 3, status: 'running' });
+			apiClient.request.mockResolvedValue(updated);
+
+			await client.updateCommandStatus(3, 'running');
+
+			const commands = documentMap.get('commands') as Record<
+				string,
+				unknown
+			>;
+			expect(commands).toBeDefined();
+			expect(commands['3']).toBeDefined();
+			expect((commands['3'] as Record<string, unknown>).status).toBe(
+				'running'
 			);
+		});
 
-			await client.updateCommandStatus(1, 'completed', 'Done');
+		it('does not write to Y.Map when not observing', async () => {
+			// Client is not observing any map, so updateCommandStatus
+			// should still succeed (REST call) without crashing.
+			const updated = fakeCommand({ id: 3, status: 'running' });
+			apiClient.request.mockResolvedValue(updated);
 
-			const callArgs = apiClient.request.mock.calls[0][1] as {
-				body: string;
-			};
-			const body = JSON.parse(callArgs.body) as Record<string, unknown>;
-			expect(body).not.toHaveProperty('result_data');
+			const result = await client.updateCommandStatus(3, 'running');
+			expect(result).toEqual(updated);
 		});
 	});
 
 	// -------------------------------------------------------
-	// SSE transport — connectSSE
+	// startObserving
 	// -------------------------------------------------------
 
-	describe('SSE transport', () => {
-		it('sets transport to sse on successful connection', async () => {
-			const [stream, closeStream] = createHangingSSEStream(
-				'event: heartbeat\ndata: \n\n'
-			);
-			apiClient.requestStream.mockResolvedValue(fakeSSEResponse(stream));
+	describe('startObserving()', () => {
+		it('sets transport to yjs', () => {
+			const { localDoc } = createSyncedDocs();
+			const documentMap = localDoc.getMap('document');
 
 			expect(client.getTransport()).toBe('none');
 
-			await client.start();
-			await vi.advanceTimersByTimeAsync(0);
+			client.startObserving(documentMap);
 
-			expect(client.getTransport()).toBe('sse');
-			closeStream();
+			expect(client.getTransport()).toBe('yjs');
 		});
 
-		it('delivers command events to onCommand callback', async () => {
-			const cmd = fakeCommand({ id: 10, prompt: 'review' });
-			const [stream, closeStream] = createHangingSSEStream(
-				`event: command\nid: 10\ndata: ${JSON.stringify(cmd)}\n\n`
+		it('processes commands already in the map on start', () => {
+			const { remoteDoc, localDoc, syncToLocal } = createSyncedDocs();
+
+			// Write a pending command to the remote doc before observing
+			const remoteMap = remoteDoc.getMap('document');
+			remoteMap.set('commands', {
+				'10': fakeCommand({ id: 10, status: 'pending' }),
+			});
+			syncToLocal();
+
+			const documentMap = localDoc.getMap('document');
+			client.startObserving(documentMap);
+
+			expect(onCommand).toHaveBeenCalledOnce();
+			expect(onCommand).toHaveBeenCalledWith(
+				expect.objectContaining({ id: 10, status: 'pending' })
 			);
-			apiClient.requestStream.mockResolvedValue(fakeSSEResponse(stream));
-
-			await client.start();
-			await vi.advanceTimersByTimeAsync(0);
-
-			expect(onCommand).toHaveBeenCalledTimes(1);
-			expect(onCommand).toHaveBeenCalledWith(cmd);
-			closeStream();
-		});
-
-		it('ignores heartbeat events', async () => {
-			const cmd = fakeCommand({ id: 11 });
-			const [stream, closeStream] = createHangingSSEStream(
-				`event: heartbeat\ndata: \n\nevent: command\nid: 11\ndata: ${JSON.stringify(cmd)}\n\nevent: heartbeat\ndata: \n\n`
-			);
-			apiClient.requestStream.mockResolvedValue(fakeSSEResponse(stream));
-
-			await client.start();
-			await vi.advanceTimersByTimeAsync(0);
-
-			expect(onCommand).toHaveBeenCalledTimes(1);
-			expect(onCommand).toHaveBeenCalledWith(cmd);
-			closeStream();
-		});
-
-		it('passes Last-Event-ID header on reconnection after stream ends', async () => {
-			const cmd = fakeCommand({ id: 25 });
-			// First connection: delivers a command, then stream closes
-			const stream1 = createSSEStream(
-				`event: command\nid: 25\ndata: ${JSON.stringify(cmd)}\n\n`
-			);
-			// Second connection: hangs open so we don't trigger another reconnect
-			const [stream2, closeStream2] = createHangingSSEStream(
-				'event: heartbeat\ndata: \n\n'
-			);
-
-			apiClient.requestStream
-				.mockResolvedValueOnce(fakeSSEResponse(stream1))
-				.mockResolvedValueOnce(fakeSSEResponse(stream2));
-
-			await client.start();
-			// Process first stream and allow reconnection
-			await vi.advanceTimersByTimeAsync(0);
-
-			// The second call should include Last-Event-ID
-			expect(apiClient.requestStream).toHaveBeenCalledTimes(2);
-			const secondCall = apiClient.requestStream.mock.calls[1];
-			const options = secondCall[1] as RequestInit & {
-				headers?: Record<string, string>;
-			};
-			expect(options.headers?.['Last-Event-ID']).toBe('25');
-			closeStream2();
-		});
-
-		it('skips malformed command data without crashing', async () => {
-			const goodCmd = fakeCommand({ id: 20 });
-			const [stream, closeStream] = createHangingSSEStream(
-				`event: command\nid: 19\ndata: NOT VALID JSON\n\nevent: command\nid: 20\ndata: ${JSON.stringify(goodCmd)}\n\n`
-			);
-			apiClient.requestStream.mockResolvedValue(fakeSSEResponse(stream));
-
-			await client.start();
-			await vi.advanceTimersByTimeAsync(0);
-
-			// Only the valid command should be delivered
-			expect(onCommand).toHaveBeenCalledTimes(1);
-			expect(onCommand).toHaveBeenCalledWith(goodCmd);
-			closeStream();
-		});
-
-		it('tracks lastSeenCommandId from SSE event ids', async () => {
-			const cmd1 = fakeCommand({ id: 30 });
-			const cmd2 = fakeCommand({ id: 35 });
-			// First connection delivers two commands, then closes
-			const stream1 = createSSEStream(
-				`event: command\nid: 30\ndata: ${JSON.stringify(cmd1)}\n\nevent: command\nid: 35\ndata: ${JSON.stringify(cmd2)}\n\n`
-			);
-			// Second connection: hangs open
-			const [stream2, closeStream2] = createHangingSSEStream(
-				'event: heartbeat\ndata: \n\n'
-			);
-
-			apiClient.requestStream
-				.mockResolvedValueOnce(fakeSSEResponse(stream1))
-				.mockResolvedValueOnce(fakeSSEResponse(stream2));
-
-			await client.start();
-			await vi.advanceTimersByTimeAsync(0);
-
-			// Reconnect should use the highest seen ID
-			const reconnectOpts = apiClient.requestStream.mock.calls[1][1] as {
-				headers?: Record<string, string>;
-			};
-			expect(reconnectOpts.headers?.['Last-Event-ID']).toBe('35');
-			closeStream2();
-		});
-
-		it('does not send Last-Event-ID header on first connection', async () => {
-			const [stream, closeStream] = createHangingSSEStream(
-				'event: heartbeat\ndata: \n\n'
-			);
-			apiClient.requestStream.mockResolvedValue(fakeSSEResponse(stream));
-
-			await client.start();
-			await vi.advanceTimersByTimeAsync(0);
-
-			const firstCall = apiClient.requestStream.mock.calls[0];
-			const options = firstCall[1] as RequestInit & {
-				headers?: Record<string, string>;
-			};
-			expect(options.headers?.['Last-Event-ID']).toBeUndefined();
-			closeStream();
 		});
 	});
 
 	// -------------------------------------------------------
-	// SSE parser — parseSSEStream
-	// -------------------------------------------------------
-
-	describe('parseSSEStream()', () => {
-		it('parses well-formed SSE events', async () => {
-			const stream = createSSEStream(
-				'event: command\ndata: {"id":1}\n\nevent: heartbeat\ndata: \n\n'
-			);
-			const events: Array<{ event: string; data: string; id?: string }> =
-				[];
-
-			for await (const event of getParser(client)(stream)) {
-				events.push(event);
-			}
-
-			expect(events).toHaveLength(2);
-			expect(events[0]).toEqual({
-				event: 'command',
-				data: '{"id":1}',
-				id: undefined,
-			});
-			expect(events[1]).toEqual({
-				event: 'heartbeat',
-				data: '',
-				id: undefined,
-			});
-		});
-
-		it('handles multi-line data fields', async () => {
-			const stream = createSSEStream(
-				'event: command\ndata: line1\ndata: line2\ndata: line3\n\n'
-			);
-			const events: Array<{ event: string; data: string }> = [];
-
-			for await (const event of getParser(client)(stream)) {
-				events.push(event);
-			}
-
-			expect(events).toHaveLength(1);
-			expect(events[0].data).toBe('line1\nline2\nline3');
-		});
-
-		it('handles events split across chunks', async () => {
-			const stream = createMultiChunkSSEStream([
-				'event: com',
-				'mand\ndata: {"id":1}\n\n',
-			]);
-			const events: Array<{ event: string; data: string }> = [];
-
-			for await (const event of getParser(client)(stream)) {
-				events.push(event);
-			}
-
-			expect(events).toHaveLength(1);
-			expect(events[0]).toEqual({
-				event: 'command',
-				data: '{"id":1}',
-				id: undefined,
-			});
-		});
-
-		it('handles data split across chunks mid-line', async () => {
-			const stream = createMultiChunkSSEStream([
-				'event: command\ndata: {"i',
-				'd":42}\n\n',
-			]);
-			const events: Array<{ event: string; data: string }> = [];
-
-			for await (const event of getParser(client)(stream)) {
-				events.push(event);
-			}
-
-			expect(events).toHaveLength(1);
-			expect(events[0].data).toBe('{"id":42}');
-		});
-
-		it('ignores comment lines', async () => {
-			const stream = createSSEStream(
-				': this is a comment\nevent: command\ndata: ok\n\n'
-			);
-			const events: Array<{ event: string; data: string }> = [];
-
-			for await (const event of getParser(client)(stream)) {
-				events.push(event);
-			}
-
-			expect(events).toHaveLength(1);
-			expect(events[0]).toEqual({
-				event: 'command',
-				data: 'ok',
-				id: undefined,
-			});
-		});
-
-		it('preserves event id field', async () => {
-			const stream = createSSEStream(
-				'event: command\nid: 99\ndata: hello\n\n'
-			);
-			const events: Array<{ event: string; data: string; id?: string }> =
-				[];
-
-			for await (const event of getParser(client)(stream)) {
-				events.push(event);
-			}
-
-			expect(events).toHaveLength(1);
-			expect(events[0].id).toBe('99');
-		});
-
-		it('defaults event type to "message" when not specified', async () => {
-			const stream = createSSEStream('data: hello\n\n');
-			const events: Array<{ event: string; data: string }> = [];
-
-			for await (const event of getParser(client)(stream)) {
-				events.push(event);
-			}
-
-			expect(events).toHaveLength(1);
-			expect(events[0].event).toBe('message');
-		});
-
-		it('handles fields without values (no colon)', async () => {
-			const stream = createSSEStream('event: command\ndata\n\n');
-			const events: Array<{ event: string; data: string }> = [];
-
-			for await (const event of getParser(client)(stream)) {
-				events.push(event);
-			}
-
-			expect(events).toHaveLength(1);
-			expect(events[0].data).toBe('');
-		});
-
-		it('strips leading space after colon per SSE spec', async () => {
-			const stream = createSSEStream('data: hello world\n\n');
-			const events: Array<{ event: string; data: string }> = [];
-
-			for await (const event of getParser(client)(stream)) {
-				events.push(event);
-			}
-
-			expect(events[0].data).toBe('hello world');
-		});
-
-		it('does not strip when no leading space after colon', async () => {
-			const stream = createSSEStream('data:nospace\n\n');
-			const events: Array<{ event: string; data: string }> = [];
-
-			for await (const event of getParser(client)(stream)) {
-				events.push(event);
-			}
-
-			expect(events[0].data).toBe('nospace');
-		});
-
-		it('handles \\r\\n line endings', async () => {
-			const stream = createSSEStream(
-				'event: command\r\ndata: ok\r\n\r\n'
-			);
-			const events: Array<{ event: string; data: string }> = [];
-
-			for await (const event of getParser(client)(stream)) {
-				events.push(event);
-			}
-
-			expect(events).toHaveLength(1);
-			expect(events[0]).toEqual({
-				event: 'command',
-				data: 'ok',
-				id: undefined,
-			});
-		});
-
-		it('emits no events for empty stream', async () => {
-			const stream = createSSEStream('');
-			const events: Array<{ event: string; data: string }> = [];
-
-			for await (const event of getParser(client)(stream)) {
-				events.push(event);
-			}
-
-			expect(events).toHaveLength(0);
-		});
-
-		it('flushes partial event at end of stream', async () => {
-			// Stream ends without a trailing blank line
-			const stream = createSSEStream('event: command\ndata: partial');
-			const events: Array<{ event: string; data: string }> = [];
-
-			for await (const event of getParser(client)(stream)) {
-				events.push(event);
-			}
-
-			expect(events).toHaveLength(1);
-			expect(events[0]).toEqual({
-				event: 'command',
-				data: 'partial',
-				id: undefined,
-			});
-		});
-
-		it('handles multiple events in a single chunk', async () => {
-			const stream = createSSEStream(
-				'event: a\ndata: 1\n\nevent: b\ndata: 2\n\nevent: c\ndata: 3\n\n'
-			);
-			const events: Array<{ event: string; data: string }> = [];
-
-			for await (const event of getParser(client)(stream)) {
-				events.push(event);
-			}
-
-			expect(events).toHaveLength(3);
-			expect(events.map((e) => e.event)).toEqual(['a', 'b', 'c']);
-			expect(events.map((e) => e.data)).toEqual(['1', '2', '3']);
-		});
-
-		it('ignores empty events (double blank lines)', async () => {
-			const stream = createSSEStream(
-				'event: command\ndata: first\n\n\n\nevent: command\ndata: second\n\n'
-			);
-			const events: Array<{ event: string; data: string }> = [];
-
-			for await (const event of getParser(client)(stream)) {
-				events.push(event);
-			}
-
-			// Two real events — the empty-line-only "events" should not yield
-			expect(events).toHaveLength(2);
-			expect(events[0].data).toBe('first');
-			expect(events[1].data).toBe('second');
-		});
-	});
-
-	// -------------------------------------------------------
-	// SSE reconnection
-	// -------------------------------------------------------
-
-	describe('SSE reconnection', () => {
-		it('retries with exponential backoff when connectSSE rejects', async () => {
-			// connectSSE rejects (requestStream rejects) — the retry count
-			// accumulates because connectSSE never succeeds to reset it.
-			// Initial connect: rejected in start() → falls back to polling
-			// But handleSSEDisconnect is the backoff path, which is only
-			// entered from the setTimeout retry chain.
-			//
-			// To trigger the backoff retry chain, we need the initial connect
-			// to succeed (stream opens), then the stream errors, which calls
-			// handleSSEDisconnect. The subsequent retries from the setTimeout
-			// call connectSSE().catch(handleSSEDisconnect). If those rejects,
-			// the count accumulates.
-			const errorStream = new ReadableStream<Uint8Array>({
-				start(controller) {
-					controller.error(new Error('Connection lost'));
-				},
-			});
-			apiClient.requestStream.mockResolvedValueOnce(
-				fakeSSEResponse(errorStream)
-			);
-
-			// Retry 1 and 2 will reject (connectSSE itself throws)
-			apiClient.requestStream
-				.mockRejectedValueOnce(new Error('Connection refused'))
-				.mockRejectedValueOnce(new Error('Connection refused'));
-
-			// Retry 3 succeeds
-			const [goodStream, closeGoodStream] = createHangingSSEStream(
-				'event: heartbeat\ndata: \n\n'
-			);
-			apiClient.requestStream.mockResolvedValueOnce(
-				fakeSSEResponse(goodStream)
-			);
-
-			await client.start();
-			// Process first stream error → handleSSEDisconnect (count=1)
-			await vi.advanceTimersByTimeAsync(0);
-
-			expect(apiClient.requestStream).toHaveBeenCalledTimes(1);
-
-			// First retry after sseBackoffBase * 2^0 = 50ms
-			// connectSSE rejects → handleSSEDisconnect (count=2)
-			await vi.advanceTimersByTimeAsync(config.sseBackoffBase);
-			await vi.advanceTimersByTimeAsync(0);
-
-			expect(apiClient.requestStream).toHaveBeenCalledTimes(2);
-
-			// Second retry: backoff = 50 * 2^1 = 100ms
-			// connectSSE rejects → handleSSEDisconnect (count=3, >= max → poll)
-			// But we mocked a 4th call that succeeds, which won't be reached
-			// because count=3 triggers polling fallback.
-			// Actually wait — let's make the 3rd call succeed instead.
-			// Re-reading the logic: count goes 1, 2, then on the 3rd
-			// handleSSEDisconnect call count becomes 3 which >= maxSseRetries(3)
-			// so it falls back to polling. Let's verify that:
-			await vi.advanceTimersByTimeAsync(config.sseBackoffBase * 2);
-			await vi.advanceTimersByTimeAsync(0);
-
-			// After count reaches maxSseRetries, it should fall back to polling
-			expect(client.getTransport()).toBe('polling');
-			closeGoodStream();
-		});
-
-		it('resets retry count after successful SSE connection', async () => {
-			// First connection succeeds, delivers data, then closes
-			const stream1 = createSSEStream('event: heartbeat\ndata: \n\n');
-			// Reconnect also succeeds and hangs
-			const [stream2, closeStream2] = createHangingSSEStream(
-				'event: heartbeat\ndata: \n\n'
-			);
-
-			apiClient.requestStream
-				.mockResolvedValueOnce(fakeSSEResponse(stream1))
-				.mockResolvedValueOnce(fakeSSEResponse(stream2));
-
-			await client.start();
-			await vi.advanceTimersByTimeAsync(0);
-
-			// After first stream ends, it reconnects immediately (not via backoff)
-			// Both connections should have succeeded
-			expect(apiClient.requestStream).toHaveBeenCalledTimes(2);
-			expect(client.getTransport()).toBe('sse');
-			closeStream2();
-		});
-
-		it('falls back to polling after maxSseRetries exceeded', async () => {
-			// The initial connect succeeds but the stream errors immediately.
-			// This triggers handleSSEDisconnect which retries via setTimeout.
-			// Each retry has connectSSE reject (requestStream rejects),
-			// which calls handleSSEDisconnect again. After maxSseRetries (3)
-			// calls to handleSSEDisconnect, it falls back to polling.
-			const errorStream = new ReadableStream<Uint8Array>({
-				start(controller) {
-					controller.error(new Error('Connection lost'));
-				},
-			});
-			apiClient.requestStream.mockResolvedValueOnce(
-				fakeSSEResponse(errorStream)
-			);
-
-			// Retries 1 and 2 reject
-			apiClient.requestStream
-				.mockRejectedValueOnce(new Error('Refused'))
-				.mockRejectedValueOnce(new Error('Refused'));
-
-			// Mock listPendingCommands for the polling fallback
-			apiClient.request.mockResolvedValue([]);
-
-			await client.start();
-			// Process first stream error → handleSSEDisconnect (count=1)
-			await vi.advanceTimersByTimeAsync(0);
-
-			// Retry 1: backoff = 50ms → connectSSE rejects → count=2
-			await vi.advanceTimersByTimeAsync(config.sseBackoffBase);
-			await vi.advanceTimersByTimeAsync(0);
-
-			// Retry 2: backoff = 100ms → connectSSE rejects → count=3 >= max
-			await vi.advanceTimersByTimeAsync(config.sseBackoffBase * 2);
-			await vi.advanceTimersByTimeAsync(0);
-
-			expect(client.getTransport()).toBe('polling');
-		});
-
-		it('falls back to polling when initial SSE connection rejects', async () => {
-			apiClient.requestStream.mockRejectedValue(
-				new Error('Network error')
-			);
-			apiClient.request.mockResolvedValue([]);
-
-			await client.start();
-			await vi.advanceTimersByTimeAsync(0);
-
-			expect(client.getTransport()).toBe('polling');
-		});
-
-		it('attempts SSE reconnection from polling mode', async () => {
-			// Initial SSE rejects
-			apiClient.requestStream.mockRejectedValueOnce(
-				new Error('SSE down')
-			);
-			apiClient.request.mockResolvedValue([]);
-
-			await client.start();
-			await vi.advanceTimersByTimeAsync(0);
-
-			expect(client.getTransport()).toBe('polling');
-
-			// Now set up a successful SSE for the retry (hangs open)
-			const [stream, closeStream] = createHangingSSEStream(
-				'event: heartbeat\ndata: \n\n'
-			);
-			apiClient.requestStream.mockResolvedValueOnce(
-				fakeSSEResponse(stream)
-			);
-
-			// Advance to the sseRetryFromPollingInterval
-			await vi.advanceTimersByTimeAsync(
-				config.sseRetryFromPollingInterval
-			);
-			await vi.advanceTimersByTimeAsync(0);
-
-			expect(client.getTransport()).toBe('sse');
-			closeStream();
-		});
-
-		it('resumes polling when SSE retry from polling fails', async () => {
-			// Initial SSE rejects
-			apiClient.requestStream.mockRejectedValueOnce(
-				new Error('SSE down')
-			);
-			apiClient.request.mockResolvedValue([]);
-
-			await client.start();
-			await vi.advanceTimersByTimeAsync(0);
-
-			expect(client.getTransport()).toBe('polling');
-
-			// SSE retry also fails
-			apiClient.requestStream.mockRejectedValueOnce(
-				new Error('Still down')
-			);
-
-			await vi.advanceTimersByTimeAsync(
-				config.sseRetryFromPollingInterval
-			);
-			await vi.advanceTimersByTimeAsync(0);
-
-			expect(client.getTransport()).toBe('polling');
-		});
-	});
-
-	// -------------------------------------------------------
-	// Polling transport
-	// -------------------------------------------------------
-
-	describe('Polling transport', () => {
-		beforeEach(() => {
-			// Force polling by making SSE reject
-			apiClient.requestStream.mockRejectedValue(
-				new Error('SSE unavailable')
-			);
-		});
-
-		it('polls listPendingCommands at configured interval', async () => {
-			apiClient.request.mockResolvedValue([]);
-
-			await client.start();
-			await vi.advanceTimersByTimeAsync(0);
-
-			expect(client.getTransport()).toBe('polling');
-			apiClient.request.mockClear();
-
-			// First poll
-			await vi.advanceTimersByTimeAsync(config.pollInterval);
-			expect(apiClient.request).toHaveBeenCalledTimes(1);
-			expect(apiClient.request).toHaveBeenCalledWith(
-				'/wpce/v1/commands?status=pending'
-			);
-
-			// Second poll
-			await vi.advanceTimersByTimeAsync(config.pollInterval);
-			expect(apiClient.request).toHaveBeenCalledTimes(2);
-		});
-
-		it('delivers new commands via onCommand callback', async () => {
-			const cmd1 = fakeCommand({ id: 1 });
-			const cmd2 = fakeCommand({ id: 2 });
-
-			apiClient.request.mockResolvedValue([cmd1, cmd2]);
-
-			await client.start();
-			await vi.advanceTimersByTimeAsync(0);
-
-			// First poll
-			await vi.advanceTimersByTimeAsync(config.pollInterval);
-
-			expect(onCommand).toHaveBeenCalledTimes(2);
-			expect(onCommand).toHaveBeenCalledWith(cmd1);
-			expect(onCommand).toHaveBeenCalledWith(cmd2);
-		});
-
-		it('does not deliver duplicate commands (lastSeenCommandId tracking)', async () => {
-			const cmd1 = fakeCommand({ id: 5 });
-			const cmd2 = fakeCommand({ id: 10 });
-			const cmd3 = fakeCommand({ id: 15 });
-
-			// First poll: commands 5 and 10
-			apiClient.request.mockResolvedValueOnce([cmd1, cmd2]);
-			// Second poll: commands 5, 10 (already seen), and 15 (new)
-			apiClient.request.mockResolvedValueOnce([cmd1, cmd2, cmd3]);
-			// Subsequent polls: empty
-			apiClient.request.mockResolvedValue([]);
-
-			await client.start();
-			await vi.advanceTimersByTimeAsync(0);
-
-			// First poll
-			await vi.advanceTimersByTimeAsync(config.pollInterval);
-			expect(onCommand).toHaveBeenCalledTimes(2);
-
-			// Second poll
-			await vi.advanceTimersByTimeAsync(config.pollInterval);
-			// Only cmd3 is new
-			expect(onCommand).toHaveBeenCalledTimes(3);
-			expect(onCommand).toHaveBeenLastCalledWith(cmd3);
-		});
-
-		it('continues polling after a network error', async () => {
-			// First poll fails
-			apiClient.request.mockRejectedValueOnce(new Error('Network error'));
-			// Second poll succeeds
-			const cmd = fakeCommand({ id: 1 });
-			apiClient.request.mockResolvedValueOnce([cmd]);
-			// Subsequent polls: empty
-			apiClient.request.mockResolvedValue([]);
-
-			await client.start();
-			await vi.advanceTimersByTimeAsync(0);
-
-			// First poll — error
-			await vi.advanceTimersByTimeAsync(config.pollInterval);
-			expect(onCommand).not.toHaveBeenCalled();
-
-			// Second poll — succeeds
-			await vi.advanceTimersByTimeAsync(config.pollInterval);
-			expect(onCommand).toHaveBeenCalledTimes(1);
-			expect(onCommand).toHaveBeenCalledWith(cmd);
-		});
-
-		it('does not overlap concurrent poll cycles', async () => {
-			let resolveFirst!: (value: Command[]) => void;
-			const slowRequest = new Promise<Command[]>((resolve) => {
-				resolveFirst = resolve;
-			});
-
-			apiClient.request.mockReturnValueOnce(slowRequest);
-			apiClient.request.mockResolvedValue([]);
-
-			await client.start();
-			await vi.advanceTimersByTimeAsync(0);
-
-			// Trigger first poll (will be blocked on slowRequest)
-			await vi.advanceTimersByTimeAsync(config.pollInterval);
-
-			// While first poll is pending, advance another interval
-			const callCountDuringBlock = apiClient.request.mock.calls.length;
-			await vi.advanceTimersByTimeAsync(config.pollInterval);
-			// No new request should have been made because polling lock is held
-			expect(apiClient.request.mock.calls.length).toBe(
-				callCountDuringBlock
-			);
-
-			// Now resolve the first poll
-			resolveFirst([]);
-			await vi.advanceTimersByTimeAsync(0);
-
-			// Next interval should trigger a new poll
-			await vi.advanceTimersByTimeAsync(config.pollInterval);
-			expect(apiClient.request.mock.calls.length).toBeGreaterThan(
-				callCountDuringBlock
-			);
-		});
-
-		it('delivers all unseen commands regardless of response order', async () => {
-			// API returns commands newest-first (DESC by date),
-			// but the client should deliver all unseen ones in ascending ID order
-			const cmd1 = fakeCommand({ id: 5 }); // newest, returned first
-			const cmd2 = fakeCommand({ id: 1 }); // oldest
-			const cmd3 = fakeCommand({ id: 3 }); // middle
-
-			apiClient.request.mockResolvedValueOnce([cmd1, cmd2, cmd3]);
-			apiClient.request.mockResolvedValue([]);
-
-			await client.start();
-			await vi.advanceTimersByTimeAsync(0);
-
-			await vi.advanceTimersByTimeAsync(config.pollInterval);
-
-			// All three are unseen (> lastSeenCommandId 0), delivered in ascending ID order
-			expect(onCommand).toHaveBeenCalledTimes(3);
-			expect(onCommand).toHaveBeenNthCalledWith(1, cmd2); // id:1
-			expect(onCommand).toHaveBeenNthCalledWith(2, cmd3); // id:3
-			expect(onCommand).toHaveBeenNthCalledWith(3, cmd1); // id:5
-		});
-
-		it('skips already-seen commands on subsequent polls', async () => {
-			const cmd1 = fakeCommand({ id: 3 });
-			const cmd2 = fakeCommand({ id: 5 });
-
-			// First poll: deliver both
-			apiClient.request.mockResolvedValueOnce([cmd2, cmd1]);
-			// Second poll: same commands still pending (not yet claimed)
-			apiClient.request.mockResolvedValueOnce([cmd2, cmd1]);
-			apiClient.request.mockResolvedValue([]);
-
-			await client.start();
-			await vi.advanceTimersByTimeAsync(0);
-
-			await vi.advanceTimersByTimeAsync(config.pollInterval);
-			expect(onCommand).toHaveBeenCalledTimes(2);
-
-			// Second poll — both should be skipped (lastSeenCommandId is now 5)
-			await vi.advanceTimersByTimeAsync(config.pollInterval);
-			expect(onCommand).toHaveBeenCalledTimes(2); // no new calls
-		});
-	});
-
-	// -------------------------------------------------------
-	// stop()
+	// stop
 	// -------------------------------------------------------
 
 	describe('stop()', () => {
-		it('sets transport to none from SSE', async () => {
-			const [stream, closeStream] = createHangingSSEStream(
-				'event: heartbeat\ndata: \n\n'
-			);
-			apiClient.requestStream.mockResolvedValue(fakeSSEResponse(stream));
+		it('sets transport back to none', () => {
+			const { localDoc } = createSyncedDocs();
+			const documentMap = localDoc.getMap('document');
 
-			await client.start();
-			await vi.advanceTimersByTimeAsync(0);
-
-			expect(client.getTransport()).toBe('sse');
+			client.startObserving(documentMap);
+			expect(client.getTransport()).toBe('yjs');
 
 			client.stop();
-
-			expect(client.getTransport()).toBe('none');
-			closeStream();
-		});
-
-		it('sets transport to none from polling', async () => {
-			apiClient.requestStream.mockRejectedValue(
-				new Error('SSE unavailable')
-			);
-			apiClient.request.mockResolvedValue([]);
-
-			await client.start();
-			await vi.advanceTimersByTimeAsync(0);
-
-			expect(client.getTransport()).toBe('polling');
-
-			client.stop();
-
 			expect(client.getTransport()).toBe('none');
 		});
 
-		it('clears poll timer — no further polls fire', async () => {
-			apiClient.requestStream.mockRejectedValue(
-				new Error('SSE unavailable')
-			);
-			apiClient.request.mockResolvedValue([]);
-
-			await client.start();
-			await vi.advanceTimersByTimeAsync(0);
-
-			expect(client.getTransport()).toBe('polling');
+		it('unobserves the Y.Map so future changes do not trigger callbacks', () => {
+			const { remoteDoc, localDoc, syncToLocal } = createSyncedDocs();
+			const documentMap = localDoc.getMap('document');
+			client.startObserving(documentMap);
 
 			client.stop();
 
-			// No more polls should fire
-			apiClient.request.mockClear();
-			await vi.advanceTimersByTimeAsync(config.pollInterval * 10);
-			expect(apiClient.request).not.toHaveBeenCalled();
+			// Write a command after stop
+			const remoteMap = remoteDoc.getMap('document');
+			remoteMap.set('commands', {
+				'20': fakeCommand({ id: 20, status: 'pending' }),
+			});
+			syncToLocal();
+
+			expect(onCommand).not.toHaveBeenCalled();
 		});
 
-		it('clears SSE retry-from-polling timer', async () => {
-			apiClient.requestStream.mockRejectedValue(
-				new Error('SSE unavailable')
-			);
-			apiClient.request.mockResolvedValue([]);
+		it('clears tracked pending IDs so re-observing detects them again', () => {
+			const { remoteDoc, localDoc, syncToLocal } = createSyncedDocs();
+			const documentMap = localDoc.getMap('document');
 
-			await client.start();
-			await vi.advanceTimersByTimeAsync(0);
+			// Write a command and observe
+			const remoteMap = remoteDoc.getMap('document');
+			remoteMap.set('commands', {
+				'30': fakeCommand({ id: 30, status: 'pending' }),
+			});
+			syncToLocal();
 
-			expect(client.getTransport()).toBe('polling');
+			client.startObserving(documentMap);
+			expect(onCommand).toHaveBeenCalledOnce();
+			onCommand.mockClear();
 
+			// Stop and re-observe — the same command should be detected again
 			client.stop();
+			client.startObserving(documentMap);
+			expect(onCommand).toHaveBeenCalledOnce();
+		});
 
-			// Reset mocks to track new calls
-			apiClient.requestStream.mockClear();
-
-			// The sseRetryFromPollingInterval should not fire
-			await vi.advanceTimersByTimeAsync(
-				config.sseRetryFromPollingInterval * 2
-			);
-			expect(apiClient.requestStream).not.toHaveBeenCalled();
+		it('is safe to call without startObserving', () => {
+			expect(() => {
+				client.stop();
+			}).not.toThrow();
 		});
 
 		it('is safe to call multiple times', () => {
+			const { localDoc } = createSyncedDocs();
+			const documentMap = localDoc.getMap('document');
+			client.startObserving(documentMap);
+
 			expect(() => {
 				client.stop();
 				client.stop();
-				client.stop();
 			}).not.toThrow();
-
-			expect(client.getTransport()).toBe('none');
-		});
-
-		it('prevents SSE reconnection after stop', async () => {
-			// Stream closes immediately, triggering reconnect logic
-			const stream = createSSEStream('event: heartbeat\ndata: \n\n');
-			apiClient.requestStream.mockResolvedValueOnce(
-				fakeSSEResponse(stream)
-			);
-
-			await client.start();
-			// Let processSSEStream start consuming
-			await vi.advanceTimersByTimeAsync(0);
-
-			// Stop before any reconnect can happen
-			client.stop();
-			apiClient.requestStream.mockClear();
-
-			// Advance time well past any backoff
-			await vi.advanceTimersByTimeAsync(config.sseBackoffMax * 10);
-
-			expect(apiClient.requestStream).not.toHaveBeenCalled();
-		});
-
-		it('prevents polling from starting after stop during SSE failure', async () => {
-			// SSE rejects on connect
-			apiClient.requestStream.mockRejectedValue(
-				new Error('SSE unavailable')
-			);
-
-			// Stop immediately after start (before the rejection settles)
-			const startPromise = client.start();
-			client.stop();
-			await startPromise;
-			await vi.advanceTimersByTimeAsync(0);
-
-			expect(client.getTransport()).toBe('none');
-
-			// No polls should happen
-			apiClient.request.mockClear();
-			await vi.advanceTimersByTimeAsync(config.pollInterval * 10);
-			expect(apiClient.request).not.toHaveBeenCalled();
 		});
 	});
 
 	// -------------------------------------------------------
-	// getTransport()
+	// New pending command detection
+	// -------------------------------------------------------
+
+	describe('new pending command detection', () => {
+		it('calls onCommand when a pending command arrives via remote sync', () => {
+			const { remoteDoc, localDoc, syncToLocal } = createSyncedDocs();
+			const documentMap = localDoc.getMap('document');
+			client.startObserving(documentMap);
+
+			// Remote browser writes a pending command
+			const remoteMap = remoteDoc.getMap('document');
+			remoteMap.set('commands', {
+				'50': fakeCommand({
+					id: 50,
+					status: 'pending',
+					prompt: 'review',
+				}),
+			});
+			syncToLocal();
+
+			expect(onCommand).toHaveBeenCalledOnce();
+			expect(onCommand).toHaveBeenCalledWith(
+				expect.objectContaining({
+					id: 50,
+					status: 'pending',
+					prompt: 'review',
+				})
+			);
+		});
+
+		it('calls onCommand for each new pending command', () => {
+			const { remoteDoc, localDoc, syncToLocal } = createSyncedDocs();
+			const documentMap = localDoc.getMap('document');
+			client.startObserving(documentMap);
+
+			const remoteMap = remoteDoc.getMap('document');
+			remoteMap.set('commands', {
+				'51': fakeCommand({ id: 51, status: 'pending' }),
+				'52': fakeCommand({ id: 52, status: 'pending' }),
+			});
+			syncToLocal();
+
+			expect(onCommand).toHaveBeenCalledTimes(2);
+		});
+
+		it('does not call onCommand for non-pending commands', () => {
+			const { remoteDoc, localDoc, syncToLocal } = createSyncedDocs();
+			const documentMap = localDoc.getMap('document');
+			client.startObserving(documentMap);
+
+			const remoteMap = remoteDoc.getMap('document');
+			remoteMap.set('commands', {
+				'60': fakeCommand({ id: 60, status: 'running' }),
+			});
+			syncToLocal();
+
+			expect(onCommand).not.toHaveBeenCalled();
+		});
+
+		it('does not call onCommand for local transactions', () => {
+			const { localDoc } = createSyncedDocs();
+			const documentMap = localDoc.getMap('document');
+			client.startObserving(documentMap);
+
+			// Local write (e.g., status update written by MCP server)
+			documentMap.set('commands', {
+				'70': fakeCommand({ id: 70, status: 'pending' }),
+			});
+
+			// The initial processAllCommands in startObserving would
+			// have seen the empty map, so onCommand should only be
+			// called if the observer fires — and local transactions
+			// should be skipped.
+			// Note: the observer skips local transactions, but the
+			// local set above happens AFTER startObserving, so the
+			// observer fires but skips it.
+			// However, no pending command was in the map at startObserving
+			// time, so onCommand should not have been called at all initially.
+			expect(onCommand).not.toHaveBeenCalled();
+		});
+
+		it('skips commands with no id', () => {
+			const { remoteDoc, localDoc, syncToLocal } = createSyncedDocs();
+			const documentMap = localDoc.getMap('document');
+			client.startObserving(documentMap);
+
+			const remoteMap = remoteDoc.getMap('document');
+			remoteMap.set('commands', {
+				bad: { status: 'pending', prompt: 'proofread' },
+			});
+			syncToLocal();
+
+			expect(onCommand).not.toHaveBeenCalled();
+		});
+	});
+
+	// -------------------------------------------------------
+	// Duplicate pending command detection
+	// -------------------------------------------------------
+
+	describe('duplicate pending command detection', () => {
+		it('does not call onCommand twice for the same pending command', () => {
+			const { remoteDoc, localDoc, syncToLocal } = createSyncedDocs();
+			const documentMap = localDoc.getMap('document');
+			client.startObserving(documentMap);
+
+			const remoteMap = remoteDoc.getMap('document');
+			const cmd = fakeCommand({ id: 80, status: 'pending' });
+
+			// First sync
+			remoteMap.set('commands', { '80': cmd });
+			syncToLocal();
+			expect(onCommand).toHaveBeenCalledOnce();
+
+			onCommand.mockClear();
+
+			// Second sync with same command (e.g., another field in the map changes)
+			remoteMap.set('commands', { '80': cmd });
+			syncToLocal();
+			expect(onCommand).not.toHaveBeenCalled();
+		});
+
+		it('does not re-notify pending commands already seen during initial sync', () => {
+			const { remoteDoc, localDoc, syncToLocal } = createSyncedDocs();
+
+			// Pre-populate
+			const remoteMap = remoteDoc.getMap('document');
+			remoteMap.set('commands', {
+				'81': fakeCommand({ id: 81, status: 'pending' }),
+			});
+			syncToLocal();
+
+			const documentMap = localDoc.getMap('document');
+			client.startObserving(documentMap);
+			expect(onCommand).toHaveBeenCalledOnce();
+			onCommand.mockClear();
+
+			// Sync again with same data — should not re-notify
+			remoteMap.set('commands', {
+				'81': fakeCommand({ id: 81, status: 'pending' }),
+			});
+			syncToLocal();
+			expect(onCommand).not.toHaveBeenCalled();
+		});
+	});
+
+	// -------------------------------------------------------
+	// Response detection
+	// -------------------------------------------------------
+
+	describe('response detection', () => {
+		it('calls onResponse when a running command gets new user messages', () => {
+			const { remoteDoc, localDoc, syncToLocal } = createSyncedDocs();
+			const documentMap = localDoc.getMap('document');
+			client.startObserving(documentMap);
+
+			const remoteMap = remoteDoc.getMap('document');
+
+			// First: command arrives as running (claimed by MCP)
+			remoteMap.set('commands', {
+				'90': fakeCommand({
+					id: 90,
+					status: 'running',
+					result_data: {
+						messages: [
+							{ role: 'assistant', content: 'Working on it...' },
+						],
+					},
+				}),
+			});
+			syncToLocal();
+			expect(onResponse).not.toHaveBeenCalled();
+
+			// User sends a message
+			remoteMap.set('commands', {
+				'90': fakeCommand({
+					id: 90,
+					status: 'running',
+					result_data: {
+						messages: [
+							{ role: 'assistant', content: 'Working on it...' },
+							{
+								role: 'user',
+								content: 'Please also fix paragraph 3',
+							},
+						],
+					},
+				}),
+			});
+			syncToLocal();
+			expect(onResponse).toHaveBeenCalledOnce();
+			expect(onResponse).toHaveBeenCalledWith(
+				expect.objectContaining({
+					id: 90,
+					status: 'running',
+				})
+			);
+		});
+
+		it('does not call onResponse when user message count has not changed', () => {
+			const { remoteDoc, localDoc, syncToLocal } = createSyncedDocs();
+			const documentMap = localDoc.getMap('document');
+			client.startObserving(documentMap);
+
+			const remoteMap = remoteDoc.getMap('document');
+
+			const cmdData = {
+				'91': fakeCommand({
+					id: 91,
+					status: 'running',
+					result_data: {
+						messages: [
+							{ role: 'user', content: 'Fix this' },
+							{ role: 'assistant', content: 'Done.' },
+						],
+					},
+				}),
+			};
+
+			remoteMap.set('commands', cmdData);
+			syncToLocal();
+			expect(onResponse).toHaveBeenCalledOnce();
+			onResponse.mockClear();
+
+			// Sync again with same message count — no new notification
+			remoteMap.set('commands', {
+				'91': fakeCommand({
+					id: 91,
+					status: 'running',
+					result_data: {
+						messages: [
+							{ role: 'user', content: 'Fix this' },
+							{ role: 'assistant', content: 'Done, updated.' },
+						],
+					},
+				}),
+			});
+			syncToLocal();
+			expect(onResponse).not.toHaveBeenCalled();
+		});
+
+		it('does not call onResponse for non-running commands', () => {
+			const { remoteDoc, localDoc, syncToLocal } = createSyncedDocs();
+			const documentMap = localDoc.getMap('document');
+			client.startObserving(documentMap);
+
+			const remoteMap = remoteDoc.getMap('document');
+
+			// Completed command with messages — should not trigger response
+			remoteMap.set('commands', {
+				'92': fakeCommand({
+					id: 92,
+					status: 'completed',
+					result_data: {
+						messages: [{ role: 'user', content: 'Thanks' }],
+					},
+				}),
+			});
+			syncToLocal();
+			expect(onResponse).not.toHaveBeenCalled();
+		});
+
+		it('does not call onResponse for running command without messages', () => {
+			const { remoteDoc, localDoc, syncToLocal } = createSyncedDocs();
+			const documentMap = localDoc.getMap('document');
+			client.startObserving(documentMap);
+
+			const remoteMap = remoteDoc.getMap('document');
+
+			remoteMap.set('commands', {
+				'93': fakeCommand({
+					id: 93,
+					status: 'running',
+					result_data: { some_other_field: true },
+				}),
+			});
+			syncToLocal();
+			expect(onResponse).not.toHaveBeenCalled();
+		});
+
+		it('calls onResponse again when additional user messages arrive', () => {
+			const { remoteDoc, localDoc, syncToLocal } = createSyncedDocs();
+			const documentMap = localDoc.getMap('document');
+			client.startObserving(documentMap);
+
+			const remoteMap = remoteDoc.getMap('document');
+
+			// First user message
+			remoteMap.set('commands', {
+				'94': fakeCommand({
+					id: 94,
+					status: 'running',
+					result_data: {
+						messages: [{ role: 'user', content: 'First question' }],
+					},
+				}),
+			});
+			syncToLocal();
+			expect(onResponse).toHaveBeenCalledOnce();
+			onResponse.mockClear();
+
+			// Second user message
+			remoteMap.set('commands', {
+				'94': fakeCommand({
+					id: 94,
+					status: 'running',
+					result_data: {
+						messages: [
+							{ role: 'user', content: 'First question' },
+							{ role: 'assistant', content: 'Answer.' },
+							{ role: 'user', content: 'Follow-up question' },
+						],
+					},
+				}),
+			});
+			syncToLocal();
+			expect(onResponse).toHaveBeenCalledOnce();
+		});
+	});
+
+	// -------------------------------------------------------
+	// writeCommandToDoc
+	// -------------------------------------------------------
+
+	describe('writeCommandToDoc()', () => {
+		it('sets the command under the commands key in the Y.Map', () => {
+			const { localDoc } = createSyncedDocs();
+			const documentMap = localDoc.getMap('document');
+			client.startObserving(documentMap);
+
+			const cmd = fakeCommand({ id: 100, status: 'running' });
+			client.writeCommandToDoc(cmd);
+
+			const commands = documentMap.get('commands') as Record<
+				string,
+				unknown
+			>;
+			expect(commands).toBeDefined();
+			expect(commands['100']).toBeDefined();
+			expect((commands['100'] as Command).id).toBe(100);
+			expect((commands['100'] as Command).status).toBe('running');
+		});
+
+		it('preserves existing commands when writing a new one', () => {
+			const { localDoc } = createSyncedDocs();
+			const documentMap = localDoc.getMap('document');
+			client.startObserving(documentMap);
+
+			client.writeCommandToDoc(
+				fakeCommand({ id: 101, status: 'pending' })
+			);
+			client.writeCommandToDoc(
+				fakeCommand({ id: 102, status: 'running' })
+			);
+
+			const commands = documentMap.get('commands') as Record<
+				string,
+				unknown
+			>;
+			expect(commands['101']).toBeDefined();
+			expect(commands['102']).toBeDefined();
+		});
+
+		it('is a no-op when not observing', () => {
+			// No startObserving called
+			expect(() => {
+				client.writeCommandToDoc(fakeCommand({ id: 103 }));
+			}).not.toThrow();
+		});
+	});
+
+	// -------------------------------------------------------
+	// removeCommandFromDoc
+	// -------------------------------------------------------
+
+	describe('removeCommandFromDoc()', () => {
+		it('removes a command from the commands key in the Y.Map', () => {
+			const { localDoc } = createSyncedDocs();
+			const documentMap = localDoc.getMap('document');
+			client.startObserving(documentMap);
+
+			client.writeCommandToDoc(
+				fakeCommand({ id: 110, status: 'completed' })
+			);
+			client.writeCommandToDoc(
+				fakeCommand({ id: 111, status: 'running' })
+			);
+
+			client.removeCommandFromDoc(110);
+
+			const commands = documentMap.get('commands') as Record<
+				string,
+				unknown
+			>;
+			expect(commands['110']).toBeUndefined();
+			expect(commands['111']).toBeDefined();
+		});
+
+		it('is a no-op when the command does not exist', () => {
+			const { localDoc } = createSyncedDocs();
+			const documentMap = localDoc.getMap('document');
+			client.startObserving(documentMap);
+
+			expect(() => {
+				client.removeCommandFromDoc(999);
+			}).not.toThrow();
+		});
+
+		it('is a no-op when not observing', () => {
+			expect(() => {
+				client.removeCommandFromDoc(999);
+			}).not.toThrow();
+		});
+	});
+
+	// -------------------------------------------------------
+	// getTransport
 	// -------------------------------------------------------
 
 	describe('getTransport()', () => {
-		it('returns none before start', () => {
+		it('returns none before observing', () => {
 			expect(client.getTransport()).toBe('none');
 		});
 
-		it('returns sse when connected via SSE', async () => {
-			const [stream, closeStream] = createHangingSSEStream(
-				'event: heartbeat\ndata: \n\n'
-			);
-			apiClient.requestStream.mockResolvedValue(fakeSSEResponse(stream));
+		it('returns yjs while observing', () => {
+			const { localDoc } = createSyncedDocs();
+			const documentMap = localDoc.getMap('document');
+			client.startObserving(documentMap);
 
-			await client.start();
-			await vi.advanceTimersByTimeAsync(0);
-
-			expect(client.getTransport()).toBe('sse');
-			closeStream();
+			expect(client.getTransport()).toBe('yjs');
 		});
 
-		it('returns polling when SSE is unavailable', async () => {
-			apiClient.requestStream.mockRejectedValue(
-				new Error('SSE unavailable')
-			);
-			apiClient.request.mockResolvedValue([]);
-
-			await client.start();
-			await vi.advanceTimersByTimeAsync(0);
-
-			expect(client.getTransport()).toBe('polling');
-		});
-
-		it('returns none after stop', async () => {
-			const [stream, closeStream] = createHangingSSEStream(
-				'event: heartbeat\ndata: \n\n'
-			);
-			apiClient.requestStream.mockResolvedValue(fakeSSEResponse(stream));
-
-			await client.start();
-			await vi.advanceTimersByTimeAsync(0);
-
+		it('returns none after stop', () => {
+			const { localDoc } = createSyncedDocs();
+			const documentMap = localDoc.getMap('document');
+			client.startObserving(documentMap);
 			client.stop();
+
 			expect(client.getTransport()).toBe('none');
-			closeStream();
-		});
-	});
-
-	// -------------------------------------------------------
-	// SSE error handling edge cases
-	// -------------------------------------------------------
-
-	describe('SSE error handling', () => {
-		it('falls back to polling when response has no body', async () => {
-			const noBodyResponse = {
-				ok: true,
-				status: 200,
-				statusText: 'OK',
-				body: null,
-				headers: new Headers(),
-			} as unknown as Response;
-
-			// connectSSE throws "SSE response has no body" — triggers
-			// handleSSEDisconnect on each retry, then falls back to polling.
-			apiClient.requestStream.mockResolvedValue(noBodyResponse);
-			apiClient.request.mockResolvedValue([]);
-
-			await client.start();
-			await vi.advanceTimersByTimeAsync(0);
-
-			// start() caught the initial rejection and fell back to polling
-			expect(client.getTransport()).toBe('polling');
 		});
 	});
 });

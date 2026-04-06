@@ -323,11 +323,18 @@ describe('SessionManager', () => {
 			expect(session.getState()).toBe('editing');
 			expect(session.getCurrentPost()).toEqual(fakePost);
 			expect(mockGetPost).toHaveBeenCalledWith(42);
-			expect(mockSyncStart).toHaveBeenCalledTimes(1);
 
-			// Verify room format
-			const [room] = mockSyncStart.mock.calls[0];
-			expect(room).toBe('postType/post:42');
+			// SyncClient.start() is called during connect() with the command room.
+			// openPost() adds the post room via addRoom().
+			expect(mockSyncStart).toHaveBeenCalledTimes(1);
+			const [startRoom] = mockSyncStart.mock.calls[0];
+			expect(startRoom).toBe('root/wpce_commands');
+
+			expect(mockSyncAddRoom).toHaveBeenCalled();
+			const postRoomCall = mockSyncAddRoom.mock.calls.find(
+				(call: unknown[]) => call[0] === 'postType/post:42'
+			);
+			expect(postRoomCall).toBeDefined();
 		});
 
 		it('loads post title into Y.Doc', async () => {
@@ -367,12 +374,15 @@ describe('SessionManager', () => {
 	});
 
 	describe('closePost()', () => {
-		it('stops sync and clears doc', async () => {
+		it('removes post room and clears doc', async () => {
 			await connectAndOpen(session);
 
 			await session.closePost();
 
-			expect(mockSyncStop).toHaveBeenCalledTimes(1);
+			// closePost removes the post room but doesn't stop the SyncClient
+			// (it keeps the command room alive).
+			expect(mockSyncRemoveRoom).toHaveBeenCalledWith('postType/post:42');
+			expect(mockSyncStop).not.toHaveBeenCalled();
 			expect(session.getState()).toBe('connected');
 			expect(session.getCurrentPost()).toBeNull();
 		});
@@ -1354,7 +1364,15 @@ describe('SessionManager', () => {
 			mockGetPost.mockResolvedValue(fakePost);
 			await session.openPost(42);
 
-			const callbacks = mockSyncStart.mock.calls[0][3];
+			// Post room callbacks are in addRoom, not start (which has the command room)
+			const postRoomCall = mockSyncAddRoom.mock.calls.find(
+				(call: unknown[]) => call[0] === 'postType/post:42'
+			) as unknown[] | undefined;
+			assertDefined(postRoomCall);
+			const callbacks = postRoomCall[3] as {
+				onAwareness: (state: Record<string, unknown>) => void;
+				getAwarenessState: () => unknown;
+			};
 
 			// Simulate awareness update with a collaborator
 			callbacks.onAwareness({
@@ -1379,7 +1397,13 @@ describe('SessionManager', () => {
 			mockGetPost.mockResolvedValue(fakePost);
 			await session.openPost(42);
 
-			const callbacks = mockSyncStart.mock.calls[0][3];
+			const postRoomCall = mockSyncAddRoom.mock.calls.find(
+				(call: unknown[]) => call[0] === 'postType/post:42'
+			) as unknown[] | undefined;
+			assertDefined(postRoomCall);
+			const callbacks = postRoomCall[3] as {
+				getAwarenessState: () => unknown;
+			};
 			const state = callbacks.getAwarenessState();
 
 			expect(state).toBeDefined();
@@ -3155,8 +3179,8 @@ describe('SessionManager', () => {
 				'This post has been deleted.'
 			);
 
-			// Background work should be stopped
-			expect(mockSyncStop).toHaveBeenCalled();
+			// Post room should be removed (but SyncClient stays alive for command room)
+			expect(mockSyncRemoveRoom).toHaveBeenCalledWith('postType/post:42');
 		});
 
 		it('sets postGone when getPost returns trashed post', async () => {
@@ -3177,8 +3201,8 @@ describe('SessionManager', () => {
 				'This post has been moved to the trash.'
 			);
 
-			// Background work should be stopped
-			expect(mockSyncStop).toHaveBeenCalled();
+			// Post room should be removed (but SyncClient stays alive for command room)
+			expect(mockSyncRemoveRoom).toHaveBeenCalledWith('postType/post:42');
 		});
 
 		it('does not set postGone on transient errors', async () => {
@@ -3342,8 +3366,8 @@ describe('SessionManager', () => {
 				'This post has been moved to the trash.'
 			);
 
-			// Background work (including the health check timer) should be stopped
-			expect(mockSyncStop).toHaveBeenCalled();
+			// Post room should be removed (but SyncClient stays alive for command room)
+			expect(mockSyncRemoveRoom).toHaveBeenCalledWith('postType/post:42');
 
 			// closePost still works for cleanup
 			await session.closePost();

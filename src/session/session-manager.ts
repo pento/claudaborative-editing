@@ -6,6 +6,7 @@
  */
 
 import { readFile } from 'node:fs/promises';
+import { debugLog } from '../debug-log.js';
 import { basename } from 'node:path';
 import * as Y from 'yjs';
 import { DocumentManager } from '../yjs/document-manager.js';
@@ -348,6 +349,16 @@ export class SessionManager {
 
 	/** Room name for the comment sync room. */
 	private static readonly COMMENT_ROOM = 'root/comment';
+	/** Room name for the command sync room (collection format, no ID). */
+	private static readonly COMMAND_ROOM = 'root/wpce_commands';
+	/** Y.Doc for the command room (created on connect, destroyed on disconnect). */
+	private commandDoc: Y.Doc | null = null;
+	/** Update handler for the command doc. */
+	private commandUpdateHandler:
+		| ((update: Uint8Array, origin: unknown) => void)
+		| null = null;
+	/** The post room name (stored for removeRoom in closePost). */
+	private postRoom: string | null = null;
 
 	/**
 	 * Max time (ms) to wait for sync to populate the doc before loading from REST API.
@@ -383,7 +394,8 @@ export class SessionManager {
 	}
 
 	private get syncClient(): SyncClient {
-		if (!this._syncClient) throw new Error('No sync client (no post open)');
+		if (!this._syncClient)
+			throw new Error('No sync client (not connected)');
 		return this._syncClient;
 	}
 
@@ -439,11 +451,67 @@ export class SessionManager {
 			this.notesSupported = false;
 		}
 
-		// Detect WordPress editor plugin and start command listener
-		await this.probeEditorPlugin();
-
 		// Build awareness state from user info
 		this.awarenessState = buildAwarenessState(user);
+
+		// Create the SyncClient with the command room.
+		// The SyncClient lives for the entire connection and is reused for
+		// post + comment rooms when a post is opened.
+		const syncClient = new SyncClient(this.apiClient, {
+			...DEFAULT_SYNC_CONFIG,
+		});
+		this._syncClient = syncClient;
+
+		// Create command Y.Doc and join the command room
+		debugLog(
+			'session',
+			'Creating command doc and joining room',
+			SessionManager.COMMAND_ROOM
+		);
+		this.commandDoc = new Y.Doc();
+		this.commandUpdateHandler = (update: Uint8Array, origin: unknown) => {
+			if (origin === LOCAL_ORIGIN) {
+				const syncUpdate = createUpdateFromChange(update);
+				syncClient.queueUpdate(SessionManager.COMMAND_ROOM, syncUpdate);
+			}
+		};
+		this.commandDoc.on('updateV2', this.commandUpdateHandler);
+
+		const cmdDoc = this.commandDoc;
+		syncClient.start(
+			SessionManager.COMMAND_ROOM,
+			cmdDoc.clientID,
+			[createSyncStep1(cmdDoc)],
+			{
+				onUpdate: (update) => {
+					try {
+						return processIncomingUpdate(cmdDoc, update);
+					} catch {
+						return null;
+					}
+				},
+				onAwareness: () => {},
+				onStatusChange: (_status, error) => {
+					// Sync errors while editing may indicate the post was
+					// deleted/trashed. Check via REST to confirm.
+					if (
+						this.state === 'editing' &&
+						_status === 'error' &&
+						error instanceof WordPressApiError &&
+						(error.status === 403 ||
+							error.status === 404 ||
+							error.status === 410)
+					) {
+						this.checkPostStillExists();
+					}
+				},
+				onCompactionRequested: () => createCompactionUpdate(cmdDoc),
+				getAwarenessState: () => this.awarenessState,
+			}
+		);
+
+		// Detect WordPress editor plugin and start command listener
+		await this.probeEditorPlugin();
 
 		this.state = 'connected';
 		return user;
@@ -462,6 +530,20 @@ export class SessionManager {
 				this.commandHandler.stop();
 				this.commandHandler = null;
 			}
+
+			// Stop the SyncClient (stops all rooms including the command room).
+			if (this._syncClient) {
+				this._syncClient.stop();
+				this._syncClient = null;
+			}
+
+			// Clean up command doc.
+			if (this.commandDoc && this.commandUpdateHandler) {
+				this.commandDoc.off('updateV2', this.commandUpdateHandler);
+				this.commandUpdateHandler = null;
+			}
+			this.commandDoc = null;
+			this.postRoom = null;
 
 			this._apiClient = null;
 			this._user = null;
@@ -504,17 +586,13 @@ export class SessionManager {
 		const doc = this.documentManager.createDoc();
 		this._doc = doc;
 
-		// Create sync client
-		const syncClient = new SyncClient(this.apiClient, {
-			...DEFAULT_SYNC_CONFIG,
-		});
-		this._syncClient = syncClient;
-
-		// Start sync with room = postType/${post.type}:${postId}
+		// Use the existing SyncClient (created in connect()) and add the post room.
+		const syncClient = this.syncClient;
 		const room = `postType/${post.type}:${postId}`;
+		this.postRoom = room;
 		const initialUpdates = [createSyncStep1(doc)];
 
-		syncClient.start(room, doc.clientID, initialUpdates, {
+		syncClient.addRoom(room, doc.clientID, initialUpdates, {
 			onUpdate: (update) => {
 				try {
 					return processIncomingUpdate(doc, update);
@@ -527,17 +605,6 @@ export class SessionManager {
 					awarenessState,
 					doc.clientID
 				);
-			},
-			onStatusChange: (_status, error) => {
-				if (
-					_status === 'error' &&
-					error instanceof WordPressApiError &&
-					(error.status === 403 ||
-						error.status === 404 ||
-						error.status === 410)
-				) {
-					this.checkPostStillExists();
-				}
 			},
 			onCompactionRequested: () => {
 				return createCompactionUpdate(doc);
@@ -771,9 +838,13 @@ export class SessionManager {
 		this.requireState('editing');
 		await this.drainStreamQueue();
 
-		if (this._syncClient) {
-			this._syncClient.stop();
-			this._syncClient = null;
+		// Remove post and comment rooms from the SyncClient (it stays alive
+		// with the command room for the duration of the connection).
+		if (this._syncClient && this.postRoom) {
+			this._syncClient.removeRoom(this.postRoom);
+		}
+		if (this._syncClient && this.commentDoc) {
+			this._syncClient.removeRoom(SessionManager.COMMENT_ROOM);
 		}
 
 		if (this._doc && this.updateHandler) {
@@ -799,6 +870,7 @@ export class SessionManager {
 
 		this._doc = null;
 		this.commentDoc = null;
+		this.postRoom = null;
 		this._currentPost = null;
 		this.collaborators = [];
 		this._cachedCategories = [];
@@ -1754,7 +1826,13 @@ export class SessionManager {
 			handler.setNotifier(this._channelNotifier);
 		}
 		try {
-			const detected = await handler.start(this.apiClient);
+			// Collection sync uses the 'state' map (not 'document').
+			// Commands are stored under the 'commands' key in the state map.
+			const commandMap = this.commandDoc?.getMap('state');
+			if (!commandMap) {
+				return false;
+			}
+			const detected = await handler.start(this.apiClient, commandMap);
 			if (detected) {
 				this.commandHandler = handler;
 			}
@@ -2131,7 +2209,7 @@ export class SessionManager {
 				name: `${this.user.name ?? this.user.slug} (Claude)`,
 				slug: this.user.slug,
 				avatar_urls: this.user.avatar_urls ?? {},
-				browserType: 'Claude Code MCP',
+				browserType: 'Claudaborative Editing MCP',
 				enteredAt,
 			},
 			editorState: {
@@ -2327,8 +2405,12 @@ export class SessionManager {
 	 * requests for a post that is known to be deleted/trashed.
 	 */
 	private stopBackgroundWork(): void {
-		if (this._syncClient) {
-			this._syncClient.stop();
+		// Remove the post room from the SyncClient (keeps the command room alive).
+		if (this._syncClient && this.postRoom) {
+			this._syncClient.removeRoom(this.postRoom);
+		}
+		if (this._syncClient && this.commentDoc) {
+			this._syncClient.removeRoom(SessionManager.COMMENT_ROOM);
 		}
 		if (this.postHealthCheckTimer !== null) {
 			clearInterval(this.postHealthCheckTimer);

@@ -1,0 +1,291 @@
+/**
+ * Command sync via core-data collection entity registration.
+ *
+ * Registers a custom `root/wpce_commands` entity with syncConfig so that
+ * Gutenberg's polling manager includes the command room in its HTTP requests.
+ * Uses collection sync (loadCollection) which creates a Y.Doc with a state
+ * map. Both browser and MCP server read/write commands in the state map.
+ *
+ * The Y.Doc reference is captured via the syncConfig.createAwareness callback,
+ * which receives the doc during loadCollection initialization.
+ *
+ * IMPORTANT: Gutenberg's polling manager pauses update queues for non-primary
+ * rooms. Our command room is never primary (the post room registers first).
+ * To work around this, we intercept fetch requests to inject our doc state
+ * when the queue is empty but we have local changes to send.
+ */
+
+/**
+ * WordPress dependencies
+ */
+import { dispatch, resolveSelect } from '@wordpress/data';
+import { store as coreDataStore } from '@wordpress/core-data';
+
+/**
+ * Internal dependencies
+ */
+import type { Command } from '../store/types';
+
+// Use dynamic import type to avoid bundling yjs (it's loaded by Gutenberg)
+type YDoc = import('yjs').Doc;
+type YMap = import('yjs').Map<unknown>;
+type YAwareness = import('y-protocols/awareness').Awareness;
+
+/** Whether the entity has been registered and sync started. */
+let initialized = false;
+
+/** Captured Y.Doc from the collection sync initialization. */
+let commandDoc: YDoc | null = null;
+
+/** Captured Awareness instance from the collection sync initialization. */
+let commandAwareness: YAwareness | null = null;
+
+/** The browserType value sent by the MCP server in awareness state. */
+const MCP_BROWSER_TYPE = 'Claudaborative Editing MCP';
+
+/**
+ * Get the state map from the captured Y.Doc.
+ */
+function getStateMap(): YMap | null {
+	return commandDoc?.getMap('state') ?? null;
+}
+
+/**
+ * Install a fetch interceptor that injects our Y.Doc state into
+ * /wp-sync/v1/updates requests when the polling manager's queue is
+ * paused (non-primary room). Only injects when the doc state has
+ * changed since the last injection.
+ */
+function installFetchInterceptor(): void {
+	const origFetch = window.fetch;
+	let lastInjectedStateVector = '';
+
+	window.fetch = (async (...args: Parameters<typeof fetch>) => {
+		const url =
+			typeof args[0] === 'string'
+				? args[0]
+				: ((args[0] as Request)?.url ?? '');
+		if (url.includes('wp-sync') && args[1]?.body && commandDoc) {
+			try {
+				const body = JSON.parse(args[1].body as string) as {
+					rooms: Array<{
+						room: string;
+						updates: Array<{ type: string; data: string }>;
+					}>;
+				};
+				const cmdRoom = body.rooms?.find(
+					(r) => r.room === 'root/wpce_commands'
+				);
+				if (cmdRoom && cmdRoom.updates.length === 0) {
+					// eslint-disable-next-line @typescript-eslint/no-require-imports, import/no-extraneous-dependencies
+					const Y = require('yjs') as typeof import('yjs');
+					const sv = btoa(
+						String.fromCharCode(...Y.encodeStateVector(commandDoc))
+					);
+					if (sv !== lastInjectedStateVector) {
+						const update = Y.encodeStateAsUpdateV2(commandDoc);
+						cmdRoom.updates = [
+							{
+								type: 'compaction',
+								data: btoa(String.fromCharCode(...update)),
+							},
+						];
+						args[1] = {
+							...args[1],
+							body: JSON.stringify(body),
+						};
+						lastInjectedStateVector = sv;
+					}
+				}
+			} catch {
+				/* ignore parse errors */
+			}
+		}
+		return origFetch(...args);
+	}) as typeof fetch;
+}
+
+/**
+ * The syncConfig tells core-data how to handle the collection sync.
+ * The key trick: createAwareness receives the Y.Doc, which we capture
+ * for direct read/write access to the state map.
+ */
+const syncConfig = {
+	applyChangesToCRDTDoc: () => {
+		// Collection sync doesn't call this — it only bumps savedAt.
+	},
+
+	createAwareness: (ydoc: unknown) => {
+		// Capture the Y.Doc reference for direct state map access.
+		commandDoc = ydoc as YDoc;
+
+		// Install the fetch interceptor to work around the paused queue.
+		installFetchInterceptor();
+
+		// Create a real Awareness instance so the polling manager populates
+		// it with remote awareness states (used for MCP connection detection).
+		// eslint-disable-next-line @typescript-eslint/no-require-imports, import/no-extraneous-dependencies
+		const { Awareness } = require('y-protocols/awareness') as {
+			Awareness: new (doc: YDoc) => YAwareness;
+		};
+		commandAwareness = new Awareness(commandDoc);
+		return commandAwareness;
+	},
+
+	getChangesFromCRDTDoc: () => {
+		// Collection sync doesn't call this.
+		return {};
+	},
+};
+
+/**
+ * Initialize the command sync entity.
+ *
+ * Registers the entity with core-data and triggers collection sync via
+ * getEntityRecords (plural) with per_page=-1. Call once during plugin
+ * initialization.
+ */
+export function initCommandSync(): void {
+	if (initialized) {
+		return;
+	}
+	initialized = true;
+
+	// Register the entity. addEntities is a public core-data action.
+	dispatch(coreDataStore).addEntities([
+		{
+			kind: 'root',
+			name: 'wpce_commands',
+			baseURL: '/wpce/v1/sync-entity',
+			baseURLParams: { context: 'edit' },
+			plural: 'wpceCommands',
+			syncConfig,
+		},
+	]);
+
+	// Trigger the collection resolver, which starts collection sync.
+	// getEntityRecords with per_page=-1 calls getSyncManager().loadCollection()
+	// which creates the Y.Doc and registers room 'root/wpce_commands' with
+	// the polling manager.
+	void resolveSelect(coreDataStore).getEntityRecords(
+		'root',
+		'wpce_commands',
+		{ per_page: -1 }
+	);
+}
+
+/**
+ * Write a command to the Y.Doc's state map.
+ * Call after a successful REST API operation (submit, respond, cancel).
+ *
+ * @param command The command to write.
+ */
+export function writeCommandToSync(command: Command): void {
+	const stateMap = getStateMap();
+	if (!stateMap) return;
+
+	// Read current commands, update the specific one, write back.
+	const commands =
+		(stateMap.get('commands') as Record<string, unknown> | undefined) ?? {};
+
+	const updated = { ...commands, [String(command.id)]: { ...command } };
+
+	commandDoc?.transact(() => {
+		stateMap.set('commands', updated);
+		stateMap.set('savedAt', Date.now());
+	});
+}
+
+/**
+ * Get the current commands from the Y.Doc's state map.
+ */
+export function getCommandsFromSync(): Record<string, Command> {
+	const stateMap = getStateMap();
+	if (!stateMap) return {};
+
+	return (stateMap.get('commands') as Record<string, Command>) ?? {};
+}
+
+/**
+ * Subscribe to command changes from the Y.Doc's state map.
+ * Returns an unsubscribe function.
+ *
+ * @param callback Called when commands change.
+ */
+export function subscribeToCommandSync(
+	callback: (commands: Record<string, Command>) => void
+): () => void {
+	// Poll until the doc is available (it's created async during loadCollection)
+	const checkInterval = setInterval(() => {
+		const stateMap = getStateMap();
+		if (!stateMap) return;
+
+		clearInterval(checkInterval);
+
+		let prev = JSON.stringify(stateMap.get('commands'));
+
+		stateMap.observe(() => {
+			const current = JSON.stringify(stateMap.get('commands'));
+			if (current !== prev) {
+				prev = current;
+				callback(
+					(stateMap.get('commands') as Record<string, Command>) ?? {}
+				);
+			}
+		});
+	}, 100);
+
+	return () => clearInterval(checkInterval);
+}
+
+/**
+ * Check whether the MCP server is connected by examining the awareness
+ * state in the command room. The MCP server sends awareness with
+ * browserType: 'Claudaborative Editing MCP'.
+ */
+export function isMcpConnected(): boolean {
+	if (!commandAwareness) return false;
+
+	const states = commandAwareness.getStates();
+	for (const [clientId, state] of states) {
+		// Skip our own client
+		if (clientId === commandAwareness.clientID) continue;
+		if (!state || typeof state !== 'object') continue;
+
+		const info = (state as { collaboratorInfo?: { browserType?: string } })
+			.collaboratorInfo;
+		if (info?.browserType === MCP_BROWSER_TYPE) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/**
+ * Subscribe to MCP connection status changes via awareness.
+ * Returns an unsubscribe function.
+ *
+ * @param callback Called with the current connection status on each change.
+ */
+export function subscribeToMcpConnection(
+	callback: (connected: boolean) => void
+): () => void {
+	if (!commandAwareness) {
+		// Awareness not yet initialized — poll until it is
+		const checkInterval = setInterval(() => {
+			if (commandAwareness) {
+				clearInterval(checkInterval);
+				callback(isMcpConnected());
+				commandAwareness.on('change', () => {
+					callback(isMcpConnected());
+				});
+			}
+		}, 100);
+		return () => clearInterval(checkInterval);
+	}
+
+	callback(isMcpConnected());
+	const handler = () => callback(isMcpConnected());
+	commandAwareness.on('change', handler);
+	return () => commandAwareness?.off('change', handler);
+}

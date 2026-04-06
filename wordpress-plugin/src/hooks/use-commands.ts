@@ -30,10 +30,12 @@ const COMMAND_POLL_INTERVAL = 3000;
 export interface UseCommandsReturn {
 	activeCommand: Command | null;
 	isSubmitting: boolean;
+	isResponding: boolean;
 	error: string | null;
 	history: Command[];
 	submit: (prompt: CommandSlug, args?: Record<string, unknown>) => void;
 	cancel: (id: number) => void;
+	respondToCommand: (commandId: number, message: string) => void;
 }
 
 /**
@@ -46,23 +48,23 @@ export interface UseCommandsReturn {
  * @return Command state and actions: `activeCommand`, `isSubmitting`, `error`, `history`, `submit( prompt, args )`, and `cancel( id )`.
  */
 export function useCommands(postId: number | null): UseCommandsReturn {
-	const { activeCommand, isSubmitting, error, history } = useSelect(
-		(select) => {
+	const { activeCommand, isSubmitting, isResponding, error, history } =
+		useSelect((select) => {
 			const s = select(store);
 
 			return {
 				activeCommand: s.getActiveCommand(),
 				isSubmitting: s.isSubmitting(),
+				isResponding: s.isResponding(),
 				error: s.getCommandError(),
 				history: s.getCommandHistory(),
 			};
-		},
-		[]
-	);
+		}, []);
 
 	const {
 		submitCommand,
 		cancelCommand,
+		respondToCommand: dispatchRespondToCommand,
 		fetchActiveCommand,
 		pollActiveCommand,
 	} = useDispatch(store);
@@ -109,12 +111,21 @@ export function useCommands(postId: number | null): UseCommandsReturn {
 		[cancelCommand]
 	);
 
+	const respond = useCallback(
+		(commandId: number, message: string) => {
+			dispatchRespondToCommand(commandId, message);
+		},
+		[dispatchRespondToCommand]
+	);
+
 	return {
 		activeCommand,
 		isSubmitting,
+		isResponding,
 		error,
 		history,
 		submit,
 		cancel,
+		respondToCommand: respond,
 	};
 }

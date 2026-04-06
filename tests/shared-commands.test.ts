@@ -22,6 +22,7 @@ describe('shared/commands', () => {
 				'edit',
 				'translate',
 				'pre-publish-check',
+				'compose',
 			];
 
 			expect(Object.keys(COMMANDS)).toEqual(expectedSlugs);
@@ -72,6 +73,7 @@ describe('shared/commands', () => {
 			'failed',
 			'expired',
 			'cancelled',
+			'awaiting_input',
 		];
 
 		it('contains only valid CommandStatus values', () => {
@@ -83,21 +85,34 @@ describe('shared/commands', () => {
 		it('does not contain active statuses', () => {
 			expect(TERMINAL_STATUSES).not.toContain('pending');
 			expect(TERMINAL_STATUSES).not.toContain('running');
+			expect(TERMINAL_STATUSES).not.toContain('awaiting_input');
 		});
 	});
 
 	describe('VALID_TRANSITIONS', () => {
-		it('defines transitions for pending and running', () => {
+		it('defines transitions for pending, running, and awaiting_input', () => {
 			expect(VALID_TRANSITIONS).toHaveProperty('pending');
 			expect(VALID_TRANSITIONS).toHaveProperty('running');
+			expect(VALID_TRANSITIONS).toHaveProperty('awaiting_input');
 		});
 
 		it('pending can only transition to running', () => {
 			expect(VALID_TRANSITIONS.pending).toEqual(['running']);
 		});
 
-		it('running can transition to completed or failed', () => {
-			expect(VALID_TRANSITIONS.running).toEqual(['completed', 'failed']);
+		it('running can transition to completed, failed, or awaiting_input', () => {
+			expect(VALID_TRANSITIONS.running).toEqual([
+				'completed',
+				'failed',
+				'awaiting_input',
+			]);
+		});
+
+		it('awaiting_input can transition to running or cancelled', () => {
+			expect(VALID_TRANSITIONS.awaiting_input).toEqual([
+				'running',
+				'cancelled',
+			]);
 		});
 	});
 });

@@ -16,6 +16,7 @@ import { registerEditingPrompts } from './prompts/editing.js';
 import { registerReviewPrompts } from './prompts/review.js';
 import { registerAuthoringPrompts } from './prompts/authoring.js';
 import { registerPrePublishPrompts } from './prompts/pre-publish.js';
+import { registerComposePrompts } from './prompts/compose.js';
 
 import { VERSION } from './version.js';
 export { VERSION };
@@ -61,11 +62,23 @@ export async function startServer(): Promise<void> {
 
 	const channelInstructions = `
 
-When you receive a <channel source="wpce"> event, it contains a command from a user in the WordPress editor. Follow these steps:
+When you receive a <channel source="wpce"> event, it contains a command from a user in the WordPress editor. Check the meta.event_type field:
+
+**New command (no event_type or event_type is absent):**
 1. Call wp_update_command_status with the command_id from the notification metadata and status "running".
 2. If no post is open, call wp_open_post with the post_id from the notification metadata. If a different post is open, call wp_close_post first.
 3. Execute the requested action based on the prompt field: ${promptDescriptions}.
-4. Call wp_update_command_status with status "completed" and a brief summary, or "failed" with an error message.`;
+4. Call wp_update_command_status with status "completed" and a brief summary, or "failed" with an error message.
+
+**User response (event_type = "response"):**
+This is a reply to a question you asked via awaiting_input. The command is already in "running" status — do NOT call wp_update_command_status with "running" again. The meta.messages field contains the full conversation history. Resume processing the original command using the conversation context.
+
+**Asking the user a question (two-way communication):**
+To ask the user a follow-up question during command execution:
+1. Call wp_update_command_status with status "awaiting_input" and your question as the message. WordPress automatically tracks the conversation history — you do NOT need to send resultData.
+2. Format messages as simple HTML: use <p> tags for paragraphs, <strong> for emphasis, <ol>/<ul>/<li> for lists.
+3. Wait for a <channel source="wpce"> notification with event_type "response". Do not proceed until you receive it.
+4. The awaiting_input status does not expire — the user can take their time responding.`;
 
 	const instructions = baseInstructions + channelInstructions;
 
@@ -106,6 +119,7 @@ When you receive a <channel source="wpce"> event, it contains a command from a u
 	registerReviewPrompts(server, session);
 	registerAuthoringPrompts(server, session);
 	registerPrePublishPrompts(server, session);
+	registerComposePrompts(server, session);
 
 	// Start stdio transport
 	const transport = new StdioServerTransport();

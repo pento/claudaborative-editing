@@ -1,0 +1,95 @@
+// Hide the conversation sidebar from the editor's Panels menu.
+// The sidebar opens/closes automatically based on command state,
+// so the menu entry is unnecessary.
+// stylelint-disable-next-line selector-class-pattern -- WordPress core class name.
+.interface-complementary-area__menu-group {
+	// Target by the generated sidebar identifier in the aria attribute.
+	button[aria-controls="claudaborative-editing-conversation:conversation"] {
+		display: none;
+	}
+}
+
+.wpce-conversation-panel {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	padding: 16px;
+
+	&__messages {
+		flex: 1;
+		overflow-y: auto;
+		padding-bottom: 12px;
+	}
+
+	&__message {
+		margin-bottom: 12px;
+	}
+
+	&__message-content {
+		padding: 8px 12px;
+		font-size: 13px;
+		line-height: 1.5;
+		word-wrap: break-word;
+
+		p {
+			margin: 0 0 8px;
+
+			&:last-child {
+				margin-bottom: 0;
+			}
+		}
+
+		ol,
+		ul {
+			margin: 0 0 8px;
+			padding-left: 20px;
+		}
+	}
+
+	&__message--assistant &__message-content {
+		background: #f0f0f0;
+		border-radius: 8px 8px 8px 2px;
+		margin-right: 24px;
+	}
+
+	&__message--user &__message-content {
+		background: #e6f2ff;
+		border-radius: 8px 8px 2px 8px;
+		margin-left: 24px;
+	}
+
+	&__processing {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		color: #757575;
+		font-size: 13px;
+		font-style: italic;
+		padding: 4px 0;
+	}
+
+	&__approve {
+		width: 100%;
+		justify-content: center;
+		margin-bottom: 12px;
+	}
+
+	&__input-area {
+		border-top: 1px solid #f0f0f0;
+		padding-top: 12px;
+		flex-shrink: 0;
+
+		textarea {
+			font-size: 13px;
+			line-height: 1.5;
+			resize: vertical;
+		}
+	}
+
+	&__actions {
+		display: flex;
+		gap: 8px;
+		margin-top: 8px;
+		justify-content: flex-end;
+	}
+}
