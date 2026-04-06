@@ -143,9 +143,7 @@ export default function ConversationPanel() {
 
 	const handleSend = () => {
 		const trimmed = inputValue.trim();
-		if (!trimmed || !activeCommand || isResponding) {
-			return;
-		}
+		if (!trimmed || !activeCommand || isResponding) return;
 
 		setInputValue('');
 		void Promise.resolve(respondToCommand(activeCommand.id, trimmed)).catch(

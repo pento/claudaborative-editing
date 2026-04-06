@@ -690,6 +690,44 @@ describe('ConversationPanel', () => {
 		expect(respondToCommand).not.toHaveBeenCalled();
 	});
 
+	it('does not call respondToCommand when isResponding is true', () => {
+		const respondToCommand = jest.fn().mockResolvedValue(undefined);
+		mockedUseCommands.mockReturnValue({
+			activeCommand: {
+				id: 1,
+				prompt: 'compose',
+				status: 'awaiting_input',
+				post_id: 100,
+				result_data: {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'Hello',
+							timestamp: '2026-04-06T10:00:00Z',
+						},
+					],
+				},
+			},
+			isResponding: true,
+			respondToCommand,
+			cancel: jest.fn(),
+		});
+
+		render(<ConversationPanel />);
+
+		const textarea = screen.getByTestId(
+			'conversation-textarea'
+		) as HTMLTextAreaElement;
+
+		// Type text so the empty-input guard is not the reason for blocking.
+		fireEvent.change(textarea, { target: { value: 'Some text' } });
+
+		// Click Send — should be blocked by isResponding guard.
+		fireEvent.click(screen.getByText('Send'));
+
+		expect(respondToCommand).not.toHaveBeenCalled();
+	});
+
 	it('calls createNotice when respondToCommand rejects on send', async () => {
 		const mockCreateNotice = jest.fn();
 		mockedUseDispatch.mockImplementation((storeNameOrDescriptor?: any) => {

@@ -1201,10 +1201,9 @@ class RestControllerTest extends \WP_UnitTestCase {
 	 */
 	public function test_respond_handler_returns_404_for_nonexistent_command() {
 		$controller = new REST_Controller();
-		$controller->register_routes();
 
 		$request = new \WP_REST_Request( 'POST', '/wpce/v1/commands/999999/respond' );
-		$request->set_param( 'id', 999999 );
+		$request->set_url_params( [ 'id' => 999999 ] );
 		$request->set_body_params( [ 'message' => 'test' ] );
 
 		$result = $controller->respond_to_command( $request );
@@ -1304,10 +1303,9 @@ class RestControllerTest extends \WP_UnitTestCase {
 		update_post_meta( $command_id, 'wpce_result_data', '{"existing":"value"}' );
 
 		$controller = new REST_Controller();
-		$controller->register_routes();
 
 		$request = new \WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
-		$request->set_param( 'id', $command_id );
+		$request->set_url_params( [ 'id' => $command_id ] );
 		$request->set_body_params(
 			[
 				'status'      => 'awaiting_input',
