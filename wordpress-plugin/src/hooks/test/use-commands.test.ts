@@ -3,15 +3,20 @@ jest.mock('@wordpress/data', () => ({
 	useDispatch: jest.fn(() => ({})),
 }));
 jest.mock('../../store', () => ({ __esModule: true, default: 'mock-store' }));
+jest.mock('../../sync/command-sync', () => ({
+	subscribeToCommandSync: jest.fn(() => jest.fn()),
+}));
 
 import { renderHook, act } from '@testing-library/react';
 import { useSelect, useDispatch } from '@wordpress/data';
 import store from '../../store';
 import { useCommands } from '../use-commands';
+import { subscribeToCommandSync } from '../../sync/command-sync';
 import type { Command } from '../../store/types';
 
 const mockedUseSelect = useSelect as jest.Mock;
 const mockedUseDispatch = useDispatch as jest.Mock;
+const mockedSubscribeToCommandSync = subscribeToCommandSync as jest.Mock;
 
 const MOCK_COMMAND: Command = {
 	id: 42,
@@ -24,7 +29,7 @@ const MOCK_COMMAND: Command = {
 };
 
 function mockUseSelect(
-	storeData: Record<string, (...args: any[]) => any>
+	storeData: Record<string, (...args: unknown[]) => unknown>
 ): void {
 	mockedUseSelect.mockImplementation((selector: Function) => {
 		const select = (s: unknown) => {
@@ -42,17 +47,16 @@ describe('useCommands', () => {
 	let cancelCommand: jest.Mock;
 	let respondToCommand: jest.Mock;
 	let fetchActiveCommand: jest.Mock;
-	let pollActiveCommand: jest.Mock;
+	let handleSyncUpdate: jest.Mock;
 
 	beforeEach(() => {
 		jest.clearAllMocks();
-		jest.useFakeTimers();
 
 		submitCommand = jest.fn();
 		cancelCommand = jest.fn();
 		respondToCommand = jest.fn();
 		fetchActiveCommand = jest.fn();
-		pollActiveCommand = jest.fn();
+		handleSyncUpdate = jest.fn();
 
 		mockUseSelect({
 			getActiveCommand: () => null,
@@ -67,12 +71,8 @@ describe('useCommands', () => {
 			cancelCommand,
 			respondToCommand,
 			fetchActiveCommand,
-			pollActiveCommand,
+			handleSyncUpdate,
 		});
-	});
-
-	afterEach(() => {
-		jest.useRealTimers();
 	});
 
 	it('returns command state from useSelect', () => {
@@ -99,58 +99,56 @@ describe('useCommands', () => {
 		expect(fetchActiveCommand).toHaveBeenCalledWith(123);
 	});
 
-	it('does not call fetchActiveCommand when postId is falsy', () => {
+	it('does not call fetchActiveCommand when postId is null', () => {
 		renderHook(() => useCommands(null));
 
 		expect(fetchActiveCommand).not.toHaveBeenCalled();
 	});
 
-	it('sets up polling when activeCommand is present', () => {
-		mockUseSelect({
-			getActiveCommand: () => MOCK_COMMAND,
-			isSubmitting: () => false,
-			isResponding: () => false,
-			getCommandError: () => null,
-			getCommandHistory: () => [],
-		});
-
+	it('subscribes to command sync on mount', () => {
 		renderHook(() => useCommands(123));
 
-		act(() => {
-			jest.advanceTimersByTime(3000);
-		});
-
-		expect(pollActiveCommand).toHaveBeenCalledTimes(1);
+		expect(mockedSubscribeToCommandSync).toHaveBeenCalledTimes(1);
+		expect(mockedSubscribeToCommandSync).toHaveBeenCalledWith(
+			expect.any(Function)
+		);
 	});
 
-	it('does not poll when no active command', () => {
-		renderHook(() => useCommands(123));
-
-		act(() => {
-			jest.advanceTimersByTime(9000);
-		});
-
-		expect(pollActiveCommand).not.toHaveBeenCalled();
-	});
-
-	it('stops polling on unmount', () => {
-		mockUseSelect({
-			getActiveCommand: () => MOCK_COMMAND,
-			isSubmitting: () => false,
-			isResponding: () => false,
-			getCommandError: () => null,
-			getCommandHistory: () => [],
-		});
+	it('unsubscribes from command sync on unmount', () => {
+		const unsubscribe = jest.fn();
+		mockedSubscribeToCommandSync.mockReturnValue(unsubscribe);
 
 		const { unmount } = renderHook(() => useCommands(123));
-
 		unmount();
 
+		expect(unsubscribe).toHaveBeenCalledTimes(1);
+	});
+
+	it('calls handleSyncUpdate when sync provides command changes', () => {
+		let syncCallback: (
+			commands: Record<string, Command>
+		) => void = () => {};
+		mockedSubscribeToCommandSync.mockImplementation(
+			(cb: (commands: Record<string, Command>) => void) => {
+				syncCallback = cb;
+				return jest.fn();
+			}
+		);
+
+		renderHook(() => useCommands(123));
+
+		const commands = {
+			'42': {
+				...MOCK_COMMAND,
+				status: 'awaiting_input' as const,
+			},
+		};
+
 		act(() => {
-			jest.advanceTimersByTime(9000);
+			syncCallback(commands);
 		});
 
-		expect(pollActiveCommand).not.toHaveBeenCalled();
+		expect(handleSyncUpdate).toHaveBeenCalledWith(commands, 123);
 	});
 
 	it('submit() calls submitCommand with correct args', () => {

@@ -449,6 +449,47 @@ const actions = {
 				// Silently fail — will retry on the next poll cycle.
 			}
 		},
+
+	/**
+	 * Handle a command sync update from the Yjs state map.
+	 * Dispatches UPDATE_ACTIVE_COMMAND or CLEAR_ACTIVE_COMMAND based
+	 * on the command status.
+	 *
+	 * @param commands Map of command ID → command object from the Y.Map.
+	 * @param postId   The current post ID to filter commands for.
+	 * @return Thunk action.
+	 */
+	handleSyncUpdate:
+		(commands: Record<string, Command>, postId: number | null) =>
+		({ dispatch }: StoreThunkArgs) => {
+			const active = Object.values(commands).find(
+				(cmd) =>
+					cmd.post_id === postId &&
+					!TERMINAL_STATUSES.includes(cmd.status)
+			);
+
+			if (active) {
+				dispatch({
+					type: 'UPDATE_ACTIVE_COMMAND',
+					command: active,
+				});
+				return;
+			}
+
+			// Check if a command just reached terminal status.
+			const terminal = Object.values(commands).find(
+				(cmd) =>
+					cmd.post_id === postId &&
+					TERMINAL_STATUSES.includes(cmd.status)
+			);
+
+			if (terminal) {
+				dispatch({
+					type: 'CLEAR_ACTIVE_COMMAND',
+					command: terminal,
+				});
+			}
+		},
 };
 
 /**
