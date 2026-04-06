@@ -16,6 +16,13 @@ import {
 	type CommandStatus,
 } from '../../shared/commands.js';
 
+/**
+ * Transaction origin used for local writes. Must match the origin
+ * checked by the session manager's updateV2 handler so updates are
+ * queued for sync.
+ */
+const LOCAL_ORIGIN = 'local';
+
 // --- Protocol version compatibility ---
 
 /** Protocol versions this MCP server supports. */
@@ -165,7 +172,7 @@ export class CommandClient {
 
 		map.doc?.transact(() => {
 			map.set('commands', updated);
-		});
+		}, LOCAL_ORIGIN);
 	}
 
 	/**
@@ -182,7 +189,7 @@ export class CommandClient {
 
 		map.doc?.transact(() => {
 			map.set('commands', remaining);
-		});
+		}, LOCAL_ORIGIN);
 	}
 
 	// --- REST methods ---
@@ -213,11 +220,14 @@ export class CommandClient {
 		);
 
 		// Mirror the updated state to the Y.Doc so the browser sees it.
-		// Remove terminal commands to prevent stale data persisting.
+		this.writeCommandToDoc(command);
+
+		// Clean up terminal commands after a delay so the browser can
+		// see the terminal status (for toast notifications) before removal.
 		if (TERMINAL_STATUSES.includes(command.status)) {
-			this.removeCommandFromDoc(command.id);
-		} else {
-			this.writeCommandToDoc(command);
+			setTimeout(() => {
+				this.removeCommandFromDoc(command.id);
+			}, 5000);
 		}
 
 		return command;

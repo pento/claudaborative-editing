@@ -18,6 +18,9 @@
  * WordPress dependencies
  */
 import { dispatch, resolveSelect } from '@wordpress/data';
+import apiFetch from '@wordpress/api-fetch';
+// eslint-disable-next-line import/no-extraneous-dependencies -- externalized by @wordpress/scripts
+import { Y, Awareness } from '@wordpress/sync';
 import { TERMINAL_STATUSES } from '#shared/commands';
 import { store as coreDataStore } from '@wordpress/core-data';
 
@@ -26,11 +29,10 @@ import { store as coreDataStore } from '@wordpress/core-data';
  */
 import type { Command } from '../store/types';
 
-// Use dynamic import type to avoid bundling yjs (it's loaded by Gutenberg)
-type YDoc = import('yjs').Doc;
-type YMap = import('yjs').Map<unknown>;
-type YMapEvent = import('yjs').YMapEvent<unknown>;
-type YAwareness = import('y-protocols/awareness').Awareness;
+// Types derived from the @wordpress/sync re-exports of Yjs.
+type YDoc = InstanceType<typeof Y.Doc>;
+type YMap = ReturnType<YDoc['getMap']>;
+type YMapEvent = Y.YMapEvent<unknown>;
 
 /** Whether the entity has been registered and sync started. */
 let initialized = false;
@@ -39,7 +41,7 @@ let initialized = false;
 let commandDoc: YDoc | null = null;
 
 /** Captured Awareness instance from the collection sync initialization. */
-let commandAwareness: YAwareness | null = null;
+let commandAwareness: InstanceType<typeof Awareness> | null = null;
 
 /** The browserType value sent by the MCP server in awareness state. */
 const MCP_BROWSER_TYPE = 'Claudaborative Editing MCP';
@@ -92,8 +94,6 @@ function installFetchInterceptor(): void {
 					(r) => r.room === 'root/wpce_commands'
 				);
 				if (cmdRoom && cmdRoom.updates.length === 0) {
-					// eslint-disable-next-line @typescript-eslint/no-require-imports, import/no-extraneous-dependencies
-					const Y = require('yjs') as typeof import('yjs');
 					const sv = uint8ToBase64(Y.encodeStateVector(commandDoc));
 					if (sv !== lastInjectedStateVector) {
 						const update = Y.encodeStateAsUpdateV2(commandDoc);
@@ -137,10 +137,7 @@ const syncConfig = {
 
 		// Create a real Awareness instance so the polling manager populates
 		// it with remote awareness states (used for MCP connection detection).
-		// eslint-disable-next-line @typescript-eslint/no-require-imports, import/no-extraneous-dependencies
-		const { Awareness } = require('y-protocols/awareness') as {
-			Awareness: new (doc: YDoc) => YAwareness;
-		};
+		// Use Awareness from @wordpress/sync to avoid duplicate Yjs instances.
 		commandAwareness = new Awareness(commandDoc);
 		return commandAwareness;
 	},
@@ -185,6 +182,74 @@ export function initCommandSync(): void {
 		'wpce_commands',
 		{ per_page: -1 }
 	);
+
+	// Periodically validate commands in the Y.Doc against the REST API.
+	// Stale data can persist from previous sessions since the sync server
+	// stores Y.Doc state. This observer removes commands that no longer
+	// exist or have reached a terminal status in the REST API.
+	void startStaleCommandCleanup();
+}
+
+/**
+ * Periodically check for stale commands in the Y.Doc and remove them.
+ * Validates against the REST API to ensure only active commands remain.
+ */
+async function startStaleCommandCleanup(): Promise<void> {
+	// Wait for the doc to be available
+	await new Promise<void>((resolve) => {
+		const check = setInterval(() => {
+			if (getStateMap()) {
+				clearInterval(check);
+				resolve();
+			}
+		}, 200);
+	});
+
+	// Run cleanup now and whenever the state map changes
+	const runCleanup = async () => {
+		const stateMap = getStateMap();
+		if (!stateMap) return;
+
+		const commands = stateMap.get('commands') as
+			| Record<string, unknown>
+			| undefined;
+		if (!commands || Object.keys(commands).length === 0) return;
+
+		try {
+			const apiCommands = await apiFetch<Command[]>({
+				path: '/wpce/v1/commands',
+			});
+			const activeIds = new Set(
+				apiCommands
+					.filter((c) => !TERMINAL_STATUSES.includes(c.status))
+					.map((c) => String(c.id))
+			);
+
+			const cleaned: Record<string, unknown> = {};
+			let changed = false;
+			for (const [id, value] of Object.entries(commands)) {
+				if (activeIds.has(id)) {
+					cleaned[id] = value;
+				} else {
+					changed = true;
+				}
+			}
+
+			if (changed) {
+				commandDoc?.transact(() => {
+					stateMap.set('commands', cleaned);
+					stateMap.set('savedAt', Date.now());
+				});
+			}
+		} catch {
+			// Best-effort
+		}
+	};
+
+	// Run immediately, then again after a delay to catch data that
+	// arrives from the sync server after init.
+	await runCleanup();
+	setTimeout(() => void runCleanup(), 5000);
 }
 
 /**
