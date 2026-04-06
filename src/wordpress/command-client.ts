@@ -10,7 +10,11 @@
 import * as Y from 'yjs';
 import { debugLog } from '../debug-log.js';
 import type { WordPressApiClient } from './api-client.js';
-import type { CommandSlug, CommandStatus } from '../../shared/commands.js';
+import {
+	TERMINAL_STATUSES,
+	type CommandSlug,
+	type CommandStatus,
+} from '../../shared/commands.js';
 
 // --- Protocol version compatibility ---
 
@@ -209,7 +213,12 @@ export class CommandClient {
 		);
 
 		// Mirror the updated state to the Y.Doc so the browser sees it.
-		this.writeCommandToDoc(command);
+		// Remove terminal commands to prevent stale data persisting.
+		if (TERMINAL_STATUSES.includes(command.status)) {
+			this.removeCommandFromDoc(command.id);
+		} else {
+			this.writeCommandToDoc(command);
+		}
 
 		return command;
 	}

@@ -18,6 +18,7 @@
  * WordPress dependencies
  */
 import { dispatch, resolveSelect } from '@wordpress/data';
+import { TERMINAL_STATUSES } from '#shared/commands';
 import { store as coreDataStore } from '@wordpress/core-data';
 
 /**
@@ -197,13 +198,43 @@ export function writeCommandToSync(command: Command): void {
 	if (!stateMap) return;
 
 	// Read current commands, update the specific one, write back.
-	const commands =
-		(stateMap.get('commands') as Record<string, unknown> | undefined) ?? {};
+	const commands = {
+		...((stateMap.get('commands') as Record<string, unknown> | undefined) ??
+			{}),
+	};
 
-	const updated = { ...commands, [String(command.id)]: { ...command } };
+	if (TERMINAL_STATUSES.includes(command.status)) {
+		// Remove terminal commands to prevent stale data persisting
+		// in the Y.Doc after the CPT post is deleted.
+		delete commands[String(command.id)];
+	} else {
+		commands[String(command.id)] = { ...command };
+	}
 
 	commandDoc?.transact(() => {
-		stateMap.set('commands', updated);
+		stateMap.set('commands', commands);
+		stateMap.set('savedAt', Date.now());
+	});
+}
+
+/**
+ * Remove a specific command from the Y.Doc's state map.
+ *
+ * @param commandId The command ID to remove.
+ */
+export function removeCommandFromSync(commandId: number): void {
+	const stateMap = getStateMap();
+	if (!stateMap) return;
+
+	const commands = {
+		...((stateMap.get('commands') as Record<string, unknown> | undefined) ??
+			{}),
+	};
+
+	delete commands[String(commandId)];
+
+	commandDoc?.transact(() => {
+		stateMap.set('commands', commands);
 		stateMap.set('savedAt', Date.now());
 	});
 }
