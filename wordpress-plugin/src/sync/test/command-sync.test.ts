@@ -537,6 +537,271 @@ describe('command-sync', () => {
 		});
 	});
 
+	describe('fetch interceptor', () => {
+		let originalFetch: typeof window.fetch;
+
+		beforeEach(() => {
+			originalFetch = window.fetch;
+		});
+
+		afterEach(() => {
+			window.fetch = originalFetch;
+		});
+
+		it('injects compaction when command room has empty updates', async () => {
+			// Set up a spy as the original fetch before the interceptor captures it.
+			const fetchSpy = jest
+				.fn()
+				.mockResolvedValue({
+					ok: true,
+					text: () => Promise.resolve('ok'),
+				});
+			window.fetch = fetchSpy;
+
+			const mod = loadModule();
+			mod.initCommandSync();
+
+			const syncConfig = mockAddEntities.mock.calls[0][0][0].syncConfig;
+			const doc = new MockYDoc();
+			syncConfig.createAwareness(doc);
+			// installFetchInterceptor ran inside createAwareness,
+			// capturing fetchSpy as origFetch, and replacing window.fetch.
+
+			// Put some data in the doc so it has state to encode.
+			doc.getMap('state').set('commands', { '42': MOCK_COMMAND });
+
+			// Build a wp-sync request body with the command room having empty updates.
+			const body = JSON.stringify({
+				rooms: [
+					{
+						room: 'postType/post:123',
+						updates: [{ type: 'update', data: 'abc' }],
+					},
+					{ room: 'root/wpce_commands', updates: [] },
+				],
+			});
+
+			await window.fetch(
+				'https://example.com/wp-json/wp-sync/v1/updates',
+				{
+					method: 'POST',
+					body,
+				}
+			);
+
+			// The interceptor should have injected a compaction update.
+			const passedBody = JSON.parse(
+				fetchSpy.mock.calls[0][1].body as string
+			) as {
+				rooms: Array<{
+					room: string;
+					updates: Array<{ type: string; data: string }>;
+				}>;
+			};
+			const cmdRoom = passedBody.rooms.find(
+				(r) => r.room === 'root/wpce_commands'
+			);
+			expect(cmdRoom).toBeDefined();
+			expect(cmdRoom!.updates).toHaveLength(1);
+			expect(cmdRoom!.updates[0].type).toBe('compaction');
+			expect(cmdRoom!.updates[0].data).toBeTruthy();
+		});
+
+		it('does not inject when command room already has updates', async () => {
+			const fetchSpy = jest
+				.fn()
+				.mockResolvedValue({
+					ok: true,
+					text: () => Promise.resolve('ok'),
+				});
+			window.fetch = fetchSpy;
+
+			const mod = loadModule();
+			mod.initCommandSync();
+
+			const syncConfig = mockAddEntities.mock.calls[0][0][0].syncConfig;
+			const doc = new MockYDoc();
+			syncConfig.createAwareness(doc);
+
+			const body = JSON.stringify({
+				rooms: [
+					{
+						room: 'root/wpce_commands',
+						updates: [{ type: 'update', data: 'existing' }],
+					},
+				],
+			});
+
+			await window.fetch(
+				'https://example.com/wp-json/wp-sync/v1/updates',
+				{
+					method: 'POST',
+					body,
+				}
+			);
+
+			// The body should be passed through unchanged.
+			const passedBody = JSON.parse(
+				fetchSpy.mock.calls[0][1].body as string
+			) as {
+				rooms: Array<{
+					room: string;
+					updates: Array<{ type: string; data: string }>;
+				}>;
+			};
+			const cmdRoom = passedBody.rooms.find(
+				(r) => r.room === 'root/wpce_commands'
+			);
+			expect(cmdRoom!.updates).toHaveLength(1);
+			expect(cmdRoom!.updates[0].type).toBe('update');
+			expect(cmdRoom!.updates[0].data).toBe('existing');
+		});
+
+		it('passes non-wp-sync requests through unchanged', async () => {
+			const fetchSpy = jest
+				.fn()
+				.mockResolvedValue({
+					ok: true,
+					text: () => Promise.resolve('ok'),
+				});
+			window.fetch = fetchSpy;
+
+			const mod = loadModule();
+			mod.initCommandSync();
+
+			const syncConfig = mockAddEntities.mock.calls[0][0][0].syncConfig;
+			const doc = new MockYDoc();
+			syncConfig.createAwareness(doc);
+
+			const body = JSON.stringify({ data: 'test' });
+			await window.fetch('https://example.com/wp-json/wp/v2/posts', {
+				method: 'POST',
+				body,
+			});
+
+			// Should pass through without modification.
+			expect(fetchSpy.mock.calls[0][1].body).toBe(body);
+		});
+	});
+
+	describe('stale command cleanup', () => {
+		let originalFetch: typeof window.fetch;
+
+		beforeEach(() => {
+			originalFetch = window.fetch;
+		});
+
+		afterEach(() => {
+			window.fetch = originalFetch;
+		});
+
+		it('removes stale commands from the state map', async () => {
+			jest.useFakeTimers();
+
+			// Set up a no-op fetch so the interceptor doesn't fail.
+			window.fetch = jest
+				.fn()
+				.mockResolvedValue({
+					ok: true,
+					text: () => Promise.resolve('ok'),
+				});
+
+			// Import apiFetch and configure it to return only command 43 as active.
+			const apiFetchMock =
+				// eslint-disable-next-line @typescript-eslint/no-require-imports
+				require('@wordpress/api-fetch') as {
+					default: jest.Mock;
+				};
+			apiFetchMock.default.mockResolvedValue([
+				{ id: 43, status: 'running' },
+			]);
+
+			const mod = loadModule();
+			mod.initCommandSync();
+
+			const syncConfig = mockAddEntities.mock.calls[0][0][0].syncConfig;
+			const doc = new MockYDoc();
+			syncConfig.createAwareness(doc);
+
+			// Add two commands to the state map — 42 and 43.
+			const stateMap = doc.getMap('state');
+			stateMap.set('commands', {
+				'42': { ...MOCK_COMMAND, id: 42 },
+				'43': { ...MOCK_COMMAND, id: 43 },
+			});
+
+			// The cleanup polls for the doc every 200ms. Advance to trigger it.
+			jest.advanceTimersByTime(200);
+
+			// Flush the apiFetch promise.
+			await Promise.resolve();
+			await Promise.resolve();
+			await Promise.resolve();
+
+			// Command 42 should have been removed (not in API response),
+			// command 43 should remain (active in API response).
+			const commands = stateMap.get('commands') as Record<
+				string,
+				unknown
+			>;
+			expect(commands['42']).toBeUndefined();
+			expect(commands['43']).toBeDefined();
+
+			jest.useRealTimers();
+		});
+	});
+
+	describe('subscribeToMcpConnection (polling fallback unsubscribe)', () => {
+		let originalFetch: typeof window.fetch;
+
+		beforeEach(() => {
+			originalFetch = window.fetch;
+		});
+
+		afterEach(() => {
+			window.fetch = originalFetch;
+		});
+
+		it('removes awareness change handler on unsubscribe after polling attaches', () => {
+			jest.useFakeTimers();
+
+			window.fetch = jest
+				.fn()
+				.mockResolvedValue({
+					ok: true,
+					text: () => Promise.resolve('ok'),
+				});
+
+			const mod = loadModule();
+			mod.initCommandSync();
+
+			// Subscribe BEFORE awareness is created — enters the polling fallback.
+			const callback = jest.fn();
+			const unsubscribe = mod.subscribeToMcpConnection(callback);
+
+			// Create awareness so the polling can attach.
+			const syncConfig = mockAddEntities.mock.calls[0][0][0].syncConfig;
+			const doc = new MockYDoc();
+			syncConfig.createAwareness(doc);
+
+			// Advance timers so the polling interval finds awareness.
+			jest.advanceTimersByTime(200);
+
+			// The callback should have been called with initial state.
+			expect(callback).toHaveBeenCalledWith(false);
+
+			// Unsubscribe — this should call off('change', handler).
+			unsubscribe();
+
+			// Trigger a change — callback should NOT be called again.
+			callback.mockClear();
+			capturedAwareness!._triggerChange();
+			expect(callback).not.toHaveBeenCalled();
+
+			jest.useRealTimers();
+		});
+	});
+
 	describe('subscribeToCommandSync', () => {
 		it('returns unsubscribe function', () => {
 			const mod = loadModule();

@@ -621,4 +621,238 @@ describe('ConversationPanel', () => {
 
 		expect(respondToCommand).not.toHaveBeenCalled();
 	});
+
+	it('focuses the textarea when entering awaiting_input state', () => {
+		jest.useFakeTimers();
+
+		mockedUseCommands.mockReturnValue({
+			activeCommand: {
+				id: 1,
+				prompt: 'compose',
+				status: 'awaiting_input',
+				post_id: 100,
+				result_data: {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'Hello',
+							timestamp: '2026-04-06T10:00:00Z',
+						},
+					],
+				},
+			},
+			isResponding: false,
+			respondToCommand: jest.fn(),
+			cancel: jest.fn(),
+		});
+
+		render(<ConversationPanel />);
+
+		const textarea = screen.getByTestId('conversation-textarea');
+		const focusSpy = jest.spyOn(textarea, 'focus');
+
+		jest.advanceTimersByTime(100);
+
+		expect(focusSpy).toHaveBeenCalled();
+
+		focusSpy.mockRestore();
+		jest.useRealTimers();
+	});
+
+	it('does not call respondToCommand when input is empty', () => {
+		const respondToCommand = jest.fn().mockResolvedValue(undefined);
+		mockedUseCommands.mockReturnValue({
+			activeCommand: {
+				id: 1,
+				prompt: 'compose',
+				status: 'awaiting_input',
+				post_id: 100,
+				result_data: {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'Hello',
+							timestamp: '2026-04-06T10:00:00Z',
+						},
+					],
+				},
+			},
+			isResponding: false,
+			respondToCommand,
+			cancel: jest.fn(),
+		});
+
+		render(<ConversationPanel />);
+
+		// Click Send without typing anything.
+		fireEvent.click(screen.getByText('Send'));
+
+		expect(respondToCommand).not.toHaveBeenCalled();
+	});
+
+	it('calls createNotice when respondToCommand rejects on send', async () => {
+		const mockCreateNotice = jest.fn();
+		mockedUseDispatch.mockImplementation((storeNameOrDescriptor?: any) => {
+			if (
+				storeNameOrDescriptor === 'core/interface' ||
+				storeNameOrDescriptor?.name === 'core/interface'
+			) {
+				return { enableComplementaryArea: jest.fn() };
+			}
+			return { createNotice: mockCreateNotice };
+		});
+
+		const respondToCommand = jest
+			.fn()
+			.mockRejectedValue(new Error('fail'));
+		mockedUseCommands.mockReturnValue({
+			activeCommand: {
+				id: 1,
+				prompt: 'compose',
+				status: 'awaiting_input',
+				post_id: 100,
+				result_data: {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'Hello',
+							timestamp: '2026-04-06T10:00:00Z',
+						},
+					],
+				},
+			},
+			isResponding: false,
+			respondToCommand,
+			cancel: jest.fn(),
+		});
+
+		render(<ConversationPanel />);
+
+		const textarea = screen.getByTestId(
+			'conversation-textarea'
+		) as HTMLTextAreaElement;
+		fireEvent.change(textarea, { target: { value: 'My message' } });
+		fireEvent.click(screen.getByText('Send'));
+
+		// Flush microtasks so the catch handler runs.
+		await new Promise(process.nextTick);
+
+		expect(mockCreateNotice).toHaveBeenCalledWith(
+			'error',
+			'Failed to send response.',
+			{ type: 'snackbar' }
+		);
+	});
+
+	it('calls respondToCommand with approve when Approve outline is clicked', () => {
+		const respondToCommand = jest.fn().mockResolvedValue(undefined);
+		mockedUseCommands.mockReturnValue({
+			activeCommand: {
+				id: 1,
+				prompt: 'compose',
+				status: 'awaiting_input',
+				post_id: 100,
+				result_data: {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'Here is the outline.',
+							timestamp: '2026-04-06T10:00:00Z',
+						},
+					],
+					planReady: true,
+				},
+			},
+			isResponding: false,
+			respondToCommand,
+			cancel: jest.fn(),
+		});
+
+		render(<ConversationPanel />);
+
+		fireEvent.click(screen.getByText('Approve outline'));
+
+		expect(respondToCommand).toHaveBeenCalledWith(1, 'approve');
+	});
+
+	it('calls createNotice when respondToCommand rejects on approve', async () => {
+		const mockCreateNotice = jest.fn();
+		mockedUseDispatch.mockImplementation((storeNameOrDescriptor?: any) => {
+			if (
+				storeNameOrDescriptor === 'core/interface' ||
+				storeNameOrDescriptor?.name === 'core/interface'
+			) {
+				return { enableComplementaryArea: jest.fn() };
+			}
+			return { createNotice: mockCreateNotice };
+		});
+
+		const respondToCommand = jest
+			.fn()
+			.mockRejectedValue(new Error('fail'));
+		mockedUseCommands.mockReturnValue({
+			activeCommand: {
+				id: 1,
+				prompt: 'compose',
+				status: 'awaiting_input',
+				post_id: 100,
+				result_data: {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'Here is the outline.',
+							timestamp: '2026-04-06T10:00:00Z',
+						},
+					],
+					planReady: true,
+				},
+			},
+			isResponding: false,
+			respondToCommand,
+			cancel: jest.fn(),
+		});
+
+		render(<ConversationPanel />);
+
+		fireEvent.click(screen.getByText('Approve outline'));
+
+		// Flush microtasks so the catch handler runs.
+		await new Promise(process.nextTick);
+
+		expect(mockCreateNotice).toHaveBeenCalledWith(
+			'error',
+			'Failed to approve outline.',
+			{ type: 'snackbar' }
+		);
+	});
+
+	it('calls cancel with the command ID when Cancel is clicked', () => {
+		const cancel = jest.fn();
+		mockedUseCommands.mockReturnValue({
+			activeCommand: {
+				id: 7,
+				prompt: 'compose',
+				status: 'awaiting_input',
+				post_id: 100,
+				result_data: {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'Hello',
+							timestamp: '2026-04-06T10:00:00Z',
+						},
+					],
+				},
+			},
+			isResponding: false,
+			respondToCommand: jest.fn(),
+			cancel,
+		});
+
+		render(<ConversationPanel />);
+
+		fireEvent.click(screen.getByText('Cancel'));
+
+		expect(cancel).toHaveBeenCalledWith(7);
+	});
 });
