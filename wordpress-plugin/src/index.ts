@@ -21,6 +21,7 @@ import './store';
 import AiActionsMenu from './components/AiActionsMenu';
 import ConnectionStatus from './components/ConnectionStatus';
 import NotesIntegration from './components/NotesIntegration';
+import PrePublishPanel from './components/PrePublishPanel';
 
 registerPlugin('claudaborative-editing-ai-actions', {
 	render: AiActionsMenu,
@@ -32,4 +33,8 @@ registerPlugin('claudaborative-editing-status', {
 
 registerPlugin('claudaborative-editing-notes', {
 	render: NotesIntegration,
+});
+
+registerPlugin('claudaborative-editing-pre-publish', {
+	render: PrePublishPanel,
 });

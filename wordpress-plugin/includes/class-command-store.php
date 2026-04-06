@@ -106,6 +106,11 @@ class Command_Store {
 				'default'           => '',
 				'sanitize_callback' => 'sanitize_textarea_field',
 			],
+			'wpce_result_data'    => [
+				'type'              => 'string',
+				'default'           => '{}',
+				'sanitize_callback' => [ __CLASS__, 'sanitize_json' ],
+			],
 			'wpce_expires_at'     => [
 				'type'              => 'string',
 				'default'           => '',

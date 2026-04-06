@@ -12,6 +12,9 @@ export interface PostMetadata {
 	sticky?: boolean;
 	commentStatus?: string;
 	excerpt?: string;
+	categories?: string[];
+	tags?: string[];
+	featuredImage?: number;
 }
 
 /**
@@ -53,6 +56,21 @@ export function renderPost(
 		}
 		if (metadata.excerpt) {
 			parts.push(`Excerpt: "${metadata.excerpt}"`);
+		}
+		if (metadata.categories && metadata.categories.length > 0) {
+			parts.push(`Categories: ${metadata.categories.join(', ')}`);
+		}
+		if (metadata.tags && metadata.tags.length > 0) {
+			parts.push(`Tags: ${metadata.tags.join(', ')}`);
+		}
+		if (metadata.featuredImage !== undefined) {
+			if (metadata.featuredImage > 0) {
+				parts.push(
+					`Featured image: set (ID: ${metadata.featuredImage})`
+				);
+			} else {
+				parts.push('Featured image: not set');
+			}
 		}
 	}
 

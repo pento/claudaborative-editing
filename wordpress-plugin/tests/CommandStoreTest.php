@@ -49,6 +49,7 @@ class CommandStoreTest extends \WP_UnitTestCase {
 			'wpce_command_status',
 			'wpce_claimed_by',
 			'wpce_message',
+			'wpce_result_data',
 			'wpce_expires_at',
 		];
 
@@ -78,6 +79,16 @@ class CommandStoreTest extends \WP_UnitTestCase {
 		$post_id = self::factory()->post->create( [ 'post_type' => Command_Store::POST_TYPE ] );
 
 		$this->assertSame( '{}', get_post_meta( $post_id, 'wpce_arguments', true ) );
+	}
+
+	/**
+	 * The wpce_result_data meta should default to an empty JSON object.
+	 */
+	public function test_result_data_defaults_to_empty_json() {
+		/** @var int $post_id */
+		$post_id = self::factory()->post->create( [ 'post_type' => Command_Store::POST_TYPE ] );
+
+		$this->assertSame( '{}', get_post_meta( $post_id, 'wpce_result_data', true ) );
 	}
 
 	/**

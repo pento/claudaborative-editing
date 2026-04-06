@@ -32,6 +32,7 @@ class Command_Defs {
 		'respond-to-note',
 		'edit',
 		'translate',
+		'pre-publish-check',
 	];
 
 	/**

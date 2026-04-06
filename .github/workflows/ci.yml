@@ -179,5 +179,6 @@ jobs:
                       wordpress-plugin/src/**/*.test.ts
                       wordpress-plugin/src/**/*.test.tsx
                       wordpress-plugin/src/**/types.ts
+                      wordpress-plugin/src/shims/*
                   coverage-label: plugin-typescript
                   github-token: ${{ secrets.GITHUB_TOKEN }}

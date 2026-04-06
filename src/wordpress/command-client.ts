@@ -123,11 +123,15 @@ export class CommandClient {
 	async updateCommandStatus(
 		id: number,
 		status: CommandStatus,
-		message?: string
+		message?: string,
+		resultData?: string
 	): Promise<Command> {
 		const body: Record<string, unknown> = { status };
 		if (message !== undefined) {
 			body.message = message;
+		}
+		if (resultData !== undefined) {
+			body.result_data = resultData;
 		}
 		return this.apiClient.request<Command>(`/wpce/v1/commands/${id}`, {
 			method: 'PATCH',

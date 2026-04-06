@@ -62,7 +62,8 @@ function setupMockCommandClient(pluginStatusResult?: {
 				(
 					id: number,
 					status: string,
-					message?: string
+					message?: string,
+					resultData?: string
 				) => Promise<Command>
 			>()
 			.mockResolvedValue(makeCommand()),
@@ -611,7 +612,32 @@ describe('CommandHandler', () => {
 			expect(instance.updateCommandStatus).toHaveBeenCalledWith(
 				42,
 				'completed',
-				'All done'
+				'All done',
+				undefined
+			);
+		});
+
+		it('delegates resultData to CommandClient', async () => {
+			const { instance } = setupMockCommandClient({
+				resolve: makePluginStatus(),
+			});
+			instance.updateCommandStatus.mockResolvedValue(
+				makeCommand({ status: 'completed' })
+			);
+
+			await handler.start(createMockApiClient());
+			await handler.updateCommandStatus(
+				42,
+				'completed',
+				'Done',
+				'{"foo":"bar"}'
+			);
+
+			expect(instance.updateCommandStatus).toHaveBeenCalledWith(
+				42,
+				'completed',
+				'Done',
+				'{"foo":"bar"}'
 			);
 		});
 
@@ -629,6 +655,7 @@ describe('CommandHandler', () => {
 			expect(instance.updateCommandStatus).toHaveBeenCalledWith(
 				42,
 				'running',
+				undefined,
 				undefined
 			);
 		});

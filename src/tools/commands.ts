@@ -24,11 +24,38 @@ export function registerCommandTools(
 					.string()
 					.optional()
 					.describe('Status message or error description'),
+				resultData: z
+					.string()
+					.optional()
+					.refine(
+						(val) => {
+							if (val === undefined) return true;
+							try {
+								const parsed: unknown = JSON.parse(val);
+								return (
+									typeof parsed === 'object' &&
+									parsed !== null &&
+									!Array.isArray(parsed)
+								);
+							} catch {
+								return false;
+							}
+						},
+						{ message: 'resultData must be a JSON object string' }
+					)
+					.describe(
+						'Optional JSON object string of structured result data for the command response'
+					),
 			},
 		},
-		async ({ commandId, status, message }) => {
+		async ({ commandId, status, message, resultData }) => {
 			try {
-				await session.updateCommandStatus(commandId, status, message);
+				await session.updateCommandStatus(
+					commandId,
+					status,
+					message,
+					resultData
+				);
 				return {
 					content: [
 						{

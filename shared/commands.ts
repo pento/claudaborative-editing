@@ -13,7 +13,8 @@ export type CommandSlug =
 	| 'respond-to-notes'
 	| 'respond-to-note'
 	| 'edit'
-	| 'translate';
+	| 'translate'
+	| 'pre-publish-check';
 
 export interface CommandArgDef {
 	type: 'string' | 'number';
@@ -27,6 +28,8 @@ export interface CommandDefinition {
 	description: string;
 	progressLabel: string;
 	args: Record<string, CommandArgDef>;
+	/** Override the auto-generated channel instruction hint for this command. */
+	channelHint?: string;
 }
 
 // --- Command definitions ---
@@ -92,6 +95,15 @@ export const COMMANDS: Record<CommandSlug, CommandDefinition> = {
 				description: 'Target language',
 			},
 		},
+	},
+	'pre-publish-check': {
+		slug: 'pre-publish-check',
+		label: 'Pre-Publish Check',
+		description: 'Suggest metadata improvements before publishing',
+		progressLabel: 'Checking\u2026',
+		args: {},
+		channelHint:
+			'"pre-publish-check" (Read-only metadata check — suggest excerpt, categories, tags, and slug. Do NOT add notes, edit blocks, or call any tool except wp_update_command_status. Return suggestions as JSON in the resultData parameter.)',
 	},
 };
 

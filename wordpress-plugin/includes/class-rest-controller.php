@@ -119,15 +119,24 @@ class REST_Controller extends \WP_REST_Controller {
 					'callback'            => [ $this, 'update_command' ],
 					'permission_callback' => [ $this, 'edit_posts_permissions' ],
 					'args'                => [
-						'status'  => [
+						'status'      => [
 							'required'          => true,
 							'type'              => 'string',
 							'sanitize_callback' => 'sanitize_text_field',
 						],
-						'message' => [
+						'message'     => [
 							'required'          => false,
 							'type'              => 'string',
 							'sanitize_callback' => 'sanitize_textarea_field',
+						],
+						'result_data' => [
+							'required'          => false,
+							'type'              => 'string',
+							'sanitize_callback' => [ Command_Store::class, 'sanitize_json' ],
+							'validate_callback' => static function ( $value ) {
+								// Only accept JSON objects, not arrays or scalars.
+								return is_object( json_decode( $value ) );
+							},
 						],
 					],
 				],
@@ -455,6 +464,11 @@ class REST_Controller extends \WP_REST_Controller {
 		$message = $request->get_param( 'message' );
 		if ( null !== $message ) {
 			update_post_meta( $command->ID, 'wpce_message', $message );
+		}
+
+		$result_data = $request->get_param( 'result_data' );
+		if ( null !== $result_data ) {
+			update_post_meta( $command->ID, 'wpce_result_data', $result_data );
 		}
 
 		if ( 'running' === $new_status && 'pending' === $current_status ) {

@@ -20,6 +20,7 @@ const MOCK_COMMAND: Command = {
 	status: 'running',
 	arguments: {},
 	message: null,
+	result_data: null,
 };
 
 function mockUseSelect(

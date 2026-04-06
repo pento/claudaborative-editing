@@ -15,6 +15,7 @@ import { registerCommandTools } from './tools/commands.js';
 import { registerEditingPrompts } from './prompts/editing.js';
 import { registerReviewPrompts } from './prompts/review.js';
 import { registerAuthoringPrompts } from './prompts/authoring.js';
+import { registerPrePublishPrompts } from './prompts/pre-publish.js';
 
 import { VERSION } from './version.js';
 export { VERSION };
@@ -46,13 +47,15 @@ export async function startServer(): Promise<void> {
 	// Build the prompt→action mapping for channel instructions from shared definitions
 	const promptDescriptions = Object.values(COMMANDS)
 		.map((cmd) => {
+			if (cmd.channelHint) {
+				return cmd.channelHint;
+			}
 			const argHints = Object.entries(cmd.args)
 				.map(([name]) => `arguments.${name}`)
 				.join(', ');
-			const hint = argHints
+			return argHints
 				? `"${cmd.slug}" (${cmd.description}, using ${argHints})`
 				: `"${cmd.slug}" (${cmd.description})`;
-			return hint;
 		})
 		.join(', ');
 
@@ -102,6 +105,7 @@ When you receive a <channel source="wpce"> event, it contains a command from a u
 	registerEditingPrompts(server, session);
 	registerReviewPrompts(server, session);
 	registerAuthoringPrompts(server, session);
+	registerPrePublishPrompts(server, session);
 
 	// Start stdio transport
 	const transport = new StdioServerTransport();

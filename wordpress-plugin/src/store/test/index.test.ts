@@ -54,6 +54,7 @@ const MOCK_COMMAND: Command = {
 	status: 'pending',
 	arguments: {},
 	message: null,
+	result_data: null,
 };
 
 describe('AI Actions store', () => {
