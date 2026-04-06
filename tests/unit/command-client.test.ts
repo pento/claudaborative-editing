@@ -183,6 +183,88 @@ describe('CommandClient', () => {
 			);
 		});
 
+		it('schedules removal from Y.Map for terminal statuses', async () => {
+			vi.useFakeTimers();
+
+			const { localDoc } = createSyncedDocs();
+			const documentMap = localDoc.getMap('document');
+			client.startObserving(documentMap);
+
+			const completed = fakeCommand({ id: 7, status: 'completed' });
+			apiClient.request.mockResolvedValue(completed);
+
+			await client.updateCommandStatus(7, 'completed');
+
+			// Command should be written to the Y.Map immediately
+			let commands = documentMap.get('commands') as Record<
+				string,
+				unknown
+			>;
+			expect(commands['7']).toBeDefined();
+
+			// After 5s, the command should be removed
+			vi.advanceTimersByTime(5000);
+
+			commands = documentMap.get('commands') as Record<string, unknown>;
+			expect(commands['7']).toBeUndefined();
+
+			vi.useRealTimers();
+		});
+
+		it('does not schedule removal for non-terminal statuses', async () => {
+			vi.useFakeTimers();
+
+			const { localDoc } = createSyncedDocs();
+			const documentMap = localDoc.getMap('document');
+			client.startObserving(documentMap);
+
+			const running = fakeCommand({ id: 8, status: 'running' });
+			apiClient.request.mockResolvedValue(running);
+
+			await client.updateCommandStatus(8, 'running');
+
+			// Command should be in the Y.Map
+			let commands = documentMap.get('commands') as Record<
+				string,
+				unknown
+			>;
+			expect(commands['8']).toBeDefined();
+
+			// Even after 5s, it should still be there
+			vi.advanceTimersByTime(5000);
+
+			commands = documentMap.get('commands') as Record<string, unknown>;
+			expect(commands['8']).toBeDefined();
+
+			vi.useRealTimers();
+		});
+
+		it('schedules removal for failed terminal status', async () => {
+			vi.useFakeTimers();
+
+			const { localDoc } = createSyncedDocs();
+			const documentMap = localDoc.getMap('document');
+			client.startObserving(documentMap);
+
+			const failed = fakeCommand({ id: 9, status: 'failed' });
+			apiClient.request.mockResolvedValue(failed);
+
+			await client.updateCommandStatus(9, 'failed', 'Something broke');
+
+			let commands = documentMap.get('commands') as Record<
+				string,
+				unknown
+			>;
+			expect(commands['9']).toBeDefined();
+
+			vi.advanceTimersByTime(5000);
+
+			commands = documentMap.get('commands') as Record<string, unknown>;
+			expect(commands['9']).toBeUndefined();
+
+			vi.useRealTimers();
+		});
+
 		it('writes the updated command to the Y.Map', async () => {
 			const { localDoc } = createSyncedDocs();
 			const documentMap = localDoc.getMap('document');
@@ -667,6 +749,23 @@ describe('CommandClient', () => {
 			expect((commands['100'] as Command).status).toBe('running');
 		});
 
+		it('uses LOCAL_ORIGIN so updates are queued for sync', () => {
+			const { localDoc } = createSyncedDocs();
+			const documentMap = localDoc.getMap('document');
+			client.startObserving(documentMap);
+
+			const origins: unknown[] = [];
+			localDoc.on('updateV2', (_update: Uint8Array, origin: unknown) => {
+				origins.push(origin);
+			});
+
+			client.writeCommandToDoc(
+				fakeCommand({ id: 104, status: 'running' })
+			);
+
+			expect(origins).toContain('local');
+		});
+
 		it('preserves existing commands when writing a new one', () => {
 			const { localDoc } = createSyncedDocs();
 			const documentMap = localDoc.getMap('document');
@@ -720,6 +819,26 @@ describe('CommandClient', () => {
 			>;
 			expect(commands['110']).toBeUndefined();
 			expect(commands['111']).toBeDefined();
+		});
+
+		it('uses LOCAL_ORIGIN so updates are queued for sync', () => {
+			const { localDoc } = createSyncedDocs();
+			const documentMap = localDoc.getMap('document');
+			client.startObserving(documentMap);
+
+			// Write a command first
+			client.writeCommandToDoc(
+				fakeCommand({ id: 112, status: 'completed' })
+			);
+
+			const origins: unknown[] = [];
+			localDoc.on('updateV2', (_update: Uint8Array, origin: unknown) => {
+				origins.push(origin);
+			});
+
+			client.removeCommandFromDoc(112);
+
+			expect(origins).toContain('local');
 		});
 
 		it('is a no-op when the command does not exist', () => {

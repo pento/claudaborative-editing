@@ -428,6 +428,26 @@ describe('AiActionsMenu', () => {
 		expect(screen.queryByTestId('translate-modal')).toBeNull();
 	});
 
+	it('renders Compose menu item', () => {
+		render(<AiActionsMenu />);
+		expect(screen.getByText('Compose')).toBeTruthy();
+	});
+
+	it('Compose menu item shows info description', () => {
+		render(<AiActionsMenu />);
+		expect(
+			screen.getByText(
+				'Plan and outline a post through guided conversation'
+			)
+		).toBeTruthy();
+	});
+
+	it('click Compose calls submitCommand with compose', () => {
+		render(<AiActionsMenu />);
+		fireEvent.click(screen.getByText('Compose'));
+		expect(mockSubmitCommand).toHaveBeenCalledWith('compose', 123);
+	});
+
 	it('shows error as snackbar toast when error appears', async () => {
 		const { rerender } = render(<AiActionsMenu />);
 		expect(mockCreateNotice).not.toHaveBeenCalled();

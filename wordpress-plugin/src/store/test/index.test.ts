@@ -812,6 +812,131 @@ describe('AI Actions store', () => {
 				expect(dispatch).not.toHaveBeenCalled();
 			});
 		});
+
+		describe('handleSyncUpdate', () => {
+			it('dispatches UPDATE_ACTIVE_COMMAND for active commands matching postId', () => {
+				const running = { ...MOCK_COMMAND, status: 'running' };
+				const commands = { '42': running };
+
+				actions.handleSyncUpdate(commands, 123)({ dispatch });
+
+				expect(dispatch).toHaveBeenCalledWith({
+					type: 'UPDATE_ACTIVE_COMMAND',
+					command: running,
+				});
+			});
+
+			it('dispatches CLEAR_ACTIVE_COMMAND for terminal commands matching postId', () => {
+				const completed = { ...MOCK_COMMAND, status: 'completed' };
+				const commands = { '42': completed };
+
+				actions.handleSyncUpdate(commands, 123)({ dispatch });
+
+				expect(dispatch).toHaveBeenCalledWith({
+					type: 'CLEAR_ACTIVE_COMMAND',
+					command: completed,
+				});
+			});
+
+			it('does nothing when no commands match the postId', () => {
+				const running = { ...MOCK_COMMAND, status: 'running' };
+				const commands = { '42': running };
+
+				actions.handleSyncUpdate(commands, 999)({ dispatch });
+
+				expect(dispatch).not.toHaveBeenCalled();
+			});
+
+			it('does nothing with empty commands map', () => {
+				actions.handleSyncUpdate({}, 123)({ dispatch });
+
+				expect(dispatch).not.toHaveBeenCalled();
+			});
+
+			it('does nothing when postId is null', () => {
+				const running = { ...MOCK_COMMAND, status: 'running' };
+				const commands = { '42': running };
+
+				actions.handleSyncUpdate(commands, null)({ dispatch });
+
+				expect(dispatch).not.toHaveBeenCalled();
+			});
+
+			it('prefers active commands over terminal commands', () => {
+				const running = { ...MOCK_COMMAND, id: 43, status: 'running' };
+				const completed = {
+					...MOCK_COMMAND,
+					id: 42,
+					status: 'completed',
+				};
+				const commands = {
+					'42': completed,
+					'43': running,
+				};
+
+				actions.handleSyncUpdate(commands, 123)({ dispatch });
+
+				expect(dispatch).toHaveBeenCalledWith({
+					type: 'UPDATE_ACTIVE_COMMAND',
+					command: running,
+				});
+				// Should only dispatch once — active takes priority.
+				expect(dispatch).toHaveBeenCalledTimes(1);
+			});
+		});
+
+		describe('submitCommand calls writeCommandToSync', () => {
+			it('mirrors submitted command to Yjs sync', async () => {
+				const { writeCommandToSync } = jest.requireMock(
+					'../../sync/command-sync'
+				);
+				mockedApiFetch.mockResolvedValueOnce(MOCK_COMMAND);
+
+				await actions.submitCommand('proofread', 123, {})({ dispatch });
+
+				expect(writeCommandToSync).toHaveBeenCalledWith(MOCK_COMMAND);
+			});
+		});
+
+		describe('respondToCommand calls writeCommandToSync', () => {
+			it('mirrors responded command to Yjs sync', async () => {
+				const { writeCommandToSync } = jest.requireMock(
+					'../../sync/command-sync'
+				);
+				const updated = {
+					...MOCK_COMMAND,
+					status: 'running',
+					message: 'Processing',
+				};
+				mockedApiFetch.mockResolvedValueOnce(updated);
+
+				await actions.respondToCommand(
+					42,
+					'Yes, go'
+				)({
+					dispatch,
+				});
+
+				expect(writeCommandToSync).toHaveBeenCalledWith(updated);
+			});
+		});
+
+		describe('cancelCommand calls writeCommandToSync', () => {
+			it('mirrors cancelled command to Yjs sync', async () => {
+				const { writeCommandToSync } = jest.requireMock(
+					'../../sync/command-sync'
+				);
+				const cancelled = {
+					...MOCK_COMMAND,
+					status: 'cancelled',
+				};
+				mockedApiFetch.mockResolvedValueOnce(cancelled);
+
+				await actions.cancelCommand(42)({ dispatch });
+
+				expect(writeCommandToSync).toHaveBeenCalledWith(cancelled);
+			});
+		});
 	});
 
 	describe('resolvers', () => {

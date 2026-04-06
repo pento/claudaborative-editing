@@ -86,7 +86,7 @@ jest.mock('../../../utils/command-i18n', () => ({
 	}),
 }));
 
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { useCommands } from '../../../hooks/use-commands';
 import ConversationPanel from '..';
@@ -399,5 +399,226 @@ describe('ConversationPanel', () => {
 		render(<ConversationPanel />);
 
 		expect(screen.queryByText('Processing\u2026')).toBeNull();
+	});
+
+	it('shows Approve outline button when planReady is true', () => {
+		mockedUseCommands.mockReturnValue({
+			activeCommand: {
+				id: 1,
+				prompt: 'compose',
+				status: 'awaiting_input',
+				post_id: 100,
+				result_data: {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'Here is the outline.',
+							timestamp: '2026-04-06T10:00:00Z',
+						},
+					],
+					planReady: true,
+				},
+			},
+			isResponding: false,
+			respondToCommand: jest.fn(),
+			cancel: jest.fn(),
+		});
+
+		render(<ConversationPanel />);
+
+		expect(screen.getByText('Approve outline')).toBeTruthy();
+	});
+
+	it('does not show Approve outline button when planReady is false', () => {
+		mockedUseCommands.mockReturnValue({
+			activeCommand: {
+				id: 1,
+				prompt: 'compose',
+				status: 'awaiting_input',
+				post_id: 100,
+				result_data: {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'Hello',
+							timestamp: '2026-04-06T10:00:00Z',
+						},
+					],
+					planReady: false,
+				},
+			},
+			isResponding: false,
+			respondToCommand: jest.fn(),
+			cancel: jest.fn(),
+		});
+
+		render(<ConversationPanel />);
+
+		expect(screen.queryByText('Approve outline')).toBeNull();
+	});
+
+	it('falls back to command.message when result_data.messages is empty', () => {
+		mockedUseCommands.mockReturnValue({
+			activeCommand: {
+				id: 1,
+				prompt: 'compose',
+				status: 'awaiting_input',
+				post_id: 100,
+				message: 'Fallback question from message field',
+				result_data: {
+					messages: [],
+				},
+			},
+			isResponding: false,
+			respondToCommand: jest.fn(),
+			cancel: jest.fn(),
+		});
+
+		render(<ConversationPanel />);
+
+		expect(
+			screen.getByText('Fallback question from message field')
+		).toBeTruthy();
+	});
+
+	it('falls back to command.message when result_data has no messages array', () => {
+		mockedUseCommands.mockReturnValue({
+			activeCommand: {
+				id: 1,
+				prompt: 'compose',
+				status: 'awaiting_input',
+				post_id: 100,
+				message: 'Question without messages array',
+				result_data: null,
+			},
+			isResponding: false,
+			respondToCommand: jest.fn(),
+			cancel: jest.fn(),
+		});
+
+		render(<ConversationPanel />);
+
+		expect(
+			screen.getByText('Question without messages array')
+		).toBeTruthy();
+	});
+
+	it('handleSend clears input and calls respondToCommand', () => {
+		const respondToCommand = jest.fn().mockResolvedValue(undefined);
+		mockedUseCommands.mockReturnValue({
+			activeCommand: {
+				id: 1,
+				prompt: 'compose',
+				status: 'awaiting_input',
+				post_id: 100,
+				result_data: {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'Hello',
+							timestamp: '2026-04-06T10:00:00Z',
+						},
+					],
+				},
+			},
+			isResponding: false,
+			respondToCommand,
+			cancel: jest.fn(),
+		});
+
+		render(<ConversationPanel />);
+
+		const textarea = screen.getByTestId(
+			'conversation-textarea'
+		) as HTMLTextAreaElement;
+
+		// Type something into the textarea.
+		fireEvent.change(textarea, { target: { value: 'My response text' } });
+		expect(textarea.value).toBe('My response text');
+
+		// Click Send.
+		fireEvent.click(screen.getByText('Send'));
+
+		// respondToCommand should have been called.
+		expect(respondToCommand).toHaveBeenCalledWith(1, 'My response text');
+
+		// The textarea should be cleared.
+		expect(textarea.value).toBe('');
+	});
+
+	it('handleKeyDown on Enter triggers send', () => {
+		const respondToCommand = jest.fn().mockResolvedValue(undefined);
+		mockedUseCommands.mockReturnValue({
+			activeCommand: {
+				id: 1,
+				prompt: 'compose',
+				status: 'awaiting_input',
+				post_id: 100,
+				result_data: {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'Hello',
+							timestamp: '2026-04-06T10:00:00Z',
+						},
+					],
+				},
+			},
+			isResponding: false,
+			respondToCommand,
+			cancel: jest.fn(),
+		});
+
+		render(<ConversationPanel />);
+
+		const textarea = screen.getByTestId(
+			'conversation-textarea'
+		) as HTMLTextAreaElement;
+
+		// Type something.
+		fireEvent.change(textarea, { target: { value: 'Enter response' } });
+
+		// Press Enter (without Shift).
+		fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
+
+		expect(respondToCommand).toHaveBeenCalledWith(1, 'Enter response');
+		expect(textarea.value).toBe('');
+	});
+
+	it('handleKeyDown on Shift+Enter does not trigger send', () => {
+		const respondToCommand = jest.fn().mockResolvedValue(undefined);
+		mockedUseCommands.mockReturnValue({
+			activeCommand: {
+				id: 1,
+				prompt: 'compose',
+				status: 'awaiting_input',
+				post_id: 100,
+				result_data: {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'Hello',
+							timestamp: '2026-04-06T10:00:00Z',
+						},
+					],
+				},
+			},
+			isResponding: false,
+			respondToCommand,
+			cancel: jest.fn(),
+		});
+
+		render(<ConversationPanel />);
+
+		const textarea = screen.getByTestId(
+			'conversation-textarea'
+		) as HTMLTextAreaElement;
+
+		fireEvent.change(textarea, { target: { value: 'Multiline text' } });
+
+		// Press Shift+Enter — should NOT send.
+		fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: true });
+
+		expect(respondToCommand).not.toHaveBeenCalled();
 	});
 });

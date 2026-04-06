@@ -952,4 +952,148 @@ class RestControllerTest extends \WP_UnitTestCase {
 		$this->assertIsString( $data['version'] );
 		$this->assertNotEmpty( $data['version'] );
 	}
+
+	// -------------------------------------------------------------------------
+	// GET /wpce/v1/sync-entity
+	// -------------------------------------------------------------------------
+
+	/**
+	 * The sync-entity endpoint returns an empty array.
+	 */
+	public function test_sync_entity_returns_empty_array() {
+		$request  = new \WP_REST_Request( 'GET', '/wpce/v1/sync-entity' );
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( [], $response->get_data() );
+	}
+
+	/**
+	 * A subscriber cannot access the sync-entity endpoint.
+	 */
+	public function test_sync_entity_no_permission() {
+		wp_set_current_user( self::$subscriber_id );
+		$request  = new \WP_REST_Request( 'GET', '/wpce/v1/sync-entity' );
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 403, $response->get_status() );
+	}
+
+	// -------------------------------------------------------------------------
+	// PATCH /wpce/v1/commands/{id} — awaiting_input transitions
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Transitioning running → awaiting_input with a message should append
+	 * the message to conversation history and merge result_data flags.
+	 */
+	public function test_running_to_awaiting_input_appends_conversation_message() {
+		$command_id = $this->create_command_directly( [ 'status' => 'running' ] );
+
+		$request = new \WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
+		$request->set_body_params(
+			[
+				'status'      => 'awaiting_input',
+				'message'     => 'What color do you prefer?',
+				'result_data' => '{"planReady":true}',
+			]
+		);
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+
+		$data = $response->get_data();
+		$this->assertSame( 'awaiting_input', $data['status'] );
+		$this->assertSame( 'What color do you prefer?', $data['message'] );
+
+		// Verify the result_data contains the assistant message and the merged flag.
+		$stored = get_post_meta( $command_id, 'wpce_result_data', true );
+		$parsed = json_decode( $stored, true );
+
+		$this->assertIsArray( $parsed['messages'] );
+		$this->assertCount( 1, $parsed['messages'] );
+		$this->assertSame( 'assistant', $parsed['messages'][0]['role'] );
+		$this->assertSame( 'What color do you prefer?', $parsed['messages'][0]['content'] );
+		$this->assertTrue( $parsed['planReady'] );
+	}
+
+	/**
+	 * merge_result_data_flags merges non-messages fields without overwriting
+	 * the existing messages array.
+	 */
+	public function test_merge_result_data_flags_preserves_messages() {
+		$command_id = $this->create_command_directly( [ 'status' => 'running' ] );
+
+		// First transition to awaiting_input with a message.
+		$request1 = new \WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
+		$request1->set_body_params(
+			[
+				'status'  => 'awaiting_input',
+				'message' => 'First question',
+			]
+		);
+		rest_get_server()->dispatch( $request1 );
+
+		// Respond to move back to running.
+		update_post_meta( $command_id, 'wpce_command_status', 'running' );
+		wp_cache_delete( $command_id, 'post_meta' );
+
+		// Second transition to awaiting_input with a flag.
+		update_post_meta( $command_id, 'wpce_command_status', 'running' );
+		wp_cache_delete( $command_id, 'post_meta' );
+
+		$request2 = new \WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
+		$request2->set_body_params(
+			[
+				'status'      => 'awaiting_input',
+				'message'     => 'Second question',
+				'result_data' => '{"planReady":true,"messages":["should-be-ignored"]}',
+			]
+		);
+		rest_get_server()->dispatch( $request2 );
+
+		$stored = get_post_meta( $command_id, 'wpce_result_data', true );
+		$parsed = json_decode( $stored, true );
+
+		// Messages should contain the appended conversation entries, not the
+		// client-provided messages array.
+		$this->assertIsArray( $parsed['messages'] );
+		foreach ( $parsed['messages'] as $msg ) {
+			$this->assertIsArray( $msg );
+			$this->assertArrayHasKey( 'role', $msg );
+		}
+
+		// The planReady flag should have been merged.
+		$this->assertTrue( $parsed['planReady'] );
+	}
+
+	/**
+	 * append_conversation_message uses add_post_meta fallback when the
+	 * meta row does not exist yet.
+	 */
+	public function test_append_conversation_message_fallback_to_add_post_meta() {
+		$command_id = $this->create_command_directly(
+			[
+				'status'      => 'awaiting_input',
+				'result_data' => '{}',
+			]
+		);
+
+		// Delete the result_data meta so the $wpdb->update finds 0 rows.
+		delete_post_meta( $command_id, 'wpce_result_data' );
+
+		$response = ( new \WP_REST_Request( 'POST', '/wpce/v1/commands/' . $command_id . '/respond' ) );
+		$response->set_body_params( [ 'message' => 'Test fallback' ] );
+		$result = rest_get_server()->dispatch( $response );
+
+		$this->assertSame( 200, $result->get_status() );
+
+		// The meta should now exist (created via add_post_meta fallback).
+		$stored = get_post_meta( $command_id, 'wpce_result_data', true );
+		$parsed = json_decode( $stored, true );
+
+		$this->assertIsArray( $parsed['messages'] );
+		$this->assertCount( 1, $parsed['messages'] );
+		$this->assertSame( 'user', $parsed['messages'][0]['role'] );
+	}
 }

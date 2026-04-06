@@ -311,6 +311,88 @@ describe('SessionManager', () => {
 			expect(user.name).toBe('other');
 			expect(session.getState()).toBe('connected');
 		});
+
+		it('creates command doc and starts sync on command room', async () => {
+			await connectSession(session);
+
+			// SyncClient.start() should be called with the command room
+			expect(mockSyncStart).toHaveBeenCalledTimes(1);
+			const [room] = mockSyncStart.mock.calls[0];
+			expect(room).toBe('root/wpce_commands');
+		});
+
+		it('registers updateV2 handler that queues LOCAL_ORIGIN updates', async () => {
+			await connectSession(session);
+
+			// SyncClient.start() was called — the callbacks are the 4th arg
+			expect(mockSyncStart).toHaveBeenCalledTimes(1);
+			const startCallbacks = mockSyncStart.mock.calls[0][3];
+
+			// Verify the callbacks are wired correctly
+			expect(startCallbacks).toHaveProperty('onUpdate');
+			expect(typeof startCallbacks.onUpdate).toBe('function');
+
+			// The start() was called with initial updates (sync step1 objects)
+			const initialUpdates = mockSyncStart.mock.calls[0][2] as Array<{
+				type: string;
+				data: string;
+			}>;
+			expect(initialUpdates).toHaveLength(1);
+			// Sync step1 is a SyncUpdate object with type and data fields
+			expect(initialUpdates[0]).toHaveProperty('type', 'sync_step1');
+			expect(initialUpdates[0]).toHaveProperty('data');
+		});
+
+		it('command room callbacks include all required handlers', async () => {
+			await connectSession(session);
+
+			const callbacks = mockSyncStart.mock.calls[0][3];
+			expect(callbacks).toHaveProperty('onUpdate');
+			expect(callbacks).toHaveProperty('onAwareness');
+			expect(callbacks).toHaveProperty('onStatusChange');
+			expect(callbacks).toHaveProperty('onCompactionRequested');
+			expect(callbacks).toHaveProperty('getAwarenessState');
+		});
+
+		it('command room onUpdate processes incoming updates without throwing', async () => {
+			await connectSession(session);
+
+			const callbacks = mockSyncStart.mock.calls[0][3] as {
+				onUpdate: (update: Uint8Array) => Uint8Array | null;
+			};
+
+			// Feed an invalid update — should return null (catch branch)
+			const result = callbacks.onUpdate(new Uint8Array([255, 255]));
+			expect(result).toBeNull();
+		});
+
+		it('command room onStatusChange ignores errors when not editing', async () => {
+			await connectSession(session);
+
+			const callbacks = mockSyncStart.mock.calls[0][3] as {
+				onStatusChange: (status: string, error?: Error) => void;
+			};
+
+			// Should not throw — state is 'connected', not 'editing'
+			expect(() => {
+				callbacks.onStatusChange(
+					'error',
+					new WordPressApiError('gone', 410, '')
+				);
+			}).not.toThrow();
+		});
+
+		it('command room getAwarenessState returns the awareness state', async () => {
+			await connectSession(session);
+
+			const callbacks = mockSyncStart.mock.calls[0][3] as {
+				getAwarenessState: () => unknown;
+			};
+
+			const state = callbacks.getAwarenessState();
+			expect(state).toBeDefined();
+			expect(state).toHaveProperty('collaboratorInfo');
+		});
 	});
 
 	describe('openPost()', () => {
