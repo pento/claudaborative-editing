@@ -520,6 +520,29 @@ describe('command-sync', () => {
 			jest.useRealTimers();
 		});
 
+		it('times out and calls callback(false) when awareness never initializes', () => {
+			jest.useFakeTimers();
+			const mod = loadModule();
+			// Do NOT create awareness — it stays null.
+
+			const callback = jest.fn();
+			mod.subscribeToMcpConnection(callback);
+
+			// Advance past the 30-second timeout (300 retries × 100ms).
+			jest.advanceTimersByTime(30_000);
+
+			// Should have been called once with false on timeout.
+			expect(callback).toHaveBeenCalledTimes(1);
+			expect(callback).toHaveBeenCalledWith(false);
+
+			// Advancing further should not cause additional calls.
+			callback.mockClear();
+			jest.advanceTimersByTime(10_000);
+			expect(callback).not.toHaveBeenCalled();
+
+			jest.useRealTimers();
+		});
+
 		it('attaches to awareness once it becomes available', () => {
 			jest.useFakeTimers();
 			const mod = loadModule();
@@ -998,6 +1021,27 @@ describe('command-sync', () => {
 			callback.mockClear();
 			doc.getMap('state').set('savedAt', Date.now());
 
+			expect(callback).not.toHaveBeenCalled();
+
+			jest.useRealTimers();
+		});
+
+		it('stops polling after timeout when doc never initializes', () => {
+			jest.useFakeTimers();
+			const mod = loadModule();
+			// Do NOT call initCommandSync or createAwareness — the doc never exists.
+
+			const callback = jest.fn();
+			mod.subscribeToCommandSync(callback);
+
+			// Advance past the 30-second timeout (300 retries × 100ms).
+			jest.advanceTimersByTime(30_000);
+
+			// Callback should never have been called.
+			expect(callback).not.toHaveBeenCalled();
+
+			// Advancing further should not cause errors (interval is cleared).
+			jest.advanceTimersByTime(10_000);
 			expect(callback).not.toHaveBeenCalled();
 
 			jest.useRealTimers();
