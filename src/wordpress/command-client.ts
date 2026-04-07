@@ -277,10 +277,22 @@ export class CommandClient {
 				Object.keys(commands)
 			);
 		}
+
+		const currentIds = new Set<number>();
 		for (const value of Object.values(commands)) {
 			if (value && typeof value === 'object') {
-				this.processCommand(value as Command);
+				const cmd = value as Command;
+				if (cmd.id) currentIds.add(cmd.id);
+				this.processCommand(cmd);
 			}
+		}
+
+		// Prune tracking state for commands no longer in the Y.Map.
+		for (const id of this.notifiedPendingIds) {
+			if (!currentIds.has(id)) this.notifiedPendingIds.delete(id);
+		}
+		for (const id of this.lastSeenUserMsgCounts.keys()) {
+			if (!currentIds.has(id)) this.lastSeenUserMsgCounts.delete(id);
 		}
 	}
 

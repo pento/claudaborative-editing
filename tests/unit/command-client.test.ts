@@ -554,6 +554,74 @@ describe('CommandClient', () => {
 	});
 
 	// -------------------------------------------------------
+	// Tracking state pruning
+	// -------------------------------------------------------
+
+	describe('tracking state pruning', () => {
+		it('prunes notifiedPendingIds when command is removed from Y.Map', () => {
+			const { remoteDoc, localDoc, syncToLocal } = createSyncedDocs();
+			const documentMap = localDoc.getMap('document');
+			client.startObserving(documentMap);
+
+			const remoteMap = remoteDoc.getMap('document');
+
+			// Add a pending command — it gets tracked in notifiedPendingIds.
+			remoteMap.set('commands', {
+				'90': fakeCommand({ id: 90, status: 'pending' }),
+			});
+			syncToLocal();
+			expect(onCommand).toHaveBeenCalledOnce();
+			onCommand.mockClear();
+
+			// Remove the command from the Y.Map (simulates terminal cleanup).
+			remoteMap.set('commands', {});
+			syncToLocal();
+
+			// Re-add the same command — should be notified again because
+			// the pruning cleared the tracked ID.
+			remoteMap.set('commands', {
+				'90': fakeCommand({ id: 90, status: 'pending' }),
+			});
+			syncToLocal();
+			expect(onCommand).toHaveBeenCalledOnce();
+		});
+
+		it('prunes lastSeenUserMsgCounts when command is removed from Y.Map', () => {
+			const { remoteDoc, localDoc, syncToLocal } = createSyncedDocs();
+			const documentMap = localDoc.getMap('document');
+			client.startObserving(documentMap);
+
+			const remoteMap = remoteDoc.getMap('document');
+
+			// Add a running command with user messages — gets tracked.
+			const cmd = fakeCommand({
+				id: 91,
+				status: 'running',
+				result_data: {
+					messages: [
+						{ role: 'assistant', content: 'hi' },
+						{ role: 'user', content: 'hello' },
+					],
+				},
+			});
+			remoteMap.set('commands', { '91': cmd });
+			syncToLocal();
+			expect(onResponse).toHaveBeenCalledOnce();
+			onResponse.mockClear();
+
+			// Remove the command.
+			remoteMap.set('commands', {});
+			syncToLocal();
+
+			// Re-add with same message count — should trigger onResponse
+			// again because the pruning cleared the tracked count.
+			remoteMap.set('commands', { '91': cmd });
+			syncToLocal();
+			expect(onResponse).toHaveBeenCalledOnce();
+		});
+	});
+
+	// -------------------------------------------------------
 	// Initial scan priming (initialScanComplete guard)
 	// -------------------------------------------------------
 

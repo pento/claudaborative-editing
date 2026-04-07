@@ -21,9 +21,12 @@ class MockYMap {
 
 	set(key: string, value: unknown): void {
 		this.data[key] = value;
-		// Notify observers after set
+		// Notify observers with a mock YMapEvent containing the changed key.
+		const event = {
+			changes: { keys: new Map([[key, { action: 'update' }]]) },
+		};
 		for (const fn of this.observers) {
-			fn({});
+			fn(event);
 		}
 	}
 

@@ -362,28 +362,33 @@ export function subscribeToCommandSync(
 	let observer: ((event: YMapEvent) => void) | null = null;
 	let observedMap: YMap | null = null;
 
-	// Poll until the doc is available (it's created async during loadCollection)
+	// Poll until the doc is available (it's created async during loadCollection).
+	// Timeout after ~30 seconds to avoid leaking an interval if sync never initializes.
+	const DOC_POLL_INTERVAL_MS = 100;
+	const DOC_POLL_MAX_RETRIES = 300;
+	let retries = 0;
 	const checkInterval = setInterval(() => {
+		retries++;
+		if (retries >= DOC_POLL_MAX_RETRIES) {
+			clearInterval(checkInterval);
+			return;
+		}
+
 		const stateMap = getStateMap();
 		if (!stateMap) return;
 
 		clearInterval(checkInterval);
 		observedMap = stateMap;
 
-		let prev = JSON.stringify(stateMap.get('commands'));
-
-		observer = () => {
-			const current = JSON.stringify(stateMap.get('commands'));
-			if (current !== prev) {
-				prev = current;
-				callback(
-					(stateMap.get('commands') as Record<string, Command>) ?? {}
-				);
-			}
+		observer = (event: YMapEvent) => {
+			if (!event.changes.keys.has('commands')) return;
+			callback(
+				(stateMap.get('commands') as Record<string, Command>) ?? {}
+			);
 		};
 
 		stateMap.observe(observer);
-	}, 100);
+	}, DOC_POLL_INTERVAL_MS);
 
 	return () => {
 		clearInterval(checkInterval);
@@ -428,16 +433,26 @@ export function subscribeToMcpConnection(
 	const handler = () => callback(isMcpConnected());
 
 	if (!commandAwareness) {
-		// Awareness not yet initialized — poll until it is
+		// Awareness not yet initialized — poll until it is.
+		// Timeout after ~30 seconds to avoid leaking an interval if sync never initializes.
+		const AWARENESS_POLL_INTERVAL_MS = 100;
+		const AWARENESS_POLL_MAX_RETRIES = 300;
 		let attached = false;
+		let retries = 0;
 		const checkInterval = setInterval(() => {
+			retries++;
+			if (retries >= AWARENESS_POLL_MAX_RETRIES) {
+				clearInterval(checkInterval);
+				callback(false);
+				return;
+			}
 			if (commandAwareness) {
 				clearInterval(checkInterval);
 				attached = true;
 				handler();
 				commandAwareness.on('change', handler);
 			}
-		}, 100);
+		}, AWARENESS_POLL_INTERVAL_MS);
 		return () => {
 			clearInterval(checkInterval);
 			if (attached) {
