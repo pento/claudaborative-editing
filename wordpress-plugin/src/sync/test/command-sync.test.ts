@@ -127,6 +127,11 @@ jest.mock('@wordpress/sync', () => ({
 	},
 }));
 
+const mockAddFilter = jest.fn();
+jest.mock('@wordpress/hooks', () => ({
+	addFilter: (...args: unknown[]) => mockAddFilter(...args),
+}));
+
 // ---------------------------------------------------------------------------
 // Imports (AFTER mocks)
 // ---------------------------------------------------------------------------
@@ -192,6 +197,36 @@ describe('command-sync', () => {
 
 			expect(mockAddEntities).toHaveBeenCalledTimes(1);
 			expect(mockGetEntityRecords).toHaveBeenCalledTimes(1);
+		});
+	});
+
+	describe('connection limit filter', () => {
+		it('registers a filter that raises the limit for the command room', () => {
+			loadModule();
+
+			expect(mockAddFilter).toHaveBeenCalledWith(
+				'sync.pollingProvider.maxClientsPerRoom',
+				'claudaborative-editing/command-room-limit',
+				expect.any(Function)
+			);
+
+			const filterFn = mockAddFilter.mock.calls.find(
+				(c: unknown[]) =>
+					c[0] === 'sync.pollingProvider.maxClientsPerRoom'
+			)![2] as (limit: number, room: string) => number;
+
+			expect(filterFn(3, 'root/wpce_commands')).toBe(100);
+		});
+
+		it('passes through the default limit for other rooms', () => {
+			loadModule();
+
+			const filterFn = mockAddFilter.mock.calls.find(
+				(c: unknown[]) =>
+					c[0] === 'sync.pollingProvider.maxClientsPerRoom'
+			)![2] as (limit: number, room: string) => number;
+
+			expect(filterFn(3, 'postType/post:123')).toBe(3);
 		});
 	});
 
