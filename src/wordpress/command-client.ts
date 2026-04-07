@@ -98,7 +98,7 @@ export class CommandClient {
 	 */
 	startObserving(documentMap: Y.Map<unknown>): void {
 		this.commandMap = documentMap;
-		if (isDebugEnabled) {
+		if (isDebugEnabled()) {
 			debugLog(
 				'cmd-client',
 				'startObserving, map size:',
@@ -109,7 +109,7 @@ export class CommandClient {
 		}
 
 		this.observer = (event: Y.YMapEvent<unknown>) => {
-			if (isDebugEnabled) {
+			if (isDebugEnabled()) {
 				debugLog(
 					'cmd-client',
 					'Y.Map change event, local:',
@@ -252,7 +252,7 @@ export class CommandClient {
 		if (!this.commandMap) return;
 
 		const raw = this.commandMap.get('commands');
-		if (isDebugEnabled) {
+		if (isDebugEnabled()) {
 			debugLog(
 				'cmd-client',
 				'processAllCommands, raw type:',
@@ -268,7 +268,7 @@ export class CommandClient {
 			return;
 		}
 
-		if (isDebugEnabled) {
+		if (isDebugEnabled()) {
 			debugLog(
 				'cmd-client',
 				'Found',

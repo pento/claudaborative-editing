@@ -11,7 +11,9 @@ import { appendFileSync } from 'node:fs';
 const logFile = process.env.WPCE_DEBUG_LOG;
 
 /** Whether debug logging is enabled. Check before computing expensive arguments. */
-export const isDebugEnabled = !!logFile;
+export function isDebugEnabled(): boolean {
+	return !!logFile;
+}
 
 export function debugLog(category: string, ...args: unknown[]): void {
 	if (!logFile) return;

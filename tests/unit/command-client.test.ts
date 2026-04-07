@@ -7,6 +7,7 @@ import {
 } from '../../src/wordpress/command-client.js';
 import type { Command } from '../../src/wordpress/command-client.js';
 import type { WordPressApiClient } from '../../src/wordpress/api-client.js';
+import * as debugLogModule from '../../src/debug-log.js';
 
 // --- Helpers ---
 
@@ -992,6 +993,89 @@ describe('CommandClient', () => {
 			client.stop();
 
 			expect(client.getTransport()).toBe('none');
+		});
+	});
+
+	// -------------------------------------------------------
+	// Debug logging branches
+	// -------------------------------------------------------
+
+	describe('debug logging when enabled', () => {
+		let debugSpy: ReturnType<typeof vi.fn>;
+
+		beforeEach(() => {
+			vi.spyOn(debugLogModule, 'isDebugEnabled').mockReturnValue(true);
+			debugSpy = vi
+				.spyOn(debugLogModule, 'debugLog')
+				.mockImplementation(() => {}) as unknown as ReturnType<
+				typeof vi.fn
+			>;
+		});
+
+		afterEach(() => {
+			vi.restoreAllMocks();
+		});
+
+		it('logs in startObserving when debug is enabled', () => {
+			const { localDoc } = createSyncedDocs();
+			const documentMap = localDoc.getMap('document');
+			client.startObserving(documentMap);
+
+			expect(debugSpy).toHaveBeenCalledWith(
+				'cmd-client',
+				'startObserving, map size:',
+				expect.any(Number),
+				'keys:',
+				expect.any(Array)
+			);
+		});
+
+		it('logs Y.Map change events when debug is enabled', () => {
+			const { remoteDoc, localDoc, syncToLocal } = createSyncedDocs();
+			const documentMap = localDoc.getMap('document');
+			client.startObserving(documentMap);
+			debugSpy.mockClear();
+
+			const remoteMap = remoteDoc.getMap('document');
+			remoteMap.set('commands', {
+				'300': fakeCommand({ id: 300, status: 'pending' }),
+			});
+			syncToLocal();
+
+			expect(debugSpy).toHaveBeenCalledWith(
+				'cmd-client',
+				'Y.Map change event, local:',
+				expect.any(Boolean),
+				'changed keys:',
+				expect.any(Array)
+			);
+		});
+
+		it('logs processAllCommands details when debug is enabled', () => {
+			const { remoteDoc, localDoc, syncToLocal } = createSyncedDocs();
+			const remoteMap = remoteDoc.getMap('document');
+			remoteMap.set('commands', {
+				'301': fakeCommand({ id: 301, status: 'pending' }),
+			});
+			syncToLocal();
+
+			const documentMap = localDoc.getMap('document');
+			client.startObserving(documentMap);
+
+			expect(debugSpy).toHaveBeenCalledWith(
+				'cmd-client',
+				'processAllCommands, raw type:',
+				'object',
+				'value:',
+				expect.any(String)
+			);
+			expect(debugSpy).toHaveBeenCalledWith(
+				'cmd-client',
+				'Found',
+				1,
+				'commands:',
+				['301']
+			);
 		});
 	});
 });
