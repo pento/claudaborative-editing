@@ -457,14 +457,20 @@ const actions = {
 	 *
 	 * @param commands Map of command ID → command object from the Y.Map.
 	 * @param postId   The current post ID to filter commands for.
+	 * @param userId   The current user ID to filter commands for.
 	 * @return Thunk action.
 	 */
 	handleSyncUpdate:
-		(commands: Record<string, Command>, postId: number | null) =>
+		(
+			commands: Record<string, Command>,
+			postId: number | null,
+			userId: number | null
+		) =>
 		({ dispatch }: StoreThunkArgs) => {
 			const active = Object.values(commands).find(
 				(cmd) =>
 					cmd.post_id === postId &&
+					cmd.user_id === userId &&
 					!TERMINAL_STATUSES.includes(cmd.status)
 			);
 
@@ -480,6 +486,7 @@ const actions = {
 			const terminal = Object.values(commands).find(
 				(cmd) =>
 					cmd.post_id === postId &&
+					cmd.user_id === userId &&
 					TERMINAL_STATUSES.includes(cmd.status)
 			);
 

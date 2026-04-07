@@ -252,6 +252,12 @@ async function startStaleCommandCleanup(): Promise<void> {
 		if (!commands || Object.keys(commands).length === 0) return;
 
 		try {
+			// Get current user ID to scope cleanup.
+			const currentUser = (await resolveSelect(
+				coreDataStore
+			).getCurrentUser()) as { id: number } | undefined;
+			if (!currentUser?.id) return;
+
 			const apiCommands = await apiFetch<Command[]>({
 				path: '/wpce/v1/commands',
 			});
@@ -264,7 +270,9 @@ async function startStaleCommandCleanup(): Promise<void> {
 			const cleaned: Record<string, unknown> = {};
 			let changed = false;
 			for (const [id, value] of Object.entries(commands)) {
-				if (activeIds.has(id)) {
+				const cmd = value as { user_id?: number };
+				if (cmd.user_id !== currentUser.id || activeIds.has(id)) {
+					// Keep: either belongs to another user, or is active for current user
 					cleaned[id] = value;
 				} else {
 					changed = true;

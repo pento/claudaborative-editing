@@ -55,6 +55,7 @@ const DEFAULT_STATE = {
 const MOCK_COMMAND: Command = {
 	id: 42,
 	post_id: 123,
+	user_id: 1,
 	prompt: 'proofread',
 	status: 'pending',
 	arguments: {},
@@ -814,11 +815,11 @@ describe('AI Actions store', () => {
 		});
 
 		describe('handleSyncUpdate', () => {
-			it('dispatches UPDATE_ACTIVE_COMMAND for active commands matching postId', () => {
+			it('dispatches UPDATE_ACTIVE_COMMAND for active commands matching postId and userId', () => {
 				const running = { ...MOCK_COMMAND, status: 'running' };
 				const commands = { '42': running };
 
-				actions.handleSyncUpdate(commands, 123)({ dispatch });
+				actions.handleSyncUpdate(commands, 123, 1)({ dispatch });
 
 				expect(dispatch).toHaveBeenCalledWith({
 					type: 'UPDATE_ACTIVE_COMMAND',
@@ -826,11 +827,11 @@ describe('AI Actions store', () => {
 				});
 			});
 
-			it('dispatches CLEAR_ACTIVE_COMMAND for terminal commands matching postId', () => {
+			it('dispatches CLEAR_ACTIVE_COMMAND for terminal commands matching postId and userId', () => {
 				const completed = { ...MOCK_COMMAND, status: 'completed' };
 				const commands = { '42': completed };
 
-				actions.handleSyncUpdate(commands, 123)({ dispatch });
+				actions.handleSyncUpdate(commands, 123, 1)({ dispatch });
 
 				expect(dispatch).toHaveBeenCalledWith({
 					type: 'CLEAR_ACTIVE_COMMAND',
@@ -842,13 +843,22 @@ describe('AI Actions store', () => {
 				const running = { ...MOCK_COMMAND, status: 'running' };
 				const commands = { '42': running };
 
-				actions.handleSyncUpdate(commands, 999)({ dispatch });
+				actions.handleSyncUpdate(commands, 999, 1)({ dispatch });
+
+				expect(dispatch).not.toHaveBeenCalled();
+			});
+
+			it('does nothing when no commands match the userId', () => {
+				const running = { ...MOCK_COMMAND, status: 'running' };
+				const commands = { '42': running };
+
+				actions.handleSyncUpdate(commands, 123, 99)({ dispatch });
 
 				expect(dispatch).not.toHaveBeenCalled();
 			});
 
 			it('does nothing with empty commands map', () => {
-				actions.handleSyncUpdate({}, 123)({ dispatch });
+				actions.handleSyncUpdate({}, 123, 1)({ dispatch });
 
 				expect(dispatch).not.toHaveBeenCalled();
 			});
@@ -857,7 +867,16 @@ describe('AI Actions store', () => {
 				const running = { ...MOCK_COMMAND, status: 'running' };
 				const commands = { '42': running };
 
-				actions.handleSyncUpdate(commands, null)({ dispatch });
+				actions.handleSyncUpdate(commands, null, 1)({ dispatch });
+
+				expect(dispatch).not.toHaveBeenCalled();
+			});
+
+			it('does nothing when userId is null', () => {
+				const running = { ...MOCK_COMMAND, status: 'running' };
+				const commands = { '42': running };
+
+				actions.handleSyncUpdate(commands, 123, null)({ dispatch });
 
 				expect(dispatch).not.toHaveBeenCalled();
 			});
@@ -874,7 +893,7 @@ describe('AI Actions store', () => {
 					'43': running,
 				};
 
-				actions.handleSyncUpdate(commands, 123)({ dispatch });
+				actions.handleSyncUpdate(commands, 123, 1)({ dispatch });
 
 				expect(dispatch).toHaveBeenCalledWith({
 					type: 'UPDATE_ACTIVE_COMMAND',

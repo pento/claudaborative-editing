@@ -30,6 +30,7 @@ export interface ConversationResultData {
 export interface Command {
 	id: number;
 	post_id: number;
+	user_id: number;
 	prompt: CommandSlug;
 	status: CommandStatus;
 	arguments: Record<string, unknown>;

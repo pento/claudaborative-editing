@@ -2,6 +2,9 @@ jest.mock('@wordpress/data', () => ({
 	useSelect: jest.fn(),
 	useDispatch: jest.fn(() => ({})),
 }));
+jest.mock('@wordpress/core-data', () => ({
+	store: 'core-data-store',
+}));
 jest.mock('../../store', () => ({ __esModule: true, default: 'mock-store' }));
 jest.mock('../../sync/command-sync', () => ({
 	subscribeToCommandSync: jest.fn(() => jest.fn()),
@@ -9,6 +12,7 @@ jest.mock('../../sync/command-sync', () => ({
 
 import { renderHook, act } from '@testing-library/react';
 import { useSelect, useDispatch } from '@wordpress/data';
+import { store as coreStore } from '@wordpress/core-data';
 import store from '../../store';
 import { useCommands } from '../use-commands';
 import { subscribeToCommandSync } from '../../sync/command-sync';
@@ -21,6 +25,7 @@ const mockedSubscribeToCommandSync = subscribeToCommandSync as jest.Mock;
 const MOCK_COMMAND: Command = {
 	id: 42,
 	post_id: 123,
+	user_id: 1,
 	prompt: 'proofread',
 	status: 'running',
 	arguments: {},
@@ -29,12 +34,16 @@ const MOCK_COMMAND: Command = {
 };
 
 function mockUseSelect(
-	storeData: Record<string, (...args: unknown[]) => unknown>
+	storeData: Record<string, (...args: unknown[]) => unknown>,
+	currentUser: { id: number } | undefined = { id: 1 }
 ): void {
 	mockedUseSelect.mockImplementation((selector: Function) => {
 		const select = (s: unknown) => {
 			if (s === store) {
 				return storeData;
+			}
+			if (s === coreStore) {
+				return { getCurrentUser: () => currentUser };
 			}
 			return {};
 		};
@@ -148,7 +157,7 @@ describe('useCommands', () => {
 			syncCallback(commands);
 		});
 
-		expect(handleSyncUpdate).toHaveBeenCalledWith(commands, 123);
+		expect(handleSyncUpdate).toHaveBeenCalledWith(commands, 123, 1);
 	});
 
 	it('submit() calls submitCommand with correct args', () => {

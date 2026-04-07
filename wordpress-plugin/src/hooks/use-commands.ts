@@ -11,6 +11,7 @@
  */
 import { useEffect, useCallback, useRef } from '@wordpress/element';
 import { useSelect, useDispatch } from '@wordpress/data';
+import { store as coreStore } from '@wordpress/core-data';
 
 /**
  * Internal dependencies
@@ -45,18 +46,28 @@ export interface UseCommandsReturn {
  * @return Command state and actions.
  */
 export function useCommands(postId: number | null): UseCommandsReturn {
-	const { activeCommand, isSubmitting, isResponding, error, history } =
-		useSelect((select) => {
-			const s = select(store);
+	const {
+		activeCommand,
+		isSubmitting,
+		isResponding,
+		error,
+		history,
+		userId,
+	} = useSelect((select) => {
+		const s = select(store);
+		const user = select(coreStore).getCurrentUser() as
+			| { id: number }
+			| undefined;
 
-			return {
-				activeCommand: s.getActiveCommand(),
-				isSubmitting: s.isSubmitting(),
-				isResponding: s.isResponding(),
-				error: s.getCommandError(),
-				history: s.getCommandHistory(),
-			};
-		}, []);
+		return {
+			activeCommand: s.getActiveCommand(),
+			isSubmitting: s.isSubmitting(),
+			isResponding: s.isResponding(),
+			error: s.getCommandError(),
+			history: s.getCommandHistory(),
+			userId: typeof user?.id === 'number' ? user.id : null,
+		};
+	}, []);
 
 	const {
 		submitCommand,
@@ -79,9 +90,12 @@ export function useCommands(postId: number | null): UseCommandsReturn {
 	const postIdRef = useRef(postId);
 	postIdRef.current = postId;
 
+	const userIdRef = useRef(userId);
+	userIdRef.current = userId;
+
 	useEffect(() => {
 		return subscribeToCommandSync((commands) => {
-			handleSyncUpdate(commands, postIdRef.current);
+			handleSyncUpdate(commands, postIdRef.current, userIdRef.current);
 		});
 	}, [handleSyncUpdate]);
 

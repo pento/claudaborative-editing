@@ -99,11 +99,13 @@ let capturedAwareness: MockAwareness | null = null;
 
 const mockAddEntities = jest.fn();
 const mockGetEntityRecords = jest.fn().mockResolvedValue([]);
+const mockGetCurrentUser = jest.fn().mockResolvedValue({ id: 1 });
 
 jest.mock('@wordpress/data', () => ({
 	dispatch: jest.fn(() => ({ addEntities: mockAddEntities })),
 	resolveSelect: jest.fn(() => ({
 		getEntityRecords: mockGetEntityRecords,
+		getCurrentUser: mockGetCurrentUser,
 	})),
 }));
 
@@ -153,6 +155,7 @@ function loadModule() {
 const MOCK_COMMAND: Command = {
 	id: 42,
 	post_id: 123,
+	user_id: 1,
 	prompt: 'proofread',
 	status: 'running',
 	arguments: {},
@@ -811,13 +814,63 @@ describe('command-sync', () => {
 			// The cleanup polls for the doc every 200ms. Advance to trigger it.
 			jest.advanceTimersByTime(200);
 
-			// Flush the apiFetch promise.
+			// Flush the getCurrentUser and apiFetch promises.
+			await Promise.resolve();
 			await Promise.resolve();
 			await Promise.resolve();
 			await Promise.resolve();
 
 			// Command 42 should have been removed (not in API response),
 			// command 43 should remain (active in API response).
+			const commands = stateMap.get('commands') as Record<
+				string,
+				unknown
+			>;
+			expect(commands['42']).toBeUndefined();
+			expect(commands['43']).toBeDefined();
+
+			jest.useRealTimers();
+		});
+
+		it('preserves commands belonging to other users', async () => {
+			jest.useFakeTimers();
+
+			window.fetch = jest.fn().mockResolvedValue({
+				ok: true,
+				text: () => Promise.resolve('ok'),
+			});
+
+			// eslint-disable-next-line @typescript-eslint/no-require-imports
+			const apiFetchMock = require('@wordpress/api-fetch') as {
+				default: jest.Mock;
+			};
+			// The API returns no active commands for the current user.
+			apiFetchMock.default.mockResolvedValue([]);
+
+			const mod = loadModule();
+			mod.initCommandSync();
+
+			const syncConfig = mockAddEntities.mock.calls[0][0][0].syncConfig;
+			const doc = new MockYDoc();
+			syncConfig.createAwareness(doc);
+
+			// Add commands from two users — 42 (current user) and 43 (other user).
+			const stateMap = doc.getMap('state');
+			stateMap.set('commands', {
+				'42': { ...MOCK_COMMAND, id: 42, user_id: 1 },
+				'43': { ...MOCK_COMMAND, id: 43, user_id: 99 },
+			});
+
+			jest.advanceTimersByTime(200);
+
+			// Flush the getCurrentUser and apiFetch promises.
+			await Promise.resolve();
+			await Promise.resolve();
+			await Promise.resolve();
+			await Promise.resolve();
+
+			// Command 42 should be removed (current user, not active).
+			// Command 43 should be preserved (belongs to another user).
 			const commands = stateMap.get('commands') as Record<
 				string,
 				unknown
