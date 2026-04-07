@@ -21,8 +21,27 @@ import { dispatch, resolveSelect } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
 // eslint-disable-next-line import/no-extraneous-dependencies -- externalized by @wordpress/scripts
 import { Y, Awareness } from '@wordpress/sync';
+// eslint-disable-next-line import/no-extraneous-dependencies -- externalized by @wordpress/scripts
+import { addFilter } from '@wordpress/hooks';
 import { TERMINAL_STATUSES } from '#shared/commands';
 import { store as coreDataStore } from '@wordpress/core-data';
+
+/**
+ * Raise the connection limit for the command room. The polling manager enforces
+ * DEFAULT_CLIENT_LIMIT_PER_ROOM (3) on the primary room's awareness count.
+ * The command room is shared across all site-wide sessions (unlike per-post
+ * rooms), so its awareness count grows with the number of active editors and
+ * MCP servers. We defer initCommandSync() so the post room registers first as
+ * primary, but this filter is a safety net for edge cases (pages without a post
+ * room, race conditions).
+ */
+addFilter(
+	'sync.pollingProvider.maxClientsPerRoom',
+	'claudaborative-editing/command-room-limit',
+	(limit: number, room: string) => {
+		return room === 'root/wpce_commands' ? 100 : limit;
+	}
+);
 
 /**
  * Internal dependencies

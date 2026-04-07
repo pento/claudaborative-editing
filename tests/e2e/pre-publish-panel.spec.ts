@@ -9,7 +9,6 @@ import {
 	createDraftPost,
 	deletePost,
 	listCommands,
-	updateCommand,
 } from './helpers/wp-env';
 
 const PARAGRAPH_CONTENT =
@@ -323,14 +322,19 @@ test.describe('Pre-Publish Panel', () => {
 				)
 				.toMatch(/^(pending|running)$/);
 
-			// Claim the command (transition to running) if still pending
+			// Claim the command (transition to running) if still pending.
+			// Use the MCP tool (not direct REST) so the status change is
+			// written to the Y.Doc and syncs to the browser.
 			const commands = await listCommands(postId);
 			const cmd = commands.find((c) => c.prompt === 'pre-publish-check');
 			expect(cmd).toBeDefined();
 			commandId = cmd?.id ?? 0;
 
 			if (cmd?.status === 'pending') {
-				await updateCommand(commandId, { status: 'running' });
+				await callToolOrThrow(client, 'wp_update_command_status', {
+					commandId,
+					status: 'running',
+				});
 			}
 
 			// Complete the command with structured suggestions
@@ -342,10 +346,11 @@ test.describe('Pre-Publish Panel', () => {
 				slug: 'e2e-pre-publish-results',
 			};
 
-			await updateCommand(commandId, {
+			await callToolOrThrow(client, 'wp_update_command_status', {
+				commandId,
 				status: 'completed',
 				message: 'Suggested excerpt, 2 categories, 2 tags, and a slug',
-				result_data: JSON.stringify(resultData),
+				resultData: JSON.stringify(resultData),
 			});
 
 			// Wait for suggestions to appear in the browser

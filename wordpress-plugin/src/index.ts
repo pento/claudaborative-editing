@@ -20,10 +20,12 @@ import './store';
 
 import { initCommandSync } from './sync/command-sync';
 
-// Initialize command sync early — registers root/wpce_commands with core-data.
-// Gutenberg's polling manager pauses update queues for non-primary rooms;
-// a fetch interceptor in command-sync.ts works around this for our room.
-initCommandSync();
+// Defer command sync initialization so the post room registers first and
+// becomes the polling manager's "primary" room. The primary room controls
+// connection limits (DEFAULT_CLIENT_LIMIT_PER_ROOM = 3) and collaborator
+// detection. The shared command room should not be primary because its
+// awareness accumulates entries from all site-wide sessions.
+setTimeout(() => initCommandSync(), 0);
 
 import AiActionsMenu from './components/AiActionsMenu';
 import ConnectionStatus from './components/ConnectionStatus';
