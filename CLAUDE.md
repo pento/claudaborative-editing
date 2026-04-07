@@ -26,7 +26,7 @@ Claude Code  <--stdio-->  MCP Server (Node.js)  <--HTTP polling-->  WordPress
                            ├─ Sync client (polling loop)
                            ├─ Block converter (Y.Doc ↔ Block model)
                            ├─ Awareness (presence as "Claude")
-                           └─ Command listener (SSE/polling)          /wpce/v1/commands
+                           └─ Command listener (Yjs room)              root/wpce_commands
 ```
 
 ### Source Layout
@@ -42,12 +42,12 @@ Claude Code  <--stdio-->  MCP Server (Node.js)  <--HTTP polling-->  WordPress
 - `src/cli/config-writer.ts` — JSON config read/merge/write for MCP client settings files
 - `src/cli/auth-server.ts` — WordPress Application Password auth with localhost HTTP callback (WP 7.0+) and fallback to non-callback auth page on older versions
 - `src/wordpress/` — REST API client, HTTP polling sync client, command client, MIME type detection
-- `src/wordpress/command-client.ts` — REST methods for plugin command endpoints + SSE/polling transport
+- `src/wordpress/command-client.ts` — Y.Map observer for plugin commands + REST methods for status updates
 - `src/yjs/` — Y.Doc management, block ↔ Yjs conversion, sync protocol encoding
 - `src/session/` — Connection lifecycle, awareness/presence, command handler
 - `src/session/command-handler.ts` — Command listener lifecycle, channel notification dispatch
 - `src/tools/` — MCP tool handlers (connect, posts, read, edit, media, metadata, notes, commands, status)
-- `src/prompts/` — MCP prompt handlers (editing, review, authoring)
+- `src/prompts/` — MCP prompt handlers (editing, review, authoring, compose)
 - `src/blocks/` — Gutenberg HTML parser, Claude-friendly renderer
 - `tests/` — Unit and integration tests
 
@@ -71,16 +71,14 @@ The MCP server declares the `claude/channel` experimental capability and include
 **Command listener lifecycle**:
 
 - Starts automatically after successful `connect()` if the WordPress editor plugin is detected
-- Runs continuously in the `connected` state — independent of the sync loop, does not require a post to be open
+- Runs continuously in the `connected` state via the `root/wpce_commands` Yjs room in the SyncClient
 - Stops on `disconnect()`
-- Uses SSE as primary transport with REST polling as fallback
 
-**Transport abstraction** (`CommandClient`):
+**Transport** (`CommandClient`):
 
-- **SSE (primary)**: Opens `GET /wpce/v1/commands/stream` with Application Password auth. Parses Server-Sent Events from the response stream. Reconnects automatically when the connection drops (server closes after ~5 minutes). Uses exponential backoff on errors.
-- **Polling (fallback)**: Falls back to `GET /wpce/v1/commands?status=pending` polling every 5 seconds after 3 failed SSE attempts. Periodically retries SSE (every 60 seconds) to recover when the connection issue was transient.
+Commands are delivered through a shared Yjs Y.Doc synced via the `root/wpce_commands` room. The browser writes command state to the Y.Doc's state map after REST API calls; the MCP server observes the state map for changes. Both sides use the same `POST /wp-sync/v1/updates` polling loop that powers collaborative editing (~2s delivery cadence).
 
-**Command flow**: When a command arrives (via SSE or polling), the handler pushes a channel notification to Claude Code via `server.server.notification()` **without claiming** the command. The claim happens when Claude calls `wp_update_command_status("running")`, which performs an atomic `pending → running` transition on the WordPress side (409 on conflict). This design ensures that instances whose clients ignore the notification (e.g., channels not enabled) never claim commands, leaving them available for channel-capable instances.
+**Command flow**: When a command appears in the Y.Map (from the browser via sync), the handler pushes a channel notification to Claude Code via `server.server.notification()` **without claiming** the command. The claim happens when Claude calls `wp_update_command_status("running")`, which performs an atomic `pending → running` transition on the WordPress side (409 on conflict). This design ensures that instances whose clients ignore the notification (e.g., channels not enabled) never claim commands, leaving them available for channel-capable instances.
 
 **Channel notification format**: The `notifications/claude/channel` notification includes a `content` field describing the request and `meta` fields with `command_id`, `prompt`, `post_id`, and optionally `arguments`. Claude Code wraps this as a `<channel source="wpce">` tag (source is set automatically from the server name).
 
@@ -299,7 +297,7 @@ Both tools replace all existing terms (not append).
 
 - `wp_update_command_status` — Update the status of a command received from the WordPress editor via a channel notification. Parameters: `commandId` (number), `status` (`running` | `completed` | `failed`), `message` (optional string). Called by Claude during command execution to report progress back to the browser.
 
-The `wp_status` tool reports plugin detection state, version, protocol version, command listener transport (SSE/polling/disabled), and protocol version compatibility warnings when the WordPress editor plugin is connected.
+The `wp_status` tool reports plugin detection state, version, protocol version, command listener transport (yjs/disabled), and protocol version compatibility warnings when the WordPress editor plugin is connected.
 
 ## Protocol Version Negotiation
 
@@ -342,6 +340,7 @@ Prompt handlers check `session.getState()` at invocation time:
 | `respond-to-notes` | Address existing notes: edit blocks, reply, resolve                               | None                      |
 | `respond-to-note`  | Address a single note by ID: read, edit block, resolve                            | `noteId` (required)       |
 | `translate`        | Translate post content into another language                                      | `language` (required)     |
+| `compose`          | Plan and outline a post through guided conversation (uses two-way communication)  | None                      |
 
 ## MCP Server Usage
 
@@ -378,7 +377,7 @@ cd wordpress-plugin && npm run test:php # PHPUnit tests (requires wp-env)
 - `includes/class-command-store.php` — `wpce_command` CPT registration and meta fields
 - `includes/class-command-formatter.php` — Converts `wpce_command` posts to REST API response shape
 - `includes/class-rest-controller.php` — `WP_REST_Controller` subclass for `wpce/v1` endpoints
-- `includes/class-sse-handler.php` — SSE streaming logic for real-time command delivery
+- `src/sync/command-sync.ts` — Command sync via core-data collection entity registration (Yjs room)
 - `includes/class-command-defs.php` — Auto-generated PHP class with command slugs, status transitions, and terminal statuses (from `shared/commands.ts` via `bin/generate-shared-defs.js`). Committed to git for standalone plugin distribution.
 - `src/` — Gutenberg editor plugin source (TypeScript, compiled by `@wordpress/scripts`)
 - `src/store/types.ts` — TypeScript interfaces (`Command`, `McpStatus`, `StoreState`, etc.)
@@ -390,43 +389,47 @@ cd wordpress-plugin && npm run test:php # PHPUnit tests (requires wp-env)
 - `src/components/AiActionsMenu/` — `DropdownMenu` in toolbar pinned items with Proofread/Review menu items
 - `src/components/ConnectionStatus/` — Footer sparkle icon indicating MCP connection and command state
 - `src/components/NotesIntegration/` — Injects "Address All Notes" and per-note buttons into the Gutenberg notes sidebar
+- `src/components/ConversationPanel/` — Sidebar panel for two-way command conversations (awaiting_input status)
 - `src/components/SparkleIcon/` — Shared animated sparkle SVG icon component
 - `tests/` — PHPUnit tests (WordPress test framework)
 
 ### Custom Post Type: `wpce_command`
 
-Non-public CPT for queuing commands from the WordPress editor to the MCP server. Post meta fields: `wpce_prompt`, `wpce_arguments` (JSON), `wpce_command_status`, `wpce_claimed_by`, `wpce_message`, `wpce_expires_at`. Scoped by `post_author` (requesting user) and `post_parent` (target post).
+Non-public CPT for queuing commands from the WordPress editor to the MCP server. Post meta fields: `wpce_prompt`, `wpce_arguments` (JSON), `wpce_command_status`, `wpce_claimed_by`, `wpce_message`, `wpce_result_data` (JSON), `wpce_expires_at`. Scoped by `post_author` (requesting user) and `post_parent` (target post).
 
 ### Command REST API (namespace: `wpce/v1`)
 
 REST endpoints for the command queue between the browser and the MCP server. All endpoints require `edit_posts` capability and are user-scoped (commands filtered by `post_author`).
 
-| Method   | Endpoint                   | Purpose                                                   |
-| -------- | -------------------------- | --------------------------------------------------------- |
-| `POST`   | `/wpce/v1/commands`        | Browser queues a command (requires `edit_post` on target) |
-| `GET`    | `/wpce/v1/commands`        | List commands (filter by `post_id`, `status`, `since`)    |
-| `GET`    | `/wpce/v1/commands/stream` | SSE stream of pending commands for the MCP server         |
-| `PATCH`  | `/wpce/v1/commands/{id}`   | MCP updates command status                                |
-| `DELETE` | `/wpce/v1/commands/{id}`   | Browser cancels a command (author only)                   |
-| `GET`    | `/wpce/v1/status`          | Plugin version, protocol version, MCP connection state    |
+| Method   | Endpoint                         | Purpose                                                   |
+| -------- | -------------------------------- | --------------------------------------------------------- |
+| `POST`   | `/wpce/v1/commands`              | Browser queues a command (requires `edit_post` on target) |
+| `GET`    | `/wpce/v1/commands`              | List commands (filter by `post_id`, `status`, `since`)    |
+| `GET`    | `/wpce/v1/sync-entity`           | Minimal endpoint for core-data entity resolver (Yjs sync) |
+| `PATCH`  | `/wpce/v1/commands/{id}`         | MCP updates command status                                |
+| `POST`   | `/wpce/v1/commands/{id}/respond` | User responds to an `awaiting_input` command              |
+| `DELETE` | `/wpce/v1/commands/{id}`         | Browser cancels a command (author only)                   |
+| `GET`    | `/wpce/v1/status`                | Plugin version, protocol version, MCP connection state    |
 
-**Command status lifecycle**: `pending` → `running` → `completed` or `failed`. Also: `pending` → `cancelled` (user cancels), `pending` → `expired` (timeout). The `pending → running` transition uses an atomic conditional update (409 on conflict) so only one MCP instance can claim a command. Expired commands are transitioned lazily on query.
+**Command status lifecycle**: `pending` → `running` → `completed` or `failed`. Also: `pending` → `cancelled` (user cancels), `pending` → `expired` (timeout), `running` → `awaiting_input` (MCP asks a question) → `running` (user responds). The `pending → running` and `awaiting_input → running` transitions use atomic conditional updates (409 on conflict) so only one MCP instance can claim a command. Expired commands are transitioned lazily on query. Commands in `awaiting_input` do not expire.
 
-**SSE stream**: Polls the database every 2s for pending commands, sends `event: command` with JSON data, heartbeat every 30s. Supports `Last-Event-ID` for reconnection. Exits after ~5 minutes (client reconnects via EventSource retry).
+**Two-way communication**: Commands can enter `awaiting_input` status when the MCP server needs user input. The `/respond` endpoint atomically transitions `awaiting_input → running` and appends the user's message to `result_data.messages`. The browser writes the updated command to the Yjs state map. The MCP server detects the change via Y.Map observation and dispatches a channel notification with `event_type: 'response'` so Claude can continue the conversation. Full conversation history is stored in `result_data` and included in each notification. Commands in `awaiting_input` do not expire.
 
-**MCP connection tracking**: User-scoped transient (`wpce_mcp_last_seen_{user_id}`), updated when a command transitions to `running` and on SSE stream activity. Status endpoint reports `mcp_connected` (true if last seen < 30s ago).
+**MCP connection tracking**: The MCP server sends Yjs awareness state with `browserType: 'Claudaborative Editing MCP'` in the `root/wpce_commands` room. The browser detects MCP presence by checking awareness entries for this browserType. No REST polling required.
 
-**Prompt validation**: Commands accept only the slugs defined in `shared/commands.ts` (`Command_Defs::ALLOWED_PROMPTS` in PHP): `proofread`, `review`, `respond-to-notes`, `respond-to-note`, `edit`, `translate`.
+**Prompt validation**: Commands accept only the slugs defined in `shared/commands.ts` (`Command_Defs::ALLOWED_PROMPTS` in PHP): `proofread`, `review`, `respond-to-notes`, `respond-to-note`, `edit`, `translate`, `compose`.
 
 ### Editor UI
 
-The plugin registers three always-mounted Gutenberg plugins via `registerPlugin()`:
+The plugin registers five always-mounted Gutenberg plugins via `registerPlugin()`:
 
-1. **Toolbar Dropdown** (`AiActionsMenu`) — A `DropdownMenu` in the editor toolbar's `PinnedItems` area. Contains Proofread and Review menu items with info descriptions. Each submits a command via `POST /wpce/v1/commands`. Items are disabled when Claude is not connected, a command is active, or Claude is editing a different post. The dropdown closes after submitting an action. Submission errors are shown as snackbar toasts.
+1. **Toolbar Dropdown** (`AiActionsMenu`) — A `DropdownMenu` in the editor toolbar's `PinnedItems` area. Contains Proofread, Review, Compose, Edit, and Translate menu items with info descriptions. Each submits a command via `POST /wpce/v1/commands`. Items are disabled when Claude is not connected, a command is active, or Claude is editing a different post. The dropdown closes after submitting an action. Submission errors are shown as snackbar toasts.
 
-2. **Footer Status** (`ConnectionStatus`) — A sparkle icon button portaled into the editor footer bar. Orange when connected, grey when disconnected. Animates (pulse + twinkle) when a command is in progress. Click toggles a popover showing plugin name, connection status, active command label, and a cancel link for pending commands (cancel only shown when connected). Uses `MutationObserver` to re-attach when the footer DOM changes (distraction-free mode, resizing). Also owns command polling (`useCommands`) and snackbar toast notifications for command completion/failure.
+2. **Footer Status** (`ConnectionStatus`) — A sparkle icon button portaled into the editor footer bar. Orange when connected, grey when disconnected. Animates (pulse + twinkle) when a command is in progress. Shows "Waiting for your input" when command is `awaiting_input`. Click toggles a popover showing plugin name, connection status, active command label, and a cancel link for pending or awaiting_input commands (cancel only shown when connected). Uses `MutationObserver` to re-attach when the footer DOM changes (distraction-free mode, resizing). Also owns command polling (`useCommands`) and snackbar toast notifications for command completion/failure.
 
 3. **Notes Integration** (`NotesIntegration`) — Injects buttons into Gutenberg's collaboration/notes sidebar via DOM observation and `createPortal`. "Address All Notes" button is pinned at the top of the notes panel (sticky in floating mode, sticky below header in full mode). Per-note sparkle buttons appear on each root thread's action bar. Uses `respond-to-notes` and `respond-to-note` prompts respectively.
+
+4. **Conversation Panel** (`ConversationPanel`) — Renders when the active command is in `awaiting_input` status. Shows a scrollable message history (assistant messages left-aligned, user messages right-aligned), a textarea for user input, and Send/Cancel buttons. Used by the `compose` command for multi-turn conversation. Auto-scrolls to latest message and focuses the textarea on each `awaiting_input` transition. When the command transitions back to `running` after a response, shows a "Processing..." indicator.
 
 **Data layer:** `@wordpress/data` store `wpce/ai-actions` manages MCP status and command queue state. Custom hooks `useMcpStatus()` (5s polling) and `useCommands(postId)` (3s polling while command active) provide reactive access. Store actions use `@wordpress/api-fetch` thunks for REST API calls.
 

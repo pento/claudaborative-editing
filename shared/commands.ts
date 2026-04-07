@@ -14,7 +14,8 @@ export type CommandSlug =
 	| 'respond-to-note'
 	| 'edit'
 	| 'translate'
-	| 'pre-publish-check';
+	| 'pre-publish-check'
+	| 'compose';
 
 export interface CommandArgDef {
 	type: 'string' | 'number';
@@ -105,6 +106,15 @@ export const COMMANDS: Record<CommandSlug, CommandDefinition> = {
 		channelHint:
 			'"pre-publish-check" (Read-only metadata check — suggest excerpt, categories, tags, and slug. Do NOT add notes, edit blocks, or call any tool except wp_update_command_status. Return suggestions as JSON in the resultData parameter.)',
 	},
+	compose: {
+		slug: 'compose',
+		label: 'Compose',
+		description: 'Plan and outline a post through guided conversation',
+		progressLabel: 'Composing\u2026',
+		args: {},
+		channelHint:
+			'"compose" (Multi-turn composing — ask questions to understand the post purpose, audience, and key points, then propose an outline. Use awaiting_input status to ask follow-up questions. When the user approves the outline, scaffold the post with section headings and editorial notes describing what to write in each section. Do NOT write the actual post content.)',
+	},
 };
 
 export const COMMAND_SLUGS: CommandSlug[] = Object.keys(
@@ -119,7 +129,8 @@ export type CommandStatus =
 	| 'completed'
 	| 'failed'
 	| 'expired'
-	| 'cancelled';
+	| 'cancelled'
+	| 'awaiting_input';
 
 export const TERMINAL_STATUSES: readonly CommandStatus[] = [
 	'completed',
@@ -132,5 +143,15 @@ export const VALID_TRANSITIONS: Readonly<
 	Partial<Record<CommandStatus, readonly CommandStatus[]>>
 > = {
 	pending: ['running'],
-	running: ['completed', 'failed'],
+	running: ['completed', 'failed', 'awaiting_input'],
+	awaiting_input: ['running', 'cancelled'],
 } as const;
+
+// --- Conversation types ---
+
+/** A single message in a two-way command conversation. */
+export interface ConversationMessage {
+	role: 'assistant' | 'user';
+	content: string;
+	timestamp: string; // ISO 8601
+}

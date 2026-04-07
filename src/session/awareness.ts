@@ -20,7 +20,7 @@ export function buildAwarenessState(user: WPUser): AwarenessLocalState {
 			name: `${user.name ?? user.slug} (Claude)`,
 			slug: user.slug,
 			avatar_urls: user.avatar_urls ?? {},
-			browserType: 'Claude Code MCP',
+			browserType: 'Claudaborative Editing MCP',
 			enteredAt: Date.now(),
 		},
 		// editorState with selection is required for Gutenberg to recognise us

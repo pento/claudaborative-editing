@@ -82,6 +82,14 @@ const STRINGS: Record<CommandSlug, CommandStrings> = {
 		),
 		progressLabel: __('Checking…', 'claudaborative-editing'),
 	},
+	compose: {
+		label: __('Compose', 'claudaborative-editing'),
+		description: __(
+			'Plan and outline a post through guided conversation',
+			'claudaborative-editing'
+		),
+		progressLabel: __('Composing…', 'claudaborative-editing'),
+	},
 };
 
 /**

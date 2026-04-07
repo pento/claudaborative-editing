@@ -28,7 +28,6 @@ use Claudaborative_Editing\Command_Defs;
 use Claudaborative_Editing\Command_Formatter;
 use Claudaborative_Editing\Command_Store;
 use Claudaborative_Editing\REST_Controller;
-use Claudaborative_Editing\SSE_Handler;
 
 /**
  * Main plugin class.

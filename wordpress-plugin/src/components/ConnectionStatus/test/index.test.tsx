@@ -399,6 +399,71 @@ describe('ConnectionStatus', () => {
 		expect(cancel).toHaveBeenCalledWith(42);
 	});
 
+	it('shows "Waiting for your input" when command is awaiting_input', async () => {
+		mockedUseMcpStatus.mockReturnValue({
+			mcpConnected: true,
+			mcpLastSeenAt: '2026-03-30T12:00:00Z',
+			isLoading: false,
+			error: null,
+		});
+
+		mockedUseCommands.mockReturnValue({
+			activeCommand: {
+				id: 42,
+				prompt: 'compose',
+				status: 'awaiting_input',
+				post_id: 100,
+			},
+			isSubmitting: false,
+			error: null,
+			history: [],
+			submit: jest.fn(),
+			cancel: jest.fn(),
+		});
+
+		await act(async () => render(<ConnectionStatus />));
+
+		const toggle = footerEl.querySelector('.wpce-footer-status-toggle')!;
+		await act(async () => fireEvent.click(toggle));
+
+		expect(screen.getByText('Waiting for your input')).toBeTruthy();
+	});
+
+	it('shows cancel button for awaiting_input command', async () => {
+		mockedUseMcpStatus.mockReturnValue({
+			mcpConnected: true,
+			mcpLastSeenAt: '2026-03-30T12:00:00Z',
+			isLoading: false,
+			error: null,
+		});
+
+		const cancel = jest.fn();
+		mockedUseCommands.mockReturnValue({
+			activeCommand: {
+				id: 42,
+				prompt: 'compose',
+				status: 'awaiting_input',
+				post_id: 100,
+			},
+			isSubmitting: false,
+			error: null,
+			history: [],
+			submit: jest.fn(),
+			cancel,
+		});
+
+		await act(async () => render(<ConnectionStatus />));
+
+		const toggle = footerEl.querySelector('.wpce-footer-status-toggle')!;
+		await act(async () => fireEvent.click(toggle));
+
+		const cancelBtn = screen.getByText('(cancel)');
+		expect(cancelBtn).toBeTruthy();
+
+		await act(async () => fireEvent.click(cancelBtn));
+		expect(cancel).toHaveBeenCalledWith(42);
+	});
+
 	it('does not show cancel for running command', async () => {
 		mockedUseMcpStatus.mockReturnValue({
 			mcpConnected: true,

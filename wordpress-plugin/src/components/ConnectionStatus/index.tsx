@@ -145,12 +145,21 @@ export default function ConnectionStatus() {
 		}
 
 		if (activeCommand) {
-			statusLines.push(getCommandProgressLabel(activeCommand.prompt));
+			if (activeCommand.status === 'awaiting_input') {
+				statusLines.push(
+					__('Waiting for your input', 'claudaborative-editing')
+				);
+			} else {
+				statusLines.push(getCommandProgressLabel(activeCommand.prompt));
+			}
 		}
 	}
 
 	const isCancellable =
-		mcpConnected && activeCommand && activeCommand.status === 'pending';
+		mcpConnected &&
+		activeCommand &&
+		(activeCommand.status === 'pending' ||
+			activeCommand.status === 'awaiting_input');
 
 	const togglePopover = useCallback(
 		() => setShowPopover((prev) => !prev),

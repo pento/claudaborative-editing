@@ -190,7 +190,15 @@ execSync(`npx prettier --write ${tsPath}`, {
 	stdio: 'inherit',
 	cwd: __dirname,
 });
-execSync('composer run phpcbf includes/class-command-defs.php', {
-	stdio: 'inherit',
-	cwd: pluginDir,
-});
+
+// Catch the phpcb return value, we only need to fail if value is 2 (unfixable lint errors). 1 is just for when all errors were fixed.
+try {
+	execSync('composer run phpcbf includes/class-command-defs.php', {
+		stdio: 'inherit',
+		cwd: pluginDir,
+	});
+} catch (error) {
+	if (error.status === 2) {
+		throw error;
+	}
+}

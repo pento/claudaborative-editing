@@ -807,137 +807,6 @@ class RestControllerTest extends \WP_UnitTestCase {
 		$this->assertSame( 403, $response->get_status() );
 	}
 
-	// -------------------------------------------------------------------------
-	// GET /wpce/v1/commands/stream
-	// -------------------------------------------------------------------------
-
-	/**
-	 * The stream route should be registered.
-	 */
-	public function test_stream_route_is_registered() {
-		$routes = rest_get_server()->get_routes();
-		$this->assertArrayHasKey( '/wpce/v1/commands/stream', $routes );
-	}
-
-	/**
-	 * A subscriber cannot access the stream endpoint.
-	 */
-	public function test_stream_no_permission() {
-		wp_set_current_user( self::$subscriber_id );
-		$request  = new \WP_REST_Request( 'GET', '/wpce/v1/commands/stream' );
-		$response = rest_get_server()->dispatch( $request );
-
-		$this->assertSame( 403, $response->get_status() );
-	}
-
-	// -------------------------------------------------------------------------
-	// SSE_Handler::query_pending_commands (SSE poll loop query)
-	// -------------------------------------------------------------------------
-
-	/**
-	 * The SSE query should find a pending command for the correct user.
-	 */
-	public function test_sse_query_finds_pending_command() {
-		$command_id = $this->create_command_directly();
-
-		$results = SSE_Handler::query_pending_commands( self::$editor_id, 0 );
-
-		$this->assertCount( 1, $results );
-		$this->assertSame( $command_id, $results[0]->ID );
-	}
-
-	/**
-	 * The SSE query should not return commands from other users.
-	 */
-	public function test_sse_query_excludes_other_users() {
-		$this->create_command_directly( [ 'author' => self::$editor2_id ] );
-
-		$results = SSE_Handler::query_pending_commands( self::$editor_id, 0 );
-
-		$this->assertCount( 0, $results );
-	}
-
-	/**
-	 * The SSE query should not return non-pending commands.
-	 */
-	public function test_sse_query_excludes_non_pending() {
-		$this->create_command_directly( [ 'status' => 'running' ] );
-		$this->create_command_directly( [ 'status' => 'completed' ] );
-		$this->create_command_directly( [ 'status' => 'failed' ] );
-
-		$results = SSE_Handler::query_pending_commands( self::$editor_id, 0 );
-
-		$this->assertCount( 0, $results );
-	}
-
-	/**
-	 * The SSE query should respect the last_seen_id filter.
-	 */
-	public function test_sse_query_respects_last_seen_id() {
-		$first_id  = $this->create_command_directly();
-		$second_id = $this->create_command_directly();
-
-		$results = SSE_Handler::query_pending_commands( self::$editor_id, $first_id );
-
-		$this->assertCount( 1, $results );
-		$this->assertSame( $second_id, $results[0]->ID );
-	}
-
-	/**
-	 * Repeated SSE queries must see newly-created commands (no stale cache).
-	 *
-	 * This tests the cache_results=false behaviour that prevents the in-memory
-	 * object cache from hiding commands created by other PHP processes.
-	 */
-	public function test_sse_query_not_affected_by_object_cache() {
-		// First query — no commands exist yet.
-		$results = SSE_Handler::query_pending_commands( self::$editor_id, 0 );
-		$this->assertCount( 0, $results );
-
-		// Simulate a command created by a separate HTTP request (different
-		// process), which writes directly to the database.
-		$command_id = $this->create_command_directly();
-
-		// Second query in the same PHP process — must see the new command.
-		$results = SSE_Handler::query_pending_commands( self::$editor_id, 0 );
-		$this->assertCount( 1, $results );
-		$this->assertSame( $command_id, $results[0]->ID );
-	}
-
-	/**
-	 * The SSE query should return commands ordered by ID ascending.
-	 */
-	public function test_sse_query_orders_by_id_ascending() {
-		$first_id  = $this->create_command_directly();
-		$second_id = $this->create_command_directly();
-		$third_id  = $this->create_command_directly();
-
-		$results = SSE_Handler::query_pending_commands( self::$editor_id, 0 );
-
-		$this->assertCount( 3, $results );
-		$this->assertSame( $first_id, $results[0]->ID );
-		$this->assertSame( $second_id, $results[1]->ID );
-		$this->assertSame( $third_id, $results[2]->ID );
-	}
-
-	/**
-	 * The SSE query should exclude expired pending commands.
-	 */
-	public function test_sse_query_excludes_expired_commands() {
-		// Expired command — should not appear in results.
-		$this->create_command_directly(
-			[ 'expires_at' => gmdate( 'Y-m-d\TH:i:s\Z', time() - 60 ) ]
-		);
-
-		// Non-expired command — should appear.
-		$active_id = $this->create_command_directly();
-
-		$results = SSE_Handler::query_pending_commands( self::$editor_id, 0 );
-
-		$this->assertCount( 1, $results );
-		$this->assertSame( $active_id, $results[0]->ID );
-	}
-
 	/**
 	 * The list endpoint should expire stale commands and update post_modified_gmt.
 	 */
@@ -1082,5 +951,459 @@ class RestControllerTest extends \WP_UnitTestCase {
 		$data = $response->get_data();
 		$this->assertIsString( $data['version'] );
 		$this->assertNotEmpty( $data['version'] );
+	}
+
+	// -------------------------------------------------------------------------
+	// GET /wpce/v1/sync-entity
+	// -------------------------------------------------------------------------
+
+	/**
+	 * The sync-entity endpoint returns an empty array.
+	 */
+	public function test_sync_entity_returns_empty_array() {
+		$request  = new \WP_REST_Request( 'GET', '/wpce/v1/sync-entity' );
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( [], $response->get_data() );
+	}
+
+	/**
+	 * A subscriber cannot access the sync-entity endpoint.
+	 */
+	public function test_sync_entity_no_permission() {
+		wp_set_current_user( self::$subscriber_id );
+		$request  = new \WP_REST_Request( 'GET', '/wpce/v1/sync-entity' );
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 403, $response->get_status() );
+	}
+
+	// -------------------------------------------------------------------------
+	// PATCH /wpce/v1/commands/{id} — awaiting_input transitions
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Transitioning running → awaiting_input with a message should append
+	 * the message to conversation history and merge result_data flags.
+	 */
+	public function test_running_to_awaiting_input_appends_conversation_message() {
+		$command_id = $this->create_command_directly( [ 'status' => 'running' ] );
+
+		$request = new \WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
+		$request->set_body_params(
+			[
+				'status'      => 'awaiting_input',
+				'message'     => 'What color do you prefer?',
+				'result_data' => '{"planReady":true}',
+			]
+		);
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+
+		$data = $response->get_data();
+		$this->assertSame( 'awaiting_input', $data['status'] );
+		$this->assertSame( 'What color do you prefer?', $data['message'] );
+
+		// Verify the result_data contains the assistant message and the merged flag.
+		$stored = get_post_meta( $command_id, 'wpce_result_data', true );
+		$parsed = json_decode( $stored, true );
+
+		$this->assertIsArray( $parsed['messages'] );
+		$this->assertCount( 1, $parsed['messages'] );
+		$this->assertSame( 'assistant', $parsed['messages'][0]['role'] );
+		$this->assertSame( 'What color do you prefer?', $parsed['messages'][0]['content'] );
+		$this->assertTrue( $parsed['planReady'] );
+	}
+
+	/**
+	 * merge_result_data_flags merges non-messages fields without overwriting
+	 * the existing messages array.
+	 */
+	public function test_merge_result_data_flags_preserves_messages() {
+		$command_id = $this->create_command_directly( [ 'status' => 'running' ] );
+
+		// First transition to awaiting_input with a message.
+		$request1 = new \WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
+		$request1->set_body_params(
+			[
+				'status'  => 'awaiting_input',
+				'message' => 'First question',
+			]
+		);
+		rest_get_server()->dispatch( $request1 );
+
+		// Respond to move back to running.
+		update_post_meta( $command_id, 'wpce_command_status', 'running' );
+		wp_cache_delete( $command_id, 'post_meta' );
+
+		// Second transition to awaiting_input with a flag.
+		update_post_meta( $command_id, 'wpce_command_status', 'running' );
+		wp_cache_delete( $command_id, 'post_meta' );
+
+		$request2 = new \WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
+		$request2->set_body_params(
+			[
+				'status'      => 'awaiting_input',
+				'message'     => 'Second question',
+				'result_data' => '{"planReady":true,"messages":["should-be-ignored"]}',
+			]
+		);
+		rest_get_server()->dispatch( $request2 );
+
+		$stored = get_post_meta( $command_id, 'wpce_result_data', true );
+		$parsed = json_decode( $stored, true );
+
+		// Messages should contain the appended conversation entries, not the
+		// client-provided messages array.
+		$this->assertIsArray( $parsed['messages'] );
+		foreach ( $parsed['messages'] as $msg ) {
+			$this->assertIsArray( $msg );
+			$this->assertArrayHasKey( 'role', $msg );
+		}
+
+		// The planReady flag should have been merged.
+		$this->assertTrue( $parsed['planReady'] );
+	}
+
+	/**
+	 * append_conversation_message uses add_post_meta fallback when the
+	 * meta row does not exist yet.
+	 */
+	public function test_append_conversation_message_fallback_to_add_post_meta() {
+		$command_id = $this->create_command_directly(
+			[
+				'status'      => 'awaiting_input',
+				'result_data' => '{}',
+			]
+		);
+
+		// Delete the result_data meta so the $wpdb->update finds 0 rows.
+		delete_post_meta( $command_id, 'wpce_result_data' );
+
+		$response = ( new \WP_REST_Request( 'POST', '/wpce/v1/commands/' . $command_id . '/respond' ) );
+		$response->set_body_params( [ 'message' => 'Test fallback' ] );
+		$result = rest_get_server()->dispatch( $response );
+
+		$this->assertSame( 200, $result->get_status() );
+
+		// The meta should now exist (created via add_post_meta fallback).
+		$stored = get_post_meta( $command_id, 'wpce_result_data', true );
+		$parsed = json_decode( $stored, true );
+
+		$this->assertIsArray( $parsed['messages'] );
+		$this->assertCount( 1, $parsed['messages'] );
+		$this->assertSame( 'user', $parsed['messages'][0]['role'] );
+	}
+
+	// -------------------------------------------------------------------------
+	// Error paths and edge cases for uncovered lines
+	// -------------------------------------------------------------------------
+
+	/**
+	 * create_command returns a WP_Error when wp_insert_post fails.
+	 *
+	 * Uses the wp_insert_post_empty_content filter to force wp_insert_post
+	 * to return a WP_Error.
+	 */
+	public function test_create_command_returns_error_when_wp_insert_post_fails() {
+		$filter = function () {
+			return true;
+		};
+		add_filter( 'wp_insert_post_empty_content', $filter );
+
+		$response = $this->create_command();
+
+		remove_filter( 'wp_insert_post_empty_content', $filter );
+
+		$this->assertSame( 500, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertSame( 'empty_content', $data['code'] );
+	}
+
+	/**
+	 * update_command returns 500 when $wpdb->update returns false during
+	 * the pending -> running CAS.
+	 *
+	 * Intercepts the SQL query to replace the postmeta table name with a
+	 * nonexistent table, causing the DB query to fail.
+	 */
+	public function test_update_command_returns_500_on_db_error_during_pending_cas() {
+		global $wpdb;
+
+		$command_id = $this->create_command_directly( [ 'status' => 'pending' ] );
+
+		$filter = function ( $sql ) use ( &$filter ) {
+			global $wpdb;
+			if ( str_contains( $sql, 'UPDATE' ) && str_contains( $sql, 'wpce_command_status' ) ) {
+				remove_filter( 'query', $filter );
+				return str_replace( $wpdb->postmeta, 'nonexistent_table_xyz', $sql );
+			}
+			return $sql;
+		};
+
+		$wpdb->suppress_errors( true );
+		add_filter( 'query', $filter );
+
+		$request = new \WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
+		$request->set_body_params( [ 'status' => 'running' ] );
+		$response = rest_get_server()->dispatch( $request );
+
+		$wpdb->suppress_errors( false );
+		// Safety cleanup in case the filter was never triggered.
+		remove_filter( 'query', $filter );
+
+		$this->assertSame( 500, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertSame( 'rest_update_failed', $data['code'] );
+	}
+
+	/**
+	 * delete_command (cancel) returns 500 when $wpdb->update returns false
+	 * during the atomic cancel CAS.
+	 */
+	public function test_cancel_command_returns_500_on_db_error() {
+		global $wpdb;
+
+		$command_id = $this->create_command_directly( [ 'status' => 'pending' ] );
+
+		$filter = function ( $sql ) use ( &$filter ) {
+			global $wpdb;
+			if ( str_contains( $sql, 'UPDATE' ) && str_contains( $sql, 'wpce_command_status' ) ) {
+				remove_filter( 'query', $filter );
+				return str_replace( $wpdb->postmeta, 'nonexistent_table_xyz', $sql );
+			}
+			return $sql;
+		};
+
+		$wpdb->suppress_errors( true );
+		add_filter( 'query', $filter );
+
+		$request  = new \WP_REST_Request( 'DELETE', '/wpce/v1/commands/' . $command_id );
+		$response = rest_get_server()->dispatch( $request );
+
+		$wpdb->suppress_errors( false );
+		remove_filter( 'query', $filter );
+
+		$this->assertSame( 500, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertSame( 'rest_update_failed', $data['code'] );
+	}
+
+	/**
+	 * respond_to_command returns 404 for a nonexistent command when called
+	 * directly on the controller (bypasses permissions check).
+	 *
+	 * This covers the defensive not-found check inside respond_to_command
+	 * that is normally unreachable via REST dispatch because
+	 * respond_command_permissions catches it first.
+	 */
+	public function test_respond_handler_returns_404_for_nonexistent_command() {
+		$controller = new REST_Controller();
+
+		$request = new \WP_REST_Request( 'POST', '/wpce/v1/commands/999999/respond' );
+		$request->set_url_params( [ 'id' => 999999 ] );
+		$request->set_body_params( [ 'message' => 'test' ] );
+
+		$result = $controller->respond_to_command( $request );
+
+		$this->assertWPError( $result );
+		$this->assertSame( 'rest_not_found', $result->get_error_code() );
+	}
+
+	/**
+	 * respond_to_command returns 500 when $wpdb->update returns false during
+	 * the awaiting_input -> running CAS.
+	 */
+	public function test_respond_returns_500_on_db_error_during_cas() {
+		global $wpdb;
+
+		$command_id = $this->create_command_directly( [ 'status' => 'awaiting_input' ] );
+		update_post_meta( $command_id, 'wpce_result_data', '{}' );
+
+		$filter = function ( $sql ) use ( &$filter ) {
+			global $wpdb;
+			if ( str_contains( $sql, 'UPDATE' ) && str_contains( $sql, 'wpce_command_status' ) ) {
+				remove_filter( 'query', $filter );
+				return str_replace( $wpdb->postmeta, 'nonexistent_table_xyz', $sql );
+			}
+			return $sql;
+		};
+
+		$wpdb->suppress_errors( true );
+		add_filter( 'query', $filter );
+
+		$request = new \WP_REST_Request( 'POST', '/wpce/v1/commands/' . $command_id . '/respond' );
+		$request->set_body_params( [ 'message' => 'My response.' ] );
+		$response = rest_get_server()->dispatch( $request );
+
+		$wpdb->suppress_errors( false );
+		remove_filter( 'query', $filter );
+
+		$this->assertSame( 500, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertSame( 'rest_update_failed', $data['code'] );
+	}
+
+	/**
+	 * append_conversation_message handles corrupted (non-JSON) result_data
+	 * by resetting to an empty array and still appending the message.
+	 *
+	 * Covers line 796: if ( ! is_array( $result_data ) ) { $result_data = array(); }
+	 */
+	public function test_append_message_handles_corrupted_result_data() {
+		global $wpdb;
+
+		$command_id = $this->create_command_directly( [ 'status' => 'awaiting_input' ] );
+
+		// Ensure result_data meta exists first (via normal path).
+		update_post_meta( $command_id, 'wpce_result_data', '{}' );
+
+		// Corrupt the stored value directly via $wpdb to bypass the
+		// registered sanitize_json callback that would normalize it.
+		$wpdb->update(
+			$wpdb->postmeta,
+			[ 'meta_value' => 'not-json' ],
+			[
+				'post_id'  => $command_id,
+				'meta_key' => 'wpce_result_data',
+			]
+		);
+		wp_cache_delete( $command_id, 'post_meta' );
+
+		$request = new \WP_REST_Request( 'POST', '/wpce/v1/commands/' . $command_id . '/respond' );
+		$request->set_body_params( [ 'message' => 'Recovery test.' ] );
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+
+		// The result_data should have been reset and the message appended.
+		$stored = get_post_meta( $command_id, 'wpce_result_data', true );
+		$parsed = json_decode( $stored, true );
+
+		$this->assertIsArray( $parsed );
+		$this->assertIsArray( $parsed['messages'] );
+		$this->assertCount( 1, $parsed['messages'] );
+		$this->assertSame( 'user', $parsed['messages'][0]['role'] );
+	}
+
+	/**
+	 * merge_result_data_flags skips processing when client result_data is
+	 * invalid JSON (non-array after decoding).
+	 *
+	 * Covers line 850: if ( ! is_array( $client_data ) ) { return; }
+	 *
+	 * Calls update_command directly on the controller to bypass REST
+	 * argument validation (which rejects non-object JSON before the
+	 * handler runs).
+	 */
+	public function test_merge_result_data_flags_skips_invalid_json() {
+		$command_id = $this->create_command_directly( [ 'status' => 'running' ] );
+		update_post_meta( $command_id, 'wpce_result_data', '{"existing":"value"}' );
+
+		$controller = new REST_Controller();
+
+		$request = new \WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
+		$request->set_url_params( [ 'id' => $command_id ] );
+		$request->set_body_params(
+			[
+				'status'      => 'awaiting_input',
+				'message'     => 'A question.',
+				'result_data' => 'not-json',
+			]
+		);
+		$result = $controller->update_command( $request );
+
+		$this->assertNotWPError( $result );
+
+		// The existing result_data should be unchanged (aside from the
+		// appended conversation message), proving the merge was skipped.
+		$stored = get_post_meta( $command_id, 'wpce_result_data', true );
+		$parsed = json_decode( $stored, true );
+
+		$this->assertSame( 'value', $parsed['existing'] );
+		$this->assertIsArray( $parsed['messages'] );
+	}
+
+	/**
+	 * merge_result_data_flags skips processing when client result_data
+	 * contains only a messages key (empty after removing messages).
+	 *
+	 * Covers line 857: if ( empty( $client_data ) ) { return; }
+	 */
+	public function test_merge_result_data_flags_skips_when_only_messages() {
+		$command_id = $this->create_command_directly( [ 'status' => 'running' ] );
+		update_post_meta( $command_id, 'wpce_result_data', '{"existing":"preserved"}' );
+
+		$request = new \WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
+		$request->set_body_params(
+			[
+				'status'      => 'awaiting_input',
+				'message'     => 'Another question.',
+				'result_data' => '{"messages":["should-be-ignored"]}',
+			]
+		);
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+
+		// The existing "preserved" key should remain, proving the empty-
+		// after-unset path was taken and existing data was not overwritten.
+		$stored = get_post_meta( $command_id, 'wpce_result_data', true );
+		$parsed = json_decode( $stored, true );
+
+		$this->assertSame( 'preserved', $parsed['existing'] );
+		$this->assertIsArray( $parsed['messages'] );
+	}
+
+	/**
+	 * merge_result_data_flags handles corrupted (non-JSON) stored result_data
+	 * by resetting to an empty array before merging client flags.
+	 *
+	 * Covers line 864: if ( ! is_array( $result_data ) ) { $result_data = array(); }
+	 */
+	public function test_merge_result_data_flags_handles_corrupted_stored_data() {
+		global $wpdb;
+
+		$command_id = $this->create_command_directly( [ 'status' => 'running' ] );
+
+		// Ensure result_data meta exists first (via normal path).
+		update_post_meta( $command_id, 'wpce_result_data', '{}' );
+
+		// Corrupt the stored value directly via $wpdb to bypass the
+		// registered sanitize_json callback that would normalize it.
+		$wpdb->update(
+			$wpdb->postmeta,
+			[ 'meta_value' => 'not-json' ],
+			[
+				'post_id'  => $command_id,
+				'meta_key' => 'wpce_result_data',
+			]
+		);
+		wp_cache_delete( $command_id, 'post_meta' );
+
+		// Omit 'message' so append_conversation_message does NOT run first
+		// (which would fix the corruption before merge_result_data_flags
+		// reads the meta). This ensures merge_result_data_flags encounters
+		// the corrupted stored data directly.
+		$request = new \WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
+		$request->set_body_params(
+			[
+				'status'      => 'awaiting_input',
+				'result_data' => '{"planReady":true}',
+			]
+		);
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+
+		// The stored result_data should have the merged flag, proving
+		// the reset-to-empty-array path in merge_result_data_flags worked.
+		$stored = get_post_meta( $command_id, 'wpce_result_data', true );
+		$parsed = json_decode( $stored, true );
+
+		$this->assertIsArray( $parsed );
+		$this->assertTrue( $parsed['planReady'] );
 	}
 }

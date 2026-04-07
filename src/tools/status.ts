@@ -119,7 +119,9 @@ export function registerStatusTools(
 
 				// Add ourselves first
 				if (user) {
-					lines.push(`- ${user.name} (AI, Claude Code MCP)`);
+					lines.push(
+						`- ${user.name} (AI, Claudaborative Editing MCP)`
+					);
 				}
 
 				// Add remote collaborators

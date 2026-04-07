@@ -18,10 +18,20 @@ import { registerPlugin } from '@wordpress/plugins';
 // Register the data store (side-effect import).
 import './store';
 
+import { initCommandSync } from './sync/command-sync';
+
+// Defer command sync initialization so the post room registers first and
+// becomes the polling manager's "primary" room. The primary room controls
+// connection limits (DEFAULT_CLIENT_LIMIT_PER_ROOM = 3) and collaborator
+// detection. The shared command room should not be primary because its
+// awareness accumulates entries from all site-wide sessions.
+setTimeout(() => initCommandSync(), 0);
+
 import AiActionsMenu from './components/AiActionsMenu';
 import ConnectionStatus from './components/ConnectionStatus';
 import NotesIntegration from './components/NotesIntegration';
 import PrePublishPanel from './components/PrePublishPanel';
+import ConversationPanel from './components/ConversationPanel';
 
 registerPlugin('claudaborative-editing-ai-actions', {
 	render: AiActionsMenu,
@@ -37,4 +47,8 @@ registerPlugin('claudaborative-editing-notes', {
 
 registerPlugin('claudaborative-editing-pre-publish', {
 	render: PrePublishPanel,
+});
+
+registerPlugin('claudaborative-editing-conversation', {
+	render: ConversationPanel,
 });

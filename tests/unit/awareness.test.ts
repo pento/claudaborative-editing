@@ -29,7 +29,7 @@ describe('buildAwarenessState', () => {
 				name: 'admin (Claude)',
 				slug: 'admin',
 				avatar_urls: { '96': 'https://example.com/avatar.jpg' },
-				browserType: 'Claude Code MCP',
+				browserType: 'Claudaborative Editing MCP',
 				enteredAt: 1700000000000,
 			},
 			editorState: {
@@ -49,9 +49,11 @@ describe('buildAwarenessState', () => {
 		expect(state.collaboratorInfo.avatar_urls).toEqual({});
 	});
 
-	it('sets browserType to "Claude Code MCP"', () => {
+	it('sets browserType to "Claudaborative Editing MCP"', () => {
 		const state = buildAwarenessState(fakeUser);
-		expect(state.collaboratorInfo.browserType).toBe('Claude Code MCP');
+		expect(state.collaboratorInfo.browserType).toBe(
+			'Claudaborative Editing MCP'
+		);
 	});
 
 	it('sets enteredAt to current time', () => {

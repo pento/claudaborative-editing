@@ -4,13 +4,13 @@
  * arrive from the WordPress editor plugin.
  *
  * Lifecycle:
- *   start(apiClient) → detect plugin → create CommandClient → listen
- *   stop()           → stop CommandClient → clean up
+ *   start(apiClient, commandMap) → detect plugin → observe Y.Map
+ *   stop()                       → stop observation → clean up
  */
 
+import * as Y from 'yjs';
 import {
 	CommandClient,
-	DEFAULT_COMMAND_CLIENT_CONFIG,
 	SUPPORTED_PROTOCOL_VERSIONS,
 	isProtocolCompatible,
 } from '../wordpress/command-client.js';
@@ -19,7 +19,6 @@ import type { WordPressApiClient } from '../wordpress/api-client.js';
 import type { CommandStatus } from '../../shared/commands.js';
 import type {
 	Command,
-	CommandClientConfig,
 	PluginStatus,
 	CommandTransport,
 } from '../wordpress/command-client.js';
@@ -30,6 +29,14 @@ export type ChannelNotifier = (params: {
 	meta: Record<string, string>;
 }) => Promise<void>;
 
+/** Strip HTML tags and normalize whitespace to produce plain text. */
+function stripHtml(html: string): string {
+	return html
+		.replace(/<[^>]*>/g, '')
+		.replace(/\s+/g, ' ')
+		.trim();
+}
+
 export class CommandHandler {
 	private commandClient: CommandClient | null = null;
 	private _pluginStatus: PluginStatus | null = null;
@@ -39,14 +46,6 @@ export class CommandHandler {
 		meta: Record<string, string>;
 	}> = [];
 	private notifier: ChannelNotifier | null = null;
-	private commandClientConfig: CommandClientConfig;
-
-	constructor(config?: Partial<CommandClientConfig>) {
-		this.commandClientConfig = {
-			...DEFAULT_COMMAND_CLIENT_CONFIG,
-			...config,
-		};
-	}
 
 	/**
 	 * Set the channel notifier callback. Flushes any buffered notifications.
@@ -67,18 +66,23 @@ export class CommandHandler {
 	}
 
 	/**
-	 * Detect the WordPress editor plugin and start listening for commands.
+	 * Detect the WordPress editor plugin and start observing the command Y.Map.
 	 *
+	 * @param apiClient  The WordPress API client.
+	 * @param commandMap The commands Y.Map from the command Y.Doc.
 	 * @returns true if the plugin was detected. When the protocol version is
-	 *   incompatible, returns true (plugin detected) but does not start the
-	 *   command listener — check `getProtocolWarning()` for details.
+	 *   incompatible, returns true (plugin detected) but does not start
+	 *   observation — check `getProtocolWarning()` for details.
 	 * @throws if the plugin status request fails for reasons other than 404.
 	 */
-	async start(apiClient: WordPressApiClient): Promise<boolean> {
+	async start(
+		apiClient: WordPressApiClient,
+		commandMap: Y.Map<unknown>
+	): Promise<boolean> {
 		const client = new CommandClient(
 			apiClient,
 			(command) => void this.handleCommand(command),
-			this.commandClientConfig
+			(command) => void this.handleResponse(command)
 		);
 
 		// Probe the plugin status endpoint
@@ -106,23 +110,20 @@ export class CommandHandler {
 			this._protocolWarning =
 				`Plugin protocol v${pluginV} is not compatible with this MCP server ` +
 				`(supports ${supported}). ${direction}`;
-			// Plugin is detected but incompatible — don't start the command listener
+			// Plugin is detected but incompatible — don't start observation
 			return true;
 		}
 
 		this.commandClient = client;
 
-		// Start listening (SSE with polling fallback). Await so that
-		// transport initialization completes before we report success —
-		// SSE resolves after headers arrive, polling resolves after the
-		// first timer is scheduled.
-		await client.start();
+		// Start observing the Y.Map for commands from the browser.
+		client.startObserving(commandMap);
 
 		return true;
 	}
 
 	/**
-	 * Stop listening for commands and clean up.
+	 * Stop observing commands and clean up.
 	 */
 	stop(): void {
 		if (this.commandClient) {
@@ -136,6 +137,7 @@ export class CommandHandler {
 
 	/**
 	 * Update a command's status (called by the wp_update_command_status tool).
+	 * Also writes the updated command to the Y.Doc so the browser sees it.
 	 */
 	async updateCommandStatus(
 		id: number,
@@ -179,6 +181,62 @@ export class CommandHandler {
 	}
 
 	// --- Internal ---
+
+	/**
+	 * Handle a response from the user on an in-progress command.
+	 * Extracts conversation messages from result_data and sends a
+	 * channel notification so Claude Code can continue the conversation.
+	 */
+	private async handleResponse(command: Command): Promise<void> {
+		if (!this.commandClient) return;
+
+		// Extract conversation messages from result_data
+		const messages = command.result_data?.messages;
+
+		// Find the last user message from result_data, or fall back to
+		// the command's message field (which the /respond endpoint sets).
+		let userContent = '(no message)';
+		if (Array.isArray(messages)) {
+			const typed = messages as Array<{ role: string; content: string }>;
+			for (let i = typed.length - 1; i >= 0; i--) {
+				if (typed[i].role === 'user') {
+					userContent = typed[i].content;
+					break;
+				}
+			}
+		}
+		if (userContent === '(no message)' && command.message) {
+			userContent = command.message;
+		}
+
+		const meta: Record<string, string> = {
+			command_id: String(command.id),
+			prompt: command.prompt,
+			post_id: String(command.post_id),
+			event_type: 'response',
+		};
+
+		if (messages) {
+			meta.messages = JSON.stringify(messages);
+		}
+		const notification = {
+			content: `User responded to ${command.prompt} command #${command.id}: "${stripHtml(userContent)}"`,
+			meta,
+		};
+
+		// Send or buffer the notification
+		if (this.notifier) {
+			try {
+				await this.notifier(notification);
+			} catch {
+				console.error(
+					`Failed to send response notification for command ${command.id}`
+				);
+			}
+		} else {
+			this.pendingNotifications.push(notification);
+		}
+	}
 
 	/**
 	 * Handle an incoming command: send a channel notification without

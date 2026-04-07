@@ -108,6 +108,15 @@ export default function AiActionsMenu() {
 							<>
 								<MenuGroup className="claudaborative-editing-ai-actions-menu">
 									<MenuItem
+										info={getCommandDescription('compose')}
+										disabled={itemsDisabled}
+										onClick={() => handleSubmit('compose')}
+									>
+										{getCommandLabel('compose')}
+									</MenuItem>
+								</MenuGroup>
+								<MenuGroup>
+									<MenuItem
 										info={getCommandDescription(
 											'proofread'
 										)}

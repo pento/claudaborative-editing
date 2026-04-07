@@ -2,20 +2,30 @@ jest.mock('@wordpress/data', () => ({
 	useSelect: jest.fn(),
 	useDispatch: jest.fn(() => ({})),
 }));
+jest.mock('@wordpress/core-data', () => ({
+	store: 'core-data-store',
+}));
 jest.mock('../../store', () => ({ __esModule: true, default: 'mock-store' }));
+jest.mock('../../sync/command-sync', () => ({
+	subscribeToCommandSync: jest.fn(() => jest.fn()),
+}));
 
 import { renderHook, act } from '@testing-library/react';
 import { useSelect, useDispatch } from '@wordpress/data';
+import { store as coreStore } from '@wordpress/core-data';
 import store from '../../store';
 import { useCommands } from '../use-commands';
+import { subscribeToCommandSync } from '../../sync/command-sync';
 import type { Command } from '../../store/types';
 
 const mockedUseSelect = useSelect as jest.Mock;
 const mockedUseDispatch = useDispatch as jest.Mock;
+const mockedSubscribeToCommandSync = subscribeToCommandSync as jest.Mock;
 
 const MOCK_COMMAND: Command = {
 	id: 42,
 	post_id: 123,
+	user_id: 1,
 	prompt: 'proofread',
 	status: 'running',
 	arguments: {},
@@ -24,12 +34,16 @@ const MOCK_COMMAND: Command = {
 };
 
 function mockUseSelect(
-	storeData: Record<string, (...args: any[]) => any>
+	storeData: Record<string, (...args: unknown[]) => unknown>,
+	currentUser: { id: number } | undefined = { id: 1 }
 ): void {
 	mockedUseSelect.mockImplementation((selector: Function) => {
 		const select = (s: unknown) => {
 			if (s === store) {
 				return storeData;
+			}
+			if (s === coreStore) {
+				return { getCurrentUser: () => currentUser };
 			}
 			return {};
 		};
@@ -40,21 +54,23 @@ function mockUseSelect(
 describe('useCommands', () => {
 	let submitCommand: jest.Mock;
 	let cancelCommand: jest.Mock;
+	let respondToCommand: jest.Mock;
 	let fetchActiveCommand: jest.Mock;
-	let pollActiveCommand: jest.Mock;
+	let handleSyncUpdate: jest.Mock;
 
 	beforeEach(() => {
 		jest.clearAllMocks();
-		jest.useFakeTimers();
 
 		submitCommand = jest.fn();
 		cancelCommand = jest.fn();
+		respondToCommand = jest.fn();
 		fetchActiveCommand = jest.fn();
-		pollActiveCommand = jest.fn();
+		handleSyncUpdate = jest.fn();
 
 		mockUseSelect({
 			getActiveCommand: () => null,
 			isSubmitting: () => false,
+			isResponding: () => false,
 			getCommandError: () => null,
 			getCommandHistory: () => [],
 		});
@@ -62,19 +78,17 @@ describe('useCommands', () => {
 		mockedUseDispatch.mockReturnValue({
 			submitCommand,
 			cancelCommand,
+			respondToCommand,
 			fetchActiveCommand,
-			pollActiveCommand,
+			handleSyncUpdate,
 		});
-	});
-
-	afterEach(() => {
-		jest.useRealTimers();
 	});
 
 	it('returns command state from useSelect', () => {
 		mockUseSelect({
 			getActiveCommand: () => MOCK_COMMAND,
 			isSubmitting: () => true,
+			isResponding: () => false,
 			getCommandError: () => 'some error',
 			getCommandHistory: () => [{ ...MOCK_COMMAND, status: 'completed' }],
 		});
@@ -83,6 +97,7 @@ describe('useCommands', () => {
 
 		expect(result.current.activeCommand).toEqual(MOCK_COMMAND);
 		expect(result.current.isSubmitting).toBe(true);
+		expect(result.current.isResponding).toBe(false);
 		expect(result.current.error).toBe('some error');
 		expect(result.current.history).toHaveLength(1);
 	});
@@ -93,56 +108,56 @@ describe('useCommands', () => {
 		expect(fetchActiveCommand).toHaveBeenCalledWith(123);
 	});
 
-	it('does not call fetchActiveCommand when postId is falsy', () => {
+	it('does not call fetchActiveCommand when postId is null', () => {
 		renderHook(() => useCommands(null));
 
 		expect(fetchActiveCommand).not.toHaveBeenCalled();
 	});
 
-	it('sets up polling when activeCommand is present', () => {
-		mockUseSelect({
-			getActiveCommand: () => MOCK_COMMAND,
-			isSubmitting: () => false,
-			getCommandError: () => null,
-			getCommandHistory: () => [],
-		});
-
+	it('subscribes to command sync on mount', () => {
 		renderHook(() => useCommands(123));
 
-		act(() => {
-			jest.advanceTimersByTime(3000);
-		});
-
-		expect(pollActiveCommand).toHaveBeenCalledTimes(1);
+		expect(mockedSubscribeToCommandSync).toHaveBeenCalledTimes(1);
+		expect(mockedSubscribeToCommandSync).toHaveBeenCalledWith(
+			expect.any(Function)
+		);
 	});
 
-	it('does not poll when no active command', () => {
-		renderHook(() => useCommands(123));
-
-		act(() => {
-			jest.advanceTimersByTime(9000);
-		});
-
-		expect(pollActiveCommand).not.toHaveBeenCalled();
-	});
-
-	it('stops polling on unmount', () => {
-		mockUseSelect({
-			getActiveCommand: () => MOCK_COMMAND,
-			isSubmitting: () => false,
-			getCommandError: () => null,
-			getCommandHistory: () => [],
-		});
+	it('unsubscribes from command sync on unmount', () => {
+		const unsubscribe = jest.fn();
+		mockedSubscribeToCommandSync.mockReturnValue(unsubscribe);
 
 		const { unmount } = renderHook(() => useCommands(123));
-
 		unmount();
 
+		expect(unsubscribe).toHaveBeenCalledTimes(1);
+	});
+
+	it('calls handleSyncUpdate when sync provides command changes', () => {
+		let syncCallback: (
+			commands: Record<string, Command>
+		) => void = () => {};
+		mockedSubscribeToCommandSync.mockImplementation(
+			(cb: (commands: Record<string, Command>) => void) => {
+				syncCallback = cb;
+				return jest.fn();
+			}
+		);
+
+		renderHook(() => useCommands(123));
+
+		const commands = {
+			'42': {
+				...MOCK_COMMAND,
+				status: 'awaiting_input' as const,
+			},
+		};
+
 		act(() => {
-			jest.advanceTimersByTime(9000);
+			syncCallback(commands);
 		});
 
-		expect(pollActiveCommand).not.toHaveBeenCalled();
+		expect(handleSyncUpdate).toHaveBeenCalledWith(commands, 123, 1);
 	});
 
 	it('submit() calls submitCommand with correct args', () => {
@@ -165,5 +180,29 @@ describe('useCommands', () => {
 		});
 
 		expect(cancelCommand).toHaveBeenCalledWith(42);
+	});
+
+	it('respondToCommand() calls store respondToCommand', () => {
+		const { result } = renderHook(() => useCommands(123));
+
+		act(() => {
+			result.current.respondToCommand(42, 'Yes, go ahead');
+		});
+
+		expect(respondToCommand).toHaveBeenCalledWith(42, 'Yes, go ahead');
+	});
+
+	it('returns isResponding state from useSelect', () => {
+		mockUseSelect({
+			getActiveCommand: () => MOCK_COMMAND,
+			isSubmitting: () => false,
+			isResponding: () => true,
+			getCommandError: () => null,
+			getCommandHistory: () => [],
+		});
+
+		const { result } = renderHook(() => useCommands(123));
+
+		expect(result.current.isResponding).toBe(true);
 	});
 });

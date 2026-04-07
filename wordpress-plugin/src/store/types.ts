@@ -2,7 +2,13 @@
  * Type definitions for the AI Actions store.
  */
 
-import type { CommandSlug, CommandStatus } from '#shared/commands';
+import type {
+	CommandSlug,
+	CommandStatus,
+	ConversationMessage,
+} from '#shared/commands';
+
+export type { ConversationMessage } from '#shared/commands';
 
 /** Structured suggestions returned by the pre-publish-check command. */
 export interface PrePublishSuggestions {
@@ -16,9 +22,15 @@ export interface PrePublishSuggestions {
 	slug?: string;
 }
 
+export interface ConversationResultData {
+	messages: ConversationMessage[];
+	input_prompt?: string;
+}
+
 export interface Command {
 	id: number;
 	post_id: number;
+	user_id: number;
 	prompt: CommandSlug;
 	status: CommandStatus;
 	arguments: Record<string, unknown>;
@@ -39,6 +51,7 @@ export interface CommandsState {
 	active: Command | null;
 	history: Command[];
 	isSubmitting: boolean;
+	isResponding: boolean;
 	error: string | null;
 }
 
@@ -70,4 +83,6 @@ export type StoreAction =
 	| { type: 'SUBMIT_COMMAND_ERROR'; error: string }
 	| { type: 'UPDATE_ACTIVE_COMMAND'; command: Command }
 	| { type: 'CLEAR_ACTIVE_COMMAND'; command?: Command }
-	| { type: 'SET_COMMAND_HISTORY'; history: Command[] };
+	| { type: 'SET_COMMAND_HISTORY'; history: Command[] }
+	| { type: 'RESPOND_START' }
+	| { type: 'RESPOND_ERROR'; error: string };

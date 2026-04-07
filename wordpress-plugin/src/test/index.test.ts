@@ -2,6 +2,9 @@ jest.mock('@wordpress/plugins', () => ({
 	registerPlugin: jest.fn(),
 }));
 jest.mock('../store', () => {});
+jest.mock('../sync/command-sync', () => ({
+	initCommandSync: jest.fn(),
+}));
 jest.mock('../components/AiActionsMenu', () => ({
 	__esModule: true,
 	default: () => null,
@@ -15,6 +18,10 @@ jest.mock('../components/NotesIntegration', () => ({
 	default: () => null,
 }));
 jest.mock('../components/PrePublishPanel', () => ({
+	__esModule: true,
+	default: () => null,
+}));
+jest.mock('../components/ConversationPanel', () => ({
 	__esModule: true,
 	default: () => null,
 }));
@@ -55,6 +62,15 @@ describe('AI Actions entry point', () => {
 	it('registers the pre-publish panel plugin', () => {
 		expect(registerPlugin).toHaveBeenCalledWith(
 			'claudaborative-editing-pre-publish',
+			expect.objectContaining({
+				render: expect.any(Function),
+			})
+		);
+	});
+
+	it('registers the conversation panel plugin', () => {
+		expect(registerPlugin).toHaveBeenCalledWith(
+			'claudaborative-editing-conversation',
 			expect.objectContaining({
 				render: expect.any(Function),
 			})

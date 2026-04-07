@@ -1,13 +1,27 @@
 /**
- * Command client: listens for commands from the WordPress editor plugin
- * via SSE (primary) or REST polling (fallback), and provides REST methods
- * for command lifecycle operations.
+ * Command client: observes a Y.Map for commands from the WordPress editor
+ * plugin and provides REST methods for command lifecycle operations.
  *
- * Analogous to SyncClient for the Yjs sync protocol.
+ * The Y.Map is in a shared Y.Doc synced via the SyncClient's polling loop.
+ * Commands arrive as Y.Map entries written by the browser; status updates
+ * are written by the MCP server after REST calls succeed.
  */
 
+import * as Y from 'yjs';
+import { debugLog, isDebugEnabled } from '../debug-log.js';
 import type { WordPressApiClient } from './api-client.js';
-import type { CommandSlug, CommandStatus } from '../../shared/commands.js';
+import {
+	TERMINAL_STATUSES,
+	type CommandSlug,
+	type CommandStatus,
+} from '../../shared/commands.js';
+
+/**
+ * Transaction origin used for local writes. Must match the origin
+ * checked by the session manager's updateV2 handler so updates are
+ * queued for sync.
+ */
+const LOCAL_ORIGIN = 'local';
 
 // --- Protocol version compatibility ---
 
@@ -37,61 +51,33 @@ export interface Command {
 	user_id: number;
 	claimed_by: number | null;
 	message: string | null;
+	result_data?: Record<string, unknown> | null;
 	created_at: string;
 	updated_at: string;
 	expires_at: string;
 }
 
-export interface CommandClientConfig {
-	/** Polling interval in ms (default 5000). */
-	pollInterval: number;
-	/** Max SSE reconnect attempts before falling back to polling (default 3). */
-	maxSseRetries: number;
-	/** Interval to retry SSE while in polling mode, in ms (default 60000). */
-	sseRetryFromPollingInterval: number;
-	/** Initial backoff delay for SSE reconnection in ms (default 1000). */
-	sseBackoffBase: number;
-	/** Maximum backoff delay for SSE reconnection in ms (default 30000). */
-	sseBackoffMax: number;
-}
-
-export const DEFAULT_COMMAND_CLIENT_CONFIG: CommandClientConfig = {
-	pollInterval: 5000,
-	maxSseRetries: 3,
-	sseRetryFromPollingInterval: 60_000,
-	sseBackoffBase: 1000,
-	sseBackoffMax: 30_000,
-};
-
-/** Parsed SSE event. */
-interface SSEEvent {
-	event: string;
-	data: string;
-	id?: string;
-}
-
-export type CommandTransport = 'sse' | 'polling' | 'none';
+export type CommandTransport = 'yjs' | 'none';
 
 // --- CommandClient ---
 
 export class CommandClient {
-	private abortController: AbortController | null = null;
-	private pollTimer: ReturnType<typeof setTimeout> | null = null;
-	private sseRetryFromPollingTimer: ReturnType<typeof setTimeout> | null =
-		null;
-	private sseBackoffTimer: ReturnType<typeof setTimeout> | null = null;
-	private _transport: CommandTransport = 'none';
-	private sseRetryCount = 0;
-	private lastSeenCommandId = 0;
-	private _stopped = false;
+	private commandMap: Y.Map<unknown> | null = null;
+	private observer: ((event: Y.YMapEvent<unknown>) => void) | null = null;
 
-	/** Processing lock to prevent overlapping poll cycles. */
-	private polling = false;
+	/** Track which pending commands we've already notified about. */
+	private notifiedPendingIds = new Set<number>();
+	/** Track user message counts per command for response detection. */
+	private lastSeenUserMsgCounts = new Map<number, number>();
+	/** Guards against spurious onResponse() calls during initial sync. */
+	private initialScanComplete = false;
+
+	private _transport: CommandTransport = 'none';
 
 	constructor(
 		private apiClient: WordPressApiClient,
 		private onCommand: (command: Command) => void,
-		private config: CommandClientConfig = DEFAULT_COMMAND_CLIENT_CONFIG
+		private onResponse: (command: Command) => void
 	) {}
 
 	// --- Public accessors ---
@@ -100,24 +86,126 @@ export class CommandClient {
 		return this._transport;
 	}
 
+	// --- Y.Map observation ---
+
 	/**
-	 * Check if the client has been stopped.
-	 * Method call prevents TypeScript from narrowing across await boundaries.
+	 * Start observing the provided Y.Map for command changes.
+	 * The concrete shared map is injected by the caller/session layer; this
+	 * method only depends on that map containing a 'commands' key whose value
+	 * is a plain object of command objects keyed by ID.
+	 *
+	 * Called by CommandHandler after the command doc is synced.
 	 */
-	private isStopped(): boolean {
-		return this._stopped;
+	startObserving(documentMap: Y.Map<unknown>): void {
+		this.commandMap = documentMap;
+		if (isDebugEnabled()) {
+			debugLog(
+				'cmd-client',
+				'startObserving, map size:',
+				documentMap.size,
+				'keys:',
+				Array.from(documentMap.keys())
+			);
+		}
+
+		this.observer = (event: Y.YMapEvent<unknown>) => {
+			if (isDebugEnabled()) {
+				debugLog(
+					'cmd-client',
+					'Y.Map change event, local:',
+					event.transaction.local,
+					'changed keys:',
+					Array.from(event.changes.keys.keys())
+				);
+			}
+
+			// Only process remote changes (from the browser via sync).
+			if (event.transaction.local) return;
+
+			// The 'commands' key in the document map holds all command objects.
+			if (event.changes.keys.has('commands')) {
+				debugLog('cmd-client', 'commands key changed, processing');
+				this.processAllCommands();
+			}
+		};
+
+		documentMap.observe(this.observer);
+
+		// Process any commands already in the map (e.g., from initial sync).
+		// The initial scan primes lastSeenUserMsgCounts without firing
+		// onResponse(), preventing spurious notifications on restart.
+		debugLog('cmd-client', 'Processing initial commands');
+		this.processAllCommands();
+		this.initialScanComplete = true;
+
+		this._transport = 'yjs';
+	}
+
+	/**
+	 * Stop observing and clean up.
+	 */
+	stop(): void {
+		if (this.commandMap && this.observer) {
+			this.commandMap.unobserve(this.observer);
+			this.observer = null;
+		}
+		this.commandMap = null;
+		this._transport = 'none';
+		this.notifiedPendingIds.clear();
+		this.lastSeenUserMsgCounts.clear();
+		this.initialScanComplete = false;
+	}
+
+	// --- Y.Map writes ---
+
+	/**
+	 * Write a command object to the Y.Map after a successful REST call.
+	 * The update will be synced to the browser on the next poll cycle.
+	 *
+	 * Commands are stored under the 'commands' key in the document map,
+	 * matching core-data's entity record structure.
+	 */
+	writeCommandToDoc(command: Command): void {
+		const map = this.commandMap;
+		if (!map) return;
+
+		// Read current commands, update the specific command, write back.
+		const raw = map.get('commands');
+		const commands = (raw as Record<string, unknown> | undefined) ?? {};
+
+		const plain: Record<string, unknown> = {};
+		for (const [k, v] of Object.entries(command)) {
+			plain[k] = v;
+		}
+
+		const updated = { ...commands, [String(command.id)]: plain };
+
+		map.doc?.transact(() => {
+			map.set('commands', updated);
+		}, LOCAL_ORIGIN);
+	}
+
+	/**
+	 * Remove a terminal command from the Y.Map to prevent unbounded growth.
+	 */
+	removeCommandFromDoc(commandId: number): void {
+		const map = this.commandMap;
+		if (!map) return;
+
+		const raw = map.get('commands');
+		const commands = (raw as Record<string, unknown> | undefined) ?? {};
+
+		const { [String(commandId)]: _, ...remaining } = commands;
+
+		map.doc?.transact(() => {
+			map.set('commands', remaining);
+		}, LOCAL_ORIGIN);
 	}
 
 	// --- REST methods ---
 
 	async getPluginStatus(): Promise<PluginStatus> {
 		return this.apiClient.request<PluginStatus>('/wpce/v1/status');
-	}
-
-	async listPendingCommands(): Promise<Command[]> {
-		return this.apiClient.request<Command[]>(
-			'/wpce/v1/commands?status=pending'
-		);
 	}
 
 	async updateCommandStatus(
@@ -133,343 +221,117 @@ export class CommandClient {
 		if (resultData !== undefined) {
 			body.result_data = resultData;
 		}
-		return this.apiClient.request<Command>(`/wpce/v1/commands/${id}`, {
-			method: 'PATCH',
-			body: JSON.stringify(body),
-		});
-	}
-
-	// --- Transport lifecycle ---
-
-	/**
-	 * Start listening for commands. Tries SSE first, falls back to polling.
-	 */
-	async start(): Promise<void> {
-		this._stopped = false;
-		this.sseRetryCount = 0;
-
-		try {
-			await this.connectSSE();
-		} catch {
-			// SSE failed immediately — fall back to polling
-			if (!this.isStopped()) {
-				this.startPolling();
-			}
-		}
-	}
-
-	/**
-	 * Stop all transport. Safe to call multiple times.
-	 */
-	stop(): void {
-		this._stopped = true;
-		this._transport = 'none';
-
-		if (this.abortController) {
-			this.abortController.abort();
-			this.abortController = null;
-		}
-
-		if (this.pollTimer !== null) {
-			clearTimeout(this.pollTimer);
-			this.pollTimer = null;
-		}
-
-		if (this.sseRetryFromPollingTimer !== null) {
-			clearTimeout(this.sseRetryFromPollingTimer);
-			this.sseRetryFromPollingTimer = null;
-		}
-
-		if (this.sseBackoffTimer !== null) {
-			clearTimeout(this.sseBackoffTimer);
-			this.sseBackoffTimer = null;
-		}
-	}
-
-	// --- SSE transport ---
-
-	private async connectSSE(): Promise<void> {
-		if (this.isStopped()) return;
-
-		const controller = new AbortController();
-		this.abortController = controller;
-
-		const headers: Record<string, string> = {};
-		if (this.lastSeenCommandId > 0) {
-			headers['Last-Event-ID'] = String(this.lastSeenCommandId);
-		}
-
-		const response = await this.apiClient.requestStream(
-			'/wpce/v1/commands/stream',
+		const command = await this.apiClient.request<Command>(
+			`/wpce/v1/commands/${id}`,
 			{
-				signal: controller.signal,
-				headers,
+				method: 'PATCH',
+				body: JSON.stringify(body),
 			}
 		);
 
-		if (!response.body) {
-			throw new Error('SSE response has no body');
+		// Mirror the updated state to the Y.Doc so the browser sees it.
+		this.writeCommandToDoc(command);
+
+		// Clean up terminal commands after a delay so the browser can
+		// see the terminal status (for toast notifications) before removal.
+		if (TERMINAL_STATUSES.includes(command.status)) {
+			setTimeout(() => {
+				this.removeCommandFromDoc(command.id);
+			}, 5000);
 		}
 
-		this._transport = 'sse';
-		this.sseRetryCount = 0;
-
-		// Process the stream in the background — don't await.
-		// The stream continues until the server closes it or we abort.
-		this.processSSEStream(response.body).catch((error: unknown) => {
-			if (this.isStopped()) return;
-
-			// AbortError means we stopped intentionally
-			if (error instanceof Error && error.name === 'AbortError') return;
-
-			this.handleSSEDisconnect();
-		});
+		return command;
 	}
 
-	private async processSSEStream(
-		stream: ReadableStream<Uint8Array>
-	): Promise<void> {
-		for await (const event of this.parseSSEStream(stream)) {
-			if (this.isStopped()) return;
+	// --- Internal ---
 
-			if (event.event === 'command') {
-				try {
-					const command = JSON.parse(event.data) as Command;
-					if (event.id) {
-						this.lastSeenCommandId = Math.max(
-							this.lastSeenCommandId,
-							Number(event.id)
-						);
-					}
-					this.onCommand(command);
-				} catch {
-					// Malformed event data — skip
-				}
-			}
-			// Heartbeat events are ignored (they keep the connection alive)
+	/**
+	 * Process all commands in the 'commands' key of the document map.
+	 */
+	private processAllCommands(): void {
+		if (!this.commandMap) return;
+
+		const raw = this.commandMap.get('commands');
+		if (isDebugEnabled()) {
+			debugLog(
+				'cmd-client',
+				'processAllCommands, raw type:',
+				typeof raw,
+				'value:',
+				raw ? JSON.stringify(raw).slice(0, 200) : 'undefined'
+			);
 		}
 
-		// Stream ended normally (server closed after ~5 minutes).
-		// Reconnect immediately unless stopped.
-		if (!this.isStopped()) {
-			try {
-				await this.connectSSE();
-			} catch {
-				this.handleSSEDisconnect();
-			}
-		}
-	}
-
-	private handleSSEDisconnect(): void {
-		if (this.isStopped()) return;
-
-		this.sseRetryCount++;
-
-		if (this.sseRetryCount >= this.config.maxSseRetries) {
-			// Max retries exceeded — switch to polling
-			this.startPolling();
+		const commands = raw as Record<string, unknown> | undefined;
+		if (!commands || typeof commands !== 'object') {
+			debugLog('cmd-client', 'No commands object found');
 			return;
 		}
 
-		// Retry with exponential backoff
-		const delay = Math.min(
-			this.config.sseBackoffBase * Math.pow(2, this.sseRetryCount - 1),
-			this.config.sseBackoffMax
-		);
+		if (isDebugEnabled()) {
+			debugLog(
+				'cmd-client',
+				'Found',
+				Object.keys(commands).length,
+				'commands:',
+				Object.keys(commands)
+			);
+		}
 
-		this.sseBackoffTimer = setTimeout(() => {
-			this.sseBackoffTimer = null;
-			if (this.isStopped()) return;
-			this.connectSSE().catch(() => {
-				this.handleSSEDisconnect();
-			});
-		}, delay);
-	}
-
-	// --- SSE parser ---
-
-	/**
-	 * Parse an SSE stream into discrete events.
-	 * Handles chunks split across read boundaries.
-	 */
-	async *parseSSEStream(
-		stream: ReadableStream<Uint8Array>
-	): AsyncGenerator<SSEEvent> {
-		const reader = stream.getReader();
-		const decoder = new TextDecoder();
-		let buffer = '';
-
-		// Current event being assembled
-		let eventType = '';
-		let eventData: string[] = [];
-		let eventId: string | undefined;
-
-		/** Parse a single SSE field line and accumulate into the current event. */
-		function parseLine(line: string): void {
-			if (line.startsWith(':')) return; // Comment — ignore
-
-			const colonIndex = line.indexOf(':');
-			let field: string;
-			let fieldValue: string;
-
-			if (colonIndex === -1) {
-				field = line.replace(/\r$/, '');
-				fieldValue = '';
-			} else {
-				field = line.slice(0, colonIndex);
-				// Strip leading space after colon (per SSE spec)
-				fieldValue = line.slice(
-					colonIndex + 1 + (line[colonIndex + 1] === ' ' ? 1 : 0)
-				);
-				fieldValue = fieldValue.replace(/\r$/, '');
-			}
-
-			switch (field) {
-				case 'event':
-					eventType = fieldValue;
-					break;
-				case 'data':
-					eventData.push(fieldValue);
-					break;
-				case 'id':
-					eventId = fieldValue;
-					break;
-				// 'retry' and unknown fields are ignored
+		const currentIds = new Set<number>();
+		for (const value of Object.values(commands)) {
+			if (value && typeof value === 'object') {
+				const cmd = value as Command;
+				if (cmd.id) currentIds.add(cmd.id);
+				this.processCommand(cmd);
 			}
 		}
 
-		try {
-			for (;;) {
-				const { done, value } = await reader.read();
-				if (done) break;
-
-				buffer += decoder.decode(value, { stream: true });
-
-				// Process complete lines
-				const lines = buffer.split('\n');
-				// Keep the last incomplete line in the buffer
-				buffer = lines.pop() ?? '';
-
-				for (const line of lines) {
-					if (line === '' || line === '\r') {
-						// Empty line = end of event
-						if (eventData.length > 0 || eventType) {
-							yield {
-								event: eventType || 'message',
-								data: eventData.join('\n'),
-								id: eventId,
-							};
-						}
-						eventType = '';
-						eventData = [];
-						eventId = undefined;
-					} else {
-						parseLine(line);
-					}
-				}
-			}
-
-			// Flush the TextDecoder (handles multi-byte chars split across chunks)
-			buffer += decoder.decode();
-
-			// Process any remaining buffered line
-			if (buffer.trim()) {
-				parseLine(buffer.replace(/\r$/, ''));
-			}
-
-			if (eventData.length > 0 || eventType) {
-				yield {
-					event: eventType || 'message',
-					data: eventData.join('\n'),
-					id: eventId,
-				};
-			}
-		} finally {
-			reader.releaseLock();
+		// Prune tracking state for commands no longer in the Y.Map.
+		for (const id of this.notifiedPendingIds) {
+			if (!currentIds.has(id)) this.notifiedPendingIds.delete(id);
 		}
-	}
-
-	// --- Polling transport ---
-
-	private startPolling(): void {
-		if (this.isStopped()) return;
-
-		this._transport = 'polling';
-		this.schedulePoll();
-		this.scheduleSSERetry();
-	}
-
-	private schedulePoll(): void {
-		if (this.isStopped()) return;
-
-		this.pollTimer = setTimeout(() => {
-			this.pollTimer = null;
-			void this.poll();
-		}, this.config.pollInterval);
-	}
-
-	private async poll(): Promise<void> {
-		if (this.isStopped() || this.polling) return;
-
-		this.polling = true;
-		try {
-			const commands = await this.listPendingCommands();
-
-			// Filter to commands newer than the last seen, then process in
-			// ascending ID order to avoid skipping older pending commands when
-			// the API returns results newest-first (DESC by date).
-			const newCommands = commands
-				.filter((c) => c.id > this.lastSeenCommandId)
-				.sort((a, b) => a.id - b.id);
-
-			let maxDeliveredId = this.lastSeenCommandId;
-			for (const command of newCommands) {
-				if (this.isStopped()) break;
-				this.onCommand(command);
-				if (command.id > maxDeliveredId) {
-					maxDeliveredId = command.id;
-				}
-			}
-			if (maxDeliveredId > this.lastSeenCommandId) {
-				this.lastSeenCommandId = maxDeliveredId;
-			}
-		} catch {
-			// Network error — will retry on next poll
-		} finally {
-			this.polling = false;
-			if (!this.isStopped() && this._transport === 'polling') {
-				this.schedulePoll();
-			}
+		for (const id of this.lastSeenUserMsgCounts.keys()) {
+			if (!currentIds.has(id)) this.lastSeenUserMsgCounts.delete(id);
 		}
 	}
 
 	/**
-	 * Periodically attempt to reconnect SSE while in polling mode.
+	 * Process a command from the Y.Map. Dispatch onCommand for new pending
+	 * commands, onResponse for commands with new user messages.
 	 */
-	private scheduleSSERetry(): void {
-		if (this.isStopped() || this._transport !== 'polling') return;
+	private processCommand(command: Command): void {
+		const id = command.id;
+		if (!id) return;
 
-		this.sseRetryFromPollingTimer = setTimeout(() => {
-			this.sseRetryFromPollingTimer = null;
-			if (this.isStopped() || this._transport !== 'polling') return;
+		// New pending command — notify once.
+		if (command.status === 'pending' && !this.notifiedPendingIds.has(id)) {
+			this.notifiedPendingIds.add(id);
+			this.onCommand(command);
+			return;
+		}
 
-			// Stop polling, try SSE
-			if (this.pollTimer !== null) {
-				clearTimeout(this.pollTimer);
-				this.pollTimer = null;
+		// Running command with user messages — check for new messages.
+		if (command.status === 'running' && command.result_data?.messages) {
+			const messages = command.result_data.messages as Array<{
+				role: string;
+			}>;
+			const userCount = messages.filter((m) => m.role === 'user').length;
+
+			if (!this.initialScanComplete) {
+				// Prime the counter during the initial scan so we don't
+				// fire onResponse() for conversations that already existed
+				// before we started observing.
+				this.lastSeenUserMsgCounts.set(id, userCount);
+				return;
 			}
 
-			this.sseRetryCount = 0;
-			this.connectSSE()
-				.then(() => {
-					// SSE succeeded — transport is now 'sse'
-				})
-				.catch(() => {
-					// SSE still broken — resume polling
-					if (!this.isStopped()) {
-						this.startPolling();
-					}
-				});
-		}, this.config.sseRetryFromPollingInterval);
+			const prevCount = this.lastSeenUserMsgCounts.get(id) ?? 0;
+
+			if (userCount > prevCount) {
+				this.lastSeenUserMsgCounts.set(id, userCount);
+				this.onResponse(command);
+			}
+		}
 	}
 }

@@ -26,6 +26,7 @@ import type {
 	StoreAction,
 	StatusApiResponse,
 } from './types';
+import { writeCommandToSync } from '../sync/command-sync';
 
 /**
  * Thunk arguments provided by @wordpress/data to thunk action creators.
@@ -63,6 +64,7 @@ const DEFAULT_STATE: StoreState = {
 		active: null,
 		history: [],
 		isSubmitting: false,
+		isResponding: false,
 		error: null,
 	},
 };
@@ -147,6 +149,7 @@ function reducer(
 				commands: {
 					...state.commands,
 					active: action.command,
+					isResponding: false,
 				},
 			};
 
@@ -174,6 +177,26 @@ function reducer(
 				commands: {
 					...state.commands,
 					history: action.history.slice(0, MAX_HISTORY),
+				},
+			};
+
+		case 'RESPOND_START':
+			return {
+				...state,
+				commands: {
+					...state.commands,
+					isResponding: true,
+					error: null,
+				},
+			};
+
+		case 'RESPOND_ERROR':
+			return {
+				...state,
+				commands: {
+					...state.commands,
+					isResponding: false,
+					error: action.error,
 				},
 			};
 
@@ -257,6 +280,9 @@ const actions = {
 					type: 'SUBMIT_COMMAND_SUCCESS',
 					command,
 				});
+
+				// Mirror to Yjs sync so the MCP server sees it.
+				writeCommandToSync(command);
 			} catch (error: unknown) {
 				dispatch({
 					type: 'SUBMIT_COMMAND_ERROR',
@@ -282,12 +308,53 @@ const actions = {
 				});
 
 				dispatch({ type: 'CLEAR_ACTIVE_COMMAND', command });
+
+				// Mirror to Yjs sync so the MCP server sees the cancellation.
+				writeCommandToSync(command);
 			} catch (error: unknown) {
 				dispatch({
 					type: 'SUBMIT_COMMAND_ERROR',
 					error:
 						error instanceof Error ? error.message : String(error),
 				});
+			}
+		},
+
+	/**
+	 * Send a response to a command that is awaiting user input.
+	 *
+	 * @param commandId The command ID to respond to.
+	 * @param message   The user's response message.
+	 * @return Thunk action.
+	 */
+	respondToCommand:
+		(commandId: number, message: string) =>
+		async ({ dispatch }: StoreThunkArgs) => {
+			dispatch({ type: 'RESPOND_START' });
+
+			try {
+				const command = await apiFetch<Command>({
+					path: `/wpce/v1/commands/${commandId}/respond`,
+					method: 'POST',
+					data: { message },
+				});
+
+				dispatch({
+					type: 'UPDATE_ACTIVE_COMMAND',
+					command,
+				});
+
+				// Mirror to Yjs sync so the MCP server sees the response.
+				writeCommandToSync(command);
+			} catch (error: unknown) {
+				dispatch({
+					type: 'RESPOND_ERROR',
+					error:
+						error instanceof Error
+							? error.message
+							: 'Failed to send response',
+				});
+				throw error;
 			}
 		},
 
@@ -311,7 +378,9 @@ const actions = {
 				});
 
 				const active = commands.find((command) =>
-					['pending', 'running'].includes(command.status)
+					['pending', 'running', 'awaiting_input'].includes(
+						command.status
+					)
 				);
 
 				if (active) {
@@ -323,7 +392,9 @@ const actions = {
 
 				const pastCommands = commands.filter(
 					(command) =>
-						!['pending', 'running'].includes(command.status)
+						!['pending', 'running', 'awaiting_input'].includes(
+							command.status
+						)
 				);
 				dispatch({
 					type: 'SET_COMMAND_HISTORY',
@@ -376,6 +447,54 @@ const actions = {
 				}
 			} catch {
 				// Silently fail — will retry on the next poll cycle.
+			}
+		},
+
+	/**
+	 * Handle a command sync update from the Yjs state map.
+	 * Dispatches UPDATE_ACTIVE_COMMAND or CLEAR_ACTIVE_COMMAND based
+	 * on the command status.
+	 *
+	 * @param commands Map of command ID → command object from the Y.Map.
+	 * @param postId   The current post ID to filter commands for.
+	 * @param userId   The current user ID to filter commands for.
+	 * @return Thunk action.
+	 */
+	handleSyncUpdate:
+		(
+			commands: Record<string, Command>,
+			postId: number | null,
+			userId: number | null
+		) =>
+		({ dispatch }: StoreThunkArgs) => {
+			const active = Object.values(commands).find(
+				(cmd) =>
+					cmd.post_id === postId &&
+					cmd.user_id === userId &&
+					!TERMINAL_STATUSES.includes(cmd.status)
+			);
+
+			if (active) {
+				dispatch({
+					type: 'UPDATE_ACTIVE_COMMAND',
+					command: active,
+				});
+				return;
+			}
+
+			// Check if a command just reached terminal status.
+			const terminal = Object.values(commands).find(
+				(cmd) =>
+					cmd.post_id === postId &&
+					cmd.user_id === userId &&
+					TERMINAL_STATUSES.includes(cmd.status)
+			);
+
+			if (terminal) {
+				dispatch({
+					type: 'CLEAR_ACTIVE_COMMAND',
+					command: terminal,
+				});
 			}
 		},
 };
@@ -432,6 +551,16 @@ const selectors = {
 	 */
 	isSubmitting(state: StoreState) {
 		return state.commands.isSubmitting;
+	},
+
+	/**
+	 * Check whether a response is being sent to a command.
+	 *
+	 * @param state Store state.
+	 * @return True if responding.
+	 */
+	isResponding(state: StoreState) {
+		return state.commands.isResponding;
 	},
 
 	/**
