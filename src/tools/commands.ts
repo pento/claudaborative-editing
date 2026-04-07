@@ -10,7 +10,7 @@ export function registerCommandTools(
 		'wp_update_command_status',
 		{
 			description:
-				'Update the status of a command received from the WordPress editor. Call this when starting, completing, or failing a command from a channel notification. For awaiting_input: only send status and message — do NOT send resultData (WordPress manages conversation history automatically).',
+				'Update the status of a command received from the WordPress editor. Call this when starting, completing, or failing a command from a channel notification. For awaiting_input: send status and message, and do not send conversation history in resultData (WordPress manages conversation history automatically). Only optional flags such as {"planReady": true} should be sent in resultData when needed.',
 			inputSchema: {
 				commandId: z
 					.number()
