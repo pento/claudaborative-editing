@@ -1,7 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as Y from 'yjs';
 import { CommandHandler } from '../../src/session/command-handler.js';
-import type { ChannelNotifier } from '../../src/session/command-handler.js';
+import type {
+	ChannelNotifier,
+	ContentProvider,
+} from '../../src/session/command-handler.js';
 import { WordPressApiError } from '../../src/wordpress/api-client.js';
 import type { WordPressApiClient } from '../../src/wordpress/api-client.js';
 import type {
@@ -988,6 +991,499 @@ describe('CommandHandler', () => {
 			expect(notification.content).toBe(
 				'User responded to edit command #13: "Please fix the intro"'
 			);
+		});
+	});
+
+	// ---------------------------------------------------------------
+	// Auto-claim (Phase 3)
+	// ---------------------------------------------------------------
+	describe('auto-claim', () => {
+		it('channelsVerified starts as false', () => {
+			expect(handler.channelsVerified).toBe(false);
+		});
+
+		it('channelsVerified becomes true after a successful updateCommandStatus call', async () => {
+			const { instance } = setupMockCommandClient({
+				resolve: makePluginStatus(),
+			});
+			instance.updateCommandStatus.mockResolvedValue(
+				makeCommand({ status: 'running' })
+			);
+
+			await handler.start(createMockApiClient(), createCommandMap());
+			expect(handler.channelsVerified).toBe(false);
+
+			await handler.updateCommandStatus(1, 'running');
+			expect(handler.channelsVerified).toBe(true);
+		});
+
+		it('auto-claims command when channelsVerified is true', async () => {
+			const { instance, dispatchCommand } = setupMockCommandClient({
+				resolve: makePluginStatus(),
+			});
+			instance.updateCommandStatus.mockResolvedValue(
+				makeCommand({ status: 'running' })
+			);
+
+			const notifier = vi
+				.fn<ChannelNotifier>()
+				.mockResolvedValue(undefined);
+			handler.setNotifier(notifier);
+			await handler.start(createMockApiClient(), createCommandMap());
+
+			// Verify channels first
+			await handler.updateCommandStatus(1, 'running');
+			expect(handler.channelsVerified).toBe(true);
+			instance.updateCommandStatus.mockClear();
+
+			// Dispatch a new command — should auto-claim
+			const command = makeCommand({
+				id: 50,
+				post_id: 200,
+				prompt: 'review',
+			});
+			await dispatchCommand(command);
+
+			expect(instance.updateCommandStatus).toHaveBeenCalledWith(
+				50,
+				'running'
+			);
+		});
+
+		it('sets meta.status to already_claimed when auto-claim succeeds', async () => {
+			const { instance, dispatchCommand } = setupMockCommandClient({
+				resolve: makePluginStatus(),
+			});
+			instance.updateCommandStatus.mockResolvedValue(
+				makeCommand({ status: 'running' })
+			);
+
+			const notifier = vi
+				.fn<ChannelNotifier>()
+				.mockResolvedValue(undefined);
+			handler.setNotifier(notifier);
+			await handler.start(createMockApiClient(), createCommandMap());
+
+			// Verify channels
+			await handler.updateCommandStatus(1, 'running');
+			instance.updateCommandStatus.mockClear();
+			instance.updateCommandStatus.mockResolvedValue(
+				makeCommand({ status: 'running' })
+			);
+
+			await dispatchCommand(
+				makeCommand({ id: 50, post_id: 200, prompt: 'review' })
+			);
+
+			expect(notifier).toHaveBeenCalledOnce();
+			const notification = notifier.mock.calls[0][0];
+			expect(notification.meta.status).toBe('already_claimed');
+		});
+
+		it('sends no notification when auto-claim gets a 409 conflict', async () => {
+			const { instance, dispatchCommand } = setupMockCommandClient({
+				resolve: makePluginStatus(),
+			});
+			instance.updateCommandStatus.mockResolvedValue(
+				makeCommand({ status: 'running' })
+			);
+
+			const notifier = vi
+				.fn<ChannelNotifier>()
+				.mockResolvedValue(undefined);
+			handler.setNotifier(notifier);
+			await handler.start(createMockApiClient(), createCommandMap());
+
+			// Verify channels
+			await handler.updateCommandStatus(1, 'running');
+			instance.updateCommandStatus.mockClear();
+
+			// Next auto-claim attempt returns 409
+			instance.updateCommandStatus.mockRejectedValue(
+				new WordPressApiError('Conflict', 409, '')
+			);
+
+			await dispatchCommand(
+				makeCommand({ id: 60, post_id: 300, prompt: 'proofread' })
+			);
+
+			expect(notifier).not.toHaveBeenCalled();
+		});
+
+		it('falls back to manual claim notification when auto-claim gets a non-409 error', async () => {
+			const { instance, dispatchCommand } = setupMockCommandClient({
+				resolve: makePluginStatus(),
+			});
+			instance.updateCommandStatus.mockResolvedValue(
+				makeCommand({ status: 'running' })
+			);
+
+			const notifier = vi
+				.fn<ChannelNotifier>()
+				.mockResolvedValue(undefined);
+			handler.setNotifier(notifier);
+			await handler.start(createMockApiClient(), createCommandMap());
+
+			// Verify channels
+			await handler.updateCommandStatus(1, 'running');
+			instance.updateCommandStatus.mockClear();
+
+			// Next auto-claim attempt returns a generic error
+			instance.updateCommandStatus.mockRejectedValue(
+				new Error('Network failure')
+			);
+
+			await dispatchCommand(
+				makeCommand({ id: 70, post_id: 400, prompt: 'proofread' })
+			);
+
+			expect(notifier).toHaveBeenCalledOnce();
+			const notification = notifier.mock.calls[0][0];
+			// Should NOT have the already_claimed status
+			expect(notification.meta).not.toHaveProperty('status');
+		});
+
+		it('falls back to manual claim when auto-claim gets a non-409 WordPressApiError', async () => {
+			const { instance, dispatchCommand } = setupMockCommandClient({
+				resolve: makePluginStatus(),
+			});
+			instance.updateCommandStatus.mockResolvedValue(
+				makeCommand({ status: 'running' })
+			);
+
+			const notifier = vi
+				.fn<ChannelNotifier>()
+				.mockResolvedValue(undefined);
+			handler.setNotifier(notifier);
+			await handler.start(createMockApiClient(), createCommandMap());
+
+			// Verify channels
+			await handler.updateCommandStatus(1, 'running');
+			instance.updateCommandStatus.mockClear();
+
+			// Next auto-claim attempt returns 500
+			instance.updateCommandStatus.mockRejectedValue(
+				new WordPressApiError('Internal Server Error', 500, '')
+			);
+
+			await dispatchCommand(
+				makeCommand({ id: 80, post_id: 500, prompt: 'edit' })
+			);
+
+			expect(notifier).toHaveBeenCalledOnce();
+			const notification = notifier.mock.calls[0][0];
+			expect(notification.meta).not.toHaveProperty('status');
+		});
+
+		it('does not auto-claim when channelsVerified is false', async () => {
+			const { instance, dispatchCommand } = setupMockCommandClient({
+				resolve: makePluginStatus(),
+			});
+
+			const notifier = vi
+				.fn<ChannelNotifier>()
+				.mockResolvedValue(undefined);
+			handler.setNotifier(notifier);
+			await handler.start(createMockApiClient(), createCommandMap());
+
+			expect(handler.channelsVerified).toBe(false);
+
+			await dispatchCommand(
+				makeCommand({ id: 90, post_id: 600, prompt: 'proofread' })
+			);
+
+			// updateCommandStatus should NOT have been called for auto-claim
+			expect(instance.updateCommandStatus).not.toHaveBeenCalled();
+
+			// Notification should still be sent
+			expect(notifier).toHaveBeenCalledOnce();
+			const notification = notifier.mock.calls[0][0];
+			expect(notification.meta).not.toHaveProperty('status');
+		});
+
+		it('stop() resets channelsVerified to false', async () => {
+			const { instance } = setupMockCommandClient({
+				resolve: makePluginStatus(),
+			});
+			instance.updateCommandStatus.mockResolvedValue(
+				makeCommand({ status: 'running' })
+			);
+
+			await handler.start(createMockApiClient(), createCommandMap());
+			await handler.updateCommandStatus(1, 'running');
+			expect(handler.channelsVerified).toBe(true);
+
+			handler.stop();
+			expect(handler.channelsVerified).toBe(false);
+		});
+	});
+
+	// ---------------------------------------------------------------
+	// Content embedding (Phase 4)
+	// ---------------------------------------------------------------
+	describe('content embedding', () => {
+		it('embeds content when content provider returns a snapshot for proofread', async () => {
+			const { dispatchCommand } = setupMockCommandClient({
+				resolve: makePluginStatus(),
+			});
+
+			const notifier = vi
+				.fn<ChannelNotifier>()
+				.mockResolvedValue(undefined);
+			handler.setNotifier(notifier);
+
+			const contentProvider: ContentProvider = vi
+				.fn<ContentProvider>()
+				.mockResolvedValue({
+					postContent: 'Hello world post content',
+					notesSupported: false,
+				});
+			handler.setContentProvider(contentProvider);
+
+			await handler.start(createMockApiClient(), createCommandMap());
+
+			await dispatchCommand(
+				makeCommand({ id: 10, post_id: 50, prompt: 'proofread' })
+			);
+
+			expect(notifier).toHaveBeenCalledOnce();
+			const notification = notifier.mock.calls[0][0];
+
+			// buildProofreadContent includes "grammar" in its instructions
+			expect(notification.content).toContain('grammar');
+			expect(notification.content).toContain('Hello world post content');
+			expect(notification.meta.content_embedded).toBe('true');
+		});
+
+		it('falls back to minimal notification when content provider returns null', async () => {
+			const { dispatchCommand } = setupMockCommandClient({
+				resolve: makePluginStatus(),
+			});
+
+			const notifier = vi
+				.fn<ChannelNotifier>()
+				.mockResolvedValue(undefined);
+			handler.setNotifier(notifier);
+
+			const contentProvider: ContentProvider = vi
+				.fn<ContentProvider>()
+				.mockResolvedValue(null);
+			handler.setContentProvider(contentProvider);
+
+			await handler.start(createMockApiClient(), createCommandMap());
+
+			await dispatchCommand(
+				makeCommand({ id: 11, post_id: 60, prompt: 'proofread' })
+			);
+
+			expect(notifier).toHaveBeenCalledOnce();
+			const notification = notifier.mock.calls[0][0];
+			expect(notification.content).toBe(
+				'User requested: proofread on post #60.'
+			);
+			expect(notification.meta).not.toHaveProperty('content_embedded');
+		});
+
+		it('falls back to minimal notification when content provider throws', async () => {
+			const { dispatchCommand } = setupMockCommandClient({
+				resolve: makePluginStatus(),
+			});
+
+			const notifier = vi
+				.fn<ChannelNotifier>()
+				.mockResolvedValue(undefined);
+			handler.setNotifier(notifier);
+
+			const contentProvider: ContentProvider = vi
+				.fn<ContentProvider>()
+				.mockRejectedValue(new Error('Failed to read post'));
+			handler.setContentProvider(contentProvider);
+
+			await handler.start(createMockApiClient(), createCommandMap());
+
+			await dispatchCommand(
+				makeCommand({ id: 12, post_id: 70, prompt: 'proofread' })
+			);
+
+			expect(notifier).toHaveBeenCalledOnce();
+			const notification = notifier.mock.calls[0][0];
+			expect(notification.content).toBe(
+				'User requested: proofread on post #70.'
+			);
+			expect(notification.meta).not.toHaveProperty('content_embedded');
+		});
+
+		it('falls back to minimal notification when no content provider is set', async () => {
+			const { dispatchCommand } = setupMockCommandClient({
+				resolve: makePluginStatus(),
+			});
+
+			const notifier = vi
+				.fn<ChannelNotifier>()
+				.mockResolvedValue(undefined);
+			handler.setNotifier(notifier);
+			// No setContentProvider call
+
+			await handler.start(createMockApiClient(), createCommandMap());
+
+			await dispatchCommand(
+				makeCommand({ id: 13, post_id: 80, prompt: 'proofread' })
+			);
+
+			expect(notifier).toHaveBeenCalledOnce();
+			const notification = notifier.mock.calls[0][0];
+			expect(notification.content).toBe(
+				'User requested: proofread on post #80.'
+			);
+			expect(notification.meta).not.toHaveProperty('content_embedded');
+		});
+
+		it('embeds content for translate command with language argument', async () => {
+			const { dispatchCommand } = setupMockCommandClient({
+				resolve: makePluginStatus(),
+			});
+
+			const notifier = vi
+				.fn<ChannelNotifier>()
+				.mockResolvedValue(undefined);
+			handler.setNotifier(notifier);
+
+			const contentProvider: ContentProvider = vi
+				.fn<ContentProvider>()
+				.mockResolvedValue({
+					postContent: 'Some post content',
+					notesSupported: false,
+				});
+			handler.setContentProvider(contentProvider);
+
+			await handler.start(createMockApiClient(), createCommandMap());
+
+			await dispatchCommand(
+				makeCommand({
+					id: 14,
+					post_id: 90,
+					prompt: 'translate',
+					arguments: { language: 'French' },
+				})
+			);
+
+			expect(notifier).toHaveBeenCalledOnce();
+			const notification = notifier.mock.calls[0][0];
+			expect(notification.content).toContain('French');
+			expect(notification.content).toContain('Some post content');
+			expect(notification.meta.content_embedded).toBe('true');
+		});
+
+		it('falls back for edit command when editingFocus argument is missing', async () => {
+			const { dispatchCommand } = setupMockCommandClient({
+				resolve: makePluginStatus(),
+			});
+
+			const notifier = vi
+				.fn<ChannelNotifier>()
+				.mockResolvedValue(undefined);
+			handler.setNotifier(notifier);
+
+			const contentProvider: ContentProvider = vi
+				.fn<ContentProvider>()
+				.mockResolvedValue({
+					postContent: 'Some post content',
+					notesSupported: false,
+				});
+			handler.setContentProvider(contentProvider);
+
+			await handler.start(createMockApiClient(), createCommandMap());
+
+			// edit command without editingFocus — buildEmbeddedContent returns null
+			await dispatchCommand(
+				makeCommand({
+					id: 15,
+					post_id: 100,
+					prompt: 'edit',
+					arguments: {},
+				})
+			);
+
+			expect(notifier).toHaveBeenCalledOnce();
+			const notification = notifier.mock.calls[0][0];
+			expect(notification.content).toBe(
+				'User requested: edit on post #100.'
+			);
+			expect(notification.meta).not.toHaveProperty('content_embedded');
+		});
+
+		it('embeds content with auto-claim when both features are active', async () => {
+			const { instance, dispatchCommand } = setupMockCommandClient({
+				resolve: makePluginStatus(),
+			});
+			instance.updateCommandStatus.mockResolvedValue(
+				makeCommand({ status: 'running' })
+			);
+
+			const notifier = vi
+				.fn<ChannelNotifier>()
+				.mockResolvedValue(undefined);
+			handler.setNotifier(notifier);
+
+			const contentProvider: ContentProvider = vi
+				.fn<ContentProvider>()
+				.mockResolvedValue({
+					postContent: 'My post text',
+					notesSupported: false,
+				});
+			handler.setContentProvider(contentProvider);
+
+			await handler.start(createMockApiClient(), createCommandMap());
+
+			// Verify channels
+			await handler.updateCommandStatus(1, 'running');
+			instance.updateCommandStatus.mockClear();
+			instance.updateCommandStatus.mockResolvedValue(
+				makeCommand({ status: 'running' })
+			);
+
+			await dispatchCommand(
+				makeCommand({ id: 20, post_id: 150, prompt: 'proofread' })
+			);
+
+			expect(notifier).toHaveBeenCalledOnce();
+			const notification = notifier.mock.calls[0][0];
+
+			// Both auto-claim and content embedding should be active
+			expect(notification.meta.status).toBe('already_claimed');
+			expect(notification.meta.content_embedded).toBe('true');
+			expect(notification.content).toContain('grammar');
+			expect(notification.content).toContain('My post text');
+		});
+
+		it('embeds content for review command with notesSupported', async () => {
+			const { dispatchCommand } = setupMockCommandClient({
+				resolve: makePluginStatus(),
+			});
+
+			const notifier = vi
+				.fn<ChannelNotifier>()
+				.mockResolvedValue(undefined);
+			handler.setNotifier(notifier);
+
+			const contentProvider: ContentProvider = vi
+				.fn<ContentProvider>()
+				.mockResolvedValue({
+					postContent: 'Review this content',
+					notesSupported: true,
+				});
+			handler.setContentProvider(contentProvider);
+
+			await handler.start(createMockApiClient(), createCommandMap());
+
+			await dispatchCommand(
+				makeCommand({ id: 16, post_id: 110, prompt: 'review' })
+			);
+
+			expect(notifier).toHaveBeenCalledOnce();
+			const notification = notifier.mock.calls[0][0];
+			expect(notification.content).toContain('Review this content');
+			expect(notification.meta.content_embedded).toBe('true');
 		});
 	});
 

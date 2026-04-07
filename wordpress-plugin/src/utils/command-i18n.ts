@@ -26,6 +26,14 @@ interface CommandStrings {
  * script bundle executes, so module-level `__()` calls are safe.
  */
 const STRINGS: Record<CommandSlug, CommandStrings> = {
+	'open-post': {
+		label: __('Open Post', 'claudaborative-editing'),
+		description: __(
+			'Signal that a post was opened in the editor',
+			'claudaborative-editing'
+		),
+		progressLabel: __('Connecting…', 'claudaborative-editing'),
+	},
 	proofread: {
 		label: __('Proofread', 'claudaborative-editing'),
 		description: __(

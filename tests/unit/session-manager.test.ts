@@ -127,6 +127,8 @@ vi.mock('../../src/wordpress/sync-client.js', () => {
 const mockCommandHandlerStart = vi.fn<() => Promise<boolean>>();
 const mockCommandHandlerStop = vi.fn();
 const mockCommandHandlerSetNotifier = vi.fn();
+const mockCommandHandlerSetPreOpenHandler = vi.fn();
+const mockCommandHandlerSetContentProvider = vi.fn();
 const mockCommandHandlerUpdateCommandStatus = vi.fn<() => Promise<void>>();
 const mockCommandHandlerGetPluginStatus = vi.fn();
 const mockCommandHandlerGetTransport = vi.fn();
@@ -140,6 +142,8 @@ vi.mock('../../src/session/command-handler.js', () => {
 			this.start = mockCommandHandlerStart;
 			this.stop = mockCommandHandlerStop;
 			this.setNotifier = mockCommandHandlerSetNotifier;
+			this.setPreOpenHandler = mockCommandHandlerSetPreOpenHandler;
+			this.setContentProvider = mockCommandHandlerSetContentProvider;
 			this.updateCommandStatus = mockCommandHandlerUpdateCommandStatus;
 			this.getPluginStatus = mockCommandHandlerGetPluginStatus;
 			this.getTransport = mockCommandHandlerGetTransport;

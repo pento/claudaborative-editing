@@ -47,6 +47,7 @@ Claude Code  <--stdio-->  MCP Server (Node.js)  <--HTTP polling-->  WordPress
 - `src/session/` — Connection lifecycle, awareness/presence, command handler
 - `src/session/command-handler.ts` — Command listener lifecycle, channel notification dispatch
 - `src/tools/` — MCP tool handlers (connect, posts, read, edit, media, metadata, notes, commands, status)
+- `src/prompts/prompt-content.ts` — Prompt content builder functions (shared by prompt handlers and channel notification embedding)
 - `src/prompts/` — MCP prompt handlers (editing, review, authoring, compose)
 - `src/blocks/` — Gutenberg HTML parser, Claude-friendly renderer
 - `tests/` — Unit and integration tests
@@ -78,9 +79,16 @@ The MCP server declares the `claude/channel` experimental capability and include
 
 Commands are delivered through a shared Yjs Y.Doc synced via the `root/wpce_commands` room. The browser writes command state to the Y.Doc's state map after REST API calls; the MCP server observes the state map for changes. Both sides use the same `POST /wp-sync/v1/updates` polling loop that powers collaborative editing (~2s delivery cadence).
 
-**Command flow**: When a command appears in the Y.Map (from the browser via sync), the handler pushes a channel notification to Claude Code via `server.server.notification()` **without claiming** the command. The claim happens when Claude calls `wp_update_command_status("running")`, which performs an atomic `pending → running` transition on the WordPress side (409 on conflict). This design ensures that instances whose clients ignore the notification (e.g., channels not enabled) never claim commands, leaving them available for channel-capable instances.
+**Active post pre-opening**: When the user opens a post in the WordPress editor, the plugin sends an `open-post` command through the standard command infrastructure (REST API → Y.Map sync via `writeCommandToSync`). The `ConnectionStatus` component sends this automatically when `mcpConnected` is true and `currentPostId` changes. On the MCP side, `CommandHandler.handleCommand()` detects the `open-post` prompt and calls `SessionManager.preOpenPost()` before building the notification. This opens the post, syncs the Yjs room, and pre-caches notes, eliminating the 200ms–15s `wp_open_post` latency when a real command arrives. The `wp_open_post` tool returns early if the post is already open.
 
-**Channel notification format**: The `notifications/claude/channel` notification includes a `content` field describing the request and `meta` fields with `command_id`, `prompt`, `post_id`, and optionally `arguments`. Claude Code wraps this as a `<channel source="wpce">` tag (source is set automatically from the server name).
+**Command flow, channel verification, and auto-claim**: The `open-post` command doubles as the channel verification mechanism. When Claude acks it (by calling `wp_update_command_status("completed")`), the `_channelsVerified` flag is set. From that point on:
+
+1. **First real command** (channels verified via prior `open-post` ack): The handler auto-claims the command via REST API before sending the notification. `meta.status = 'already_claimed'` tells Claude to skip the claim step. If the claim gets a 409 (another instance claimed it), the notification is skipped entirely.
+2. **Without prior verification** (fallback): The command notification is sent **without claiming**. Claude calls `wp_update_command_status("running")` to claim (atomic `pending → running`, 409 on conflict). This call also verifies channels for subsequent commands.
+
+**Content-embedded notifications**: When the post is pre-opened, the handler embeds the full post content and task-specific instructions directly in the notification `content` field (built using prompt content builders from `src/prompts/prompt-content.ts`). `meta.content_embedded = 'true'` tells Claude to skip `wp_open_post` and `wp_read_post`. A `ContentProvider` callback (set by SessionManager) returns the current `readPost()` output and cached notes. Fallback: if the post isn't ready, a minimal notification is sent without embedded content.
+
+**Channel notification format**: The `notifications/claude/channel` notification includes a `content` field (either embedded prompt content or a brief request description) and `meta` fields with `command_id`, `prompt`, `post_id`, and optionally `arguments`, `status` (`already_claimed`), and `content_embedded` (`true`). Claude Code wraps this as a `<channel source="wpce">` tag (source is set automatically from the server name).
 
 **Notification buffering**: During auto-connect, the command handler may start before the `McpServer` is created and the notifier callback is wired. Notifications are buffered and flushed when `setChannelNotifier()` is called from `server.ts`.
 

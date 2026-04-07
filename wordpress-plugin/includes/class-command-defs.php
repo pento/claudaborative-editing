@@ -26,6 +26,7 @@ class Command_Defs {
 	 * @var string[]
 	 */
 	const ALLOWED_PROMPTS = [
+		'open-post',
 		'proofread',
 		'review',
 		'respond-to-notes',
@@ -44,6 +45,7 @@ class Command_Defs {
 	const VALID_TRANSITIONS = [
 		'pending'        => [
 			'running',
+			'completed',
 		],
 		'running'        => [
 			'completed',

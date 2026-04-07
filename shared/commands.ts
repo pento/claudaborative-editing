@@ -8,6 +8,7 @@
 // --- Command types ---
 
 export type CommandSlug =
+	| 'open-post'
 	| 'proofread'
 	| 'review'
 	| 'respond-to-notes'
@@ -36,6 +37,15 @@ export interface CommandDefinition {
 // --- Command definitions ---
 
 export const COMMANDS: Record<CommandSlug, CommandDefinition> = {
+	'open-post': {
+		slug: 'open-post',
+		label: 'Open Post',
+		description: 'Signal that a post was opened in the editor',
+		progressLabel: 'Connecting\u2026',
+		args: {},
+		channelHint:
+			'"open-post" (Post opened in the editor — the post is already loaded. Just call wp_update_command_status with status "completed" to acknowledge.)',
+	},
 	proofread: {
 		slug: 'proofread',
 		label: 'Proofread',
@@ -142,7 +152,7 @@ export const TERMINAL_STATUSES: readonly CommandStatus[] = [
 export const VALID_TRANSITIONS: Readonly<
 	Partial<Record<CommandStatus, readonly CommandStatus[]>>
 > = {
-	pending: ['running'],
+	pending: ['running', 'completed'],
 	running: ['completed', 'failed', 'awaiting_input'],
 	awaiting_input: ['running', 'cancelled'],
 } as const;

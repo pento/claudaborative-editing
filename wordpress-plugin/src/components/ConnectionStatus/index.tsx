@@ -49,6 +49,17 @@ export default function ConnectionStatus() {
 		[]
 	);
 
+	// Send open-post command when MCP is connected and we have a post ID.
+	// This triggers the MCP server to pre-open the post and verify channels.
+	const { submitCommand } = useDispatch(aiActionsStore);
+	const openPostSentRef = useRef<number | null>(null);
+	useEffect(() => {
+		if (!mcpConnected || !currentPostId) return;
+		if (openPostSentRef.current === currentPostId) return;
+		openPostSentRef.current = currentPostId;
+		submitCommand('open-post', currentPostId);
+	}, [mcpConnected, currentPostId, submitCommand]);
+
 	// Command polling — runs continuously regardless of footer visibility.
 	const { activeCommand, history, cancel } = useCommands(currentPostId);
 

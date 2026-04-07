@@ -94,6 +94,25 @@ describe('post tools', () => {
 			expect(result.content[0].text).toContain('Title:');
 		});
 
+		it('returns early when the post is already open', async () => {
+			// Reconfigure session to be in editing state with post 42 open
+			server = createMockServer();
+			session = createMockSession({
+				state: 'editing',
+				user: fakeUser,
+				post: fakePost,
+			});
+			registerPostTools(server as unknown as McpServer, session);
+
+			const tool = server.registeredTools.get('wp_open_post');
+			assertDefined(tool);
+			const result = await tool.handler({ postId: 42 });
+
+			expect(session.openPost).not.toHaveBeenCalled();
+			expect(result.isError).toBeUndefined();
+			expect(result.content[0].text).toContain('Post 42 is already open');
+		});
+
 		it('returns error on failure', async () => {
 			(
 				session.openPost as ReturnType<typeof import('vitest').vi.fn>

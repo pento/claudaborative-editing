@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { SessionManager } from '../session/session-manager.js';
+import { buildTranslateContent } from './prompt-content.js';
 
 export function registerAuthoringPrompts(
 	server: McpServer,
@@ -63,21 +64,7 @@ export function registerAuthoringPrompts(
 						role: 'user' as const,
 						content: {
 							type: 'text' as const,
-							text: `Translate the following WordPress post into ${language}.
-
-Here is the current post content:
-
-${postContent}
-
-Instructions:
-- Translate the title using wp_set_title.
-- Translate each block's content using wp_update_block, working through blocks in order.
-- If the post has an excerpt, translate it using wp_set_excerpt.
-- Preserve all HTML formatting, links, and block structure exactly.
-- Do NOT add, remove, or reorder blocks.
-- Do NOT change non-text attributes (images, URLs, etc.) unless they contain translatable alt text or captions.
-- Adapt idioms and cultural references naturally rather than translating literally.
-- After completing the translation, use wp_read_post to verify, then wp_save to save.`,
+							text: buildTranslateContent(postContent, language),
 						},
 					},
 				],
