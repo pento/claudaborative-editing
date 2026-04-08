@@ -140,7 +140,39 @@ export function teardownWpEnv(): void {
 // REST API helpers — safe for concurrent test execution (no wp-cli needed)
 // ---------------------------------------------------------------------------
 
+/**
+ * Per-worker auth context set by the testUser fixture.
+ * When set, apiFetch uses these credentials by default instead of admin.
+ * Playwright workers are single-threaded, so a module-level variable is safe.
+ */
+let currentTestAuth: { username: string; appPassword: string } | null = null;
+
+/**
+ * Set the default auth for API requests (called by testUser fixture on setup).
+ */
+export function setTestAuth(auth: {
+	username: string;
+	appPassword: string;
+}): void {
+	currentTestAuth = auth;
+}
+
+/**
+ * Clear the default auth (called by testUser fixture on teardown).
+ */
+export function clearTestAuth(): void {
+	currentTestAuth = null;
+}
+
 function basicAuth(): string {
+	if (currentTestAuth) {
+		return (
+			'Basic ' +
+			Buffer.from(
+				`${currentTestAuth.username}:${currentTestAuth.appPassword}`
+			).toString('base64')
+		);
+	}
 	const password = getSharedAppPassword();
 	return (
 		'Basic ' +
@@ -256,19 +288,6 @@ export async function updateCommand(
 		},
 		auth
 	);
-}
-
-export async function createAppPassword(label: string): Promise<string> {
-	const result = await apiFetch<{ password: string }>(
-		`/wp/v2/users/me/application-passwords`,
-		{
-			method: 'POST',
-			body: JSON.stringify({
-				name: label,
-			}),
-		}
-	);
-	return result.password;
 }
 
 // ---------------------------------------------------------------------------

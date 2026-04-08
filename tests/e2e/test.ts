@@ -7,12 +7,21 @@
  *   WordPress user + app password, logs the browser in as that user, and
  *   cleans up afterwards). This prevents command cross-contamination when
  *   tests run in parallel, since commands are user-scoped.
+ * - `mcpClient` fixture: MCP subprocess auto-connected as the test user,
+ *   with stderr-enhanced errors and automatic cleanup
+ * - `draftPost` fixture: draft post creation with automatic cleanup
  */
 import { test as base, expect } from '@wordpress/e2e-test-utils-playwright';
+import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { createMcpTestClient } from './helpers/mcp';
 import {
 	WP_BASE_URL,
 	createTestUser,
 	deleteTestUser,
+	setTestAuth,
+	clearTestAuth,
+	createDraftPost,
+	deletePost,
 	type TestUser,
 } from './helpers/wp-env';
 
@@ -35,7 +44,20 @@ function isSuppressed(args: unknown[]): boolean {
 	return SUPPRESSED_MESSAGES.some((msg) => text.includes(msg));
 }
 
-const test = base.extend<{ testUser: TestUser }>({
+export interface McpClientFixture {
+	client: Client;
+	stderr: string[];
+}
+
+/** Default content for auto-created draft posts. */
+const DEFAULT_POST_CONTENT =
+	'<!-- wp:paragraph --><p>Test paragraph</p><!-- /wp:paragraph -->';
+
+const test = base.extend<{
+	testUser: TestUser;
+	mcpClient: McpClientFixture;
+	draftPost: number;
+}>({
 	// Per-test user fixture — opt-in. Creates a unique WordPress user,
 	// logs the browser in as that user, and cleans up afterwards.
 	// Tests must explicitly destructure `testUser` to activate it.
@@ -43,22 +65,86 @@ const test = base.extend<{ testUser: TestUser }>({
 		async ({ page }, use) => {
 			const user = await createTestUser();
 
-			// Log the browser in as the test user. Set values via JS to
-			// avoid interference from wp-login.php's focus timer script
-			// which fires at 200ms and can yank focus between fields.
-			await page.goto(`${WP_BASE_URL}/wp-login.php`);
-			await page.waitForSelector('#user_login');
-			await page.evaluate(`
-				document.getElementById('user_login').value = ${JSON.stringify(user.username)};
-				document.getElementById('user_pass').value = ${JSON.stringify(user.password)};
-			`);
-			await page.click('#wp-submit');
-			await page.waitForURL('**/wp-admin/**');
+			// Set as default auth for API helpers so tests don't need
+			// to pass credentials explicitly.
+			setTestAuth({
+				username: user.username,
+				appPassword: user.appPassword,
+			});
 
 			try {
+				// Log the browser in as the test user. Set values via JS to
+				// avoid interference from wp-login.php's focus timer script
+				// which fires at 200ms and can yank focus between fields.
+				await page.goto(`${WP_BASE_URL}/wp-login.php`);
+				await page.waitForSelector('#user_login');
+				await page.evaluate(`
+					document.getElementById('user_login').value = ${JSON.stringify(user.username)};
+					document.getElementById('user_pass').value = ${JSON.stringify(user.password)};
+				`);
+				await page.click('#wp-submit');
+				await page.waitForURL('**/wp-admin/**');
+
 				await use(user);
 			} finally {
+				clearTestAuth();
 				await deleteTestUser(user.userId);
+			}
+		},
+		{ auto: false },
+	],
+
+	// MCP client fixture — opt-in. Spawns an MCP subprocess with the
+	// test user's credentials so it auto-connects to WordPress on startup.
+	// Enhances errors with stderr output on failure and closes the
+	// transport on teardown.
+	mcpClient: [
+		async ({ testUser }, use) => {
+			const { client, close, stderr } = await createMcpTestClient({
+				WP_SITE_URL: WP_BASE_URL,
+				WP_USERNAME: testUser.username,
+				WP_APP_PASSWORD: testUser.appPassword,
+			});
+			try {
+				await use({ client, stderr });
+			} catch (error) {
+				const stderrOutput = stderr.join('').trim();
+				throw new Error(
+					`${error instanceof Error ? error.message : String(error)}${stderrOutput ? `\n\nMCP stderr:\n${stderrOutput}` : ''}`,
+					{ cause: error }
+				);
+			} finally {
+				await close();
+			}
+		},
+		{ auto: false },
+	],
+
+	// Draft post fixture — opt-in. Creates a draft post owned by the
+	// test user (via setTestAuth), using the test title as the post title,
+	// and deletes it on teardown. Provides the post ID directly.
+	draftPost: [
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars -- ensures setTestAuth runs first
+		async ({ testUser: _ensureAuth }, use, testInfo) => {
+			const postId = await createDraftPost(
+				testInfo.title,
+				DEFAULT_POST_CONTENT
+			);
+
+			await use(postId);
+
+			// Cleanup: delete the post. Swallow 404 (post already deleted
+			// mid-test, e.g. deleted-post tests), rethrow anything else so
+			// real cleanup failures are surfaced.
+			try {
+				await deletePost(postId);
+			} catch (error) {
+				if (
+					!(error instanceof Error) ||
+					!error.message.includes('(404)')
+				) {
+					throw error;
+				}
 			}
 		},
 		{ auto: false },
