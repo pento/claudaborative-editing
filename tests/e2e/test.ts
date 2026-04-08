@@ -72,19 +72,19 @@ const test = base.extend<{
 				appPassword: user.appPassword,
 			});
 
-			// Log the browser in as the test user. Set values via JS to
-			// avoid interference from wp-login.php's focus timer script
-			// which fires at 200ms and can yank focus between fields.
-			await page.goto(`${WP_BASE_URL}/wp-login.php`);
-			await page.waitForSelector('#user_login');
-			await page.evaluate(`
-				document.getElementById('user_login').value = ${JSON.stringify(user.username)};
-				document.getElementById('user_pass').value = ${JSON.stringify(user.password)};
-			`);
-			await page.click('#wp-submit');
-			await page.waitForURL('**/wp-admin/**');
-
 			try {
+				// Log the browser in as the test user. Set values via JS to
+				// avoid interference from wp-login.php's focus timer script
+				// which fires at 200ms and can yank focus between fields.
+				await page.goto(`${WP_BASE_URL}/wp-login.php`);
+				await page.waitForSelector('#user_login');
+				await page.evaluate(`
+					document.getElementById('user_login').value = ${JSON.stringify(user.username)};
+					document.getElementById('user_pass').value = ${JSON.stringify(user.password)};
+				`);
+				await page.click('#wp-submit');
+				await page.waitForURL('**/wp-admin/**');
+
 				await use(user);
 			} finally {
 				clearTestAuth();
@@ -123,7 +123,6 @@ const test = base.extend<{
 	// Draft post fixture — opt-in. Creates a draft post owned by the
 	// test user (via setTestAuth), using the test title as the post title,
 	// and deletes it on teardown. Provides the post ID directly.
-	// Tracks all created posts so multiple calls are cleaned up.
 	draftPost: [
 		// eslint-disable-next-line @typescript-eslint/no-unused-vars -- ensures setTestAuth runs first
 		async ({ testUser: _ensureAuth }, use, testInfo) => {

@@ -13,12 +13,6 @@ export interface BrowserBlock {
 	attributes: Record<string, unknown>;
 }
 
-export interface EditorBlock {
-	name: string;
-	attributes: Record<string, unknown>;
-	innerBlocks?: EditorBlock[];
-}
-
 /**
  * Navigate to the post editor, disable welcome guide and fullscreen mode,
  * and wait until at least one block is loaded.
