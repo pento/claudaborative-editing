@@ -76,6 +76,8 @@ export class CommandHandler {
 	private notifier: ChannelNotifier | null = null;
 	private preOpenHandler: PreOpenHandler | null = null;
 	private contentProvider: ContentProvider | null = null;
+	/** Connected user's ID — commands from other users are ignored. */
+	private _userId: number | null = null;
 
 	/**
 	 * Whether the MCP client has been verified as channel-capable.
@@ -109,6 +111,13 @@ export class CommandHandler {
 	 */
 	setPreOpenHandler(handler: PreOpenHandler): void {
 		this.preOpenHandler = handler;
+	}
+
+	/**
+	 * Set the connected user's ID. Commands from other users are ignored.
+	 */
+	setUserId(userId: number): void {
+		this._userId = userId;
 	}
 
 	/**
@@ -187,6 +196,7 @@ export class CommandHandler {
 		this._pluginStatus = null;
 		this._protocolWarning = null;
 		this._channelsVerified = false;
+		this._userId = null;
 		this.pendingNotifications = [];
 	}
 
@@ -320,6 +330,7 @@ export class CommandHandler {
 	 */
 	private async handleResponse(command: Command): Promise<void> {
 		if (!this.commandClient) return;
+		if (this._userId !== null && command.user_id !== this._userId) return;
 
 		// Extract conversation messages from result_data
 		const messages = command.result_data?.messages;
@@ -378,6 +389,7 @@ export class CommandHandler {
 	 */
 	private async handleCommand(command: Command): Promise<void> {
 		if (!this.commandClient) return;
+		if (this._userId !== null && command.user_id !== this._userId) return;
 
 		// For open-post commands, pre-open the post before building the
 		// notification so content can be embedded.

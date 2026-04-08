@@ -150,12 +150,19 @@ function basicAuth(): string {
 
 async function apiFetch<T>(
 	endpoint: string,
-	options: RequestInit = {}
+	options: RequestInit = {},
+	auth?: { username: string; appPassword: string }
 ): Promise<T> {
 	const url = `${WP_BASE_URL}/wp-json${endpoint}`;
+	const authHeader = auth
+		? 'Basic ' +
+			Buffer.from(`${auth.username}:${auth.appPassword}`).toString(
+				'base64'
+			)
+		: basicAuth();
 	const headers = new Headers({
 		'Content-Type': 'application/json',
-		Authorization: basicAuth(),
+		Authorization: authHeader,
 	});
 	if (options.headers) {
 		new Headers(options.headers).forEach((v, k) => {
@@ -174,29 +181,44 @@ async function apiFetch<T>(
 
 export async function createDraftPost(
 	title: string,
-	content: string
+	content: string,
+	auth?: { username: string; appPassword: string }
 ): Promise<number> {
-	const post = await apiFetch<{ id: number }>('/wp/v2/posts', {
-		method: 'POST',
-		body: JSON.stringify({
-			title,
-			content,
-			status: 'draft',
-		}),
-	});
+	const post = await apiFetch<{ id: number }>(
+		'/wp/v2/posts',
+		{
+			method: 'POST',
+			body: JSON.stringify({
+				title,
+				content,
+				status: 'draft',
+			}),
+		},
+		auth
+	);
 	return post.id;
 }
 
-export async function deletePost(postId: number): Promise<void> {
-	await apiFetch(`/wp/v2/posts/${postId}?force=true`, {
-		method: 'DELETE',
-	});
+export async function deletePost(
+	postId: number,
+	auth?: { username: string; appPassword: string }
+): Promise<void> {
+	await apiFetch(
+		`/wp/v2/posts/${postId}?force=true`,
+		{ method: 'DELETE' },
+		auth
+	);
 }
 
-export async function trashPost(postId: number): Promise<void> {
-	await apiFetch(`/wp/v2/posts/${postId}?force=false`, {
-		method: 'DELETE',
-	});
+export async function trashPost(
+	postId: number,
+	auth?: { username: string; appPassword: string }
+): Promise<void> {
+	await apiFetch(
+		`/wp/v2/posts/${postId}?force=false`,
+		{ method: 'DELETE' },
+		auth
+	);
 }
 
 export interface CommandResponse {
@@ -210,10 +232,11 @@ export interface CommandResponse {
 }
 
 export async function listCommands(
-	postId?: number
+	postId?: number,
+	auth?: { username: string; appPassword: string }
 ): Promise<CommandResponse[]> {
 	const query = postId ? `?post_id=${postId}` : '';
-	return apiFetch(`/wpce/v1/commands${query}`);
+	return apiFetch(`/wpce/v1/commands${query}`, {}, auth);
 }
 
 export async function updateCommand(
@@ -222,12 +245,17 @@ export async function updateCommand(
 		status: string;
 		message?: string;
 		result_data?: string;
-	}
+	},
+	auth?: { username: string; appPassword: string }
 ): Promise<CommandResponse> {
-	return apiFetch(`/wpce/v1/commands/${commandId}`, {
-		method: 'PATCH',
-		body: JSON.stringify(params),
-	});
+	return apiFetch(
+		`/wpce/v1/commands/${commandId}`,
+		{
+			method: 'PATCH',
+			body: JSON.stringify(params),
+		},
+		auth
+	);
 }
 
 export async function createAppPassword(label: string): Promise<string> {
@@ -241,4 +269,64 @@ export async function createAppPassword(label: string): Promise<string> {
 		}
 	);
 	return result.password;
+}
+
+// ---------------------------------------------------------------------------
+// Per-test user isolation — each test gets a unique WordPress user so that
+// commands in the shared Yjs room are user-scoped and don't cross-contaminate.
+// ---------------------------------------------------------------------------
+
+export interface TestUser {
+	username: string;
+	password: string;
+	appPassword: string;
+	userId: number;
+}
+
+let testUserCounter = 0;
+
+/**
+ * Create a unique WordPress editor user with an application password.
+ * The user has the `editor` role (has edit_posts but is not an admin).
+ */
+export async function createTestUser(): Promise<TestUser> {
+	const id = ++testUserCounter;
+	const username = `e2e-user-${Date.now()}-${id}`;
+	const password = `pass-${Date.now()}-${id}`;
+
+	// Create user as admin
+	const user = await apiFetch<{ id: number }>('/wp/v2/users', {
+		method: 'POST',
+		body: JSON.stringify({
+			username,
+			password,
+			email: `${username}@example.com`,
+			roles: ['editor'],
+		}),
+	});
+
+	// Create an app password for the new user (admin can do this)
+	const appResult = await apiFetch<{ password: string }>(
+		`/wp/v2/users/${user.id}/application-passwords`,
+		{
+			method: 'POST',
+			body: JSON.stringify({ name: `e2e-${Date.now()}` }),
+		}
+	);
+
+	return {
+		username,
+		password,
+		appPassword: appResult.password,
+		userId: user.id,
+	};
+}
+
+/**
+ * Delete a test user (force-deletes, reassigns content to admin user 1).
+ */
+export async function deleteTestUser(userId: number): Promise<void> {
+	await apiFetch(`/wp/v2/users/${userId}?force=true&reassign=1`, {
+		method: 'DELETE',
+	});
 }

@@ -1805,7 +1805,7 @@ export class SessionManager {
 	private _preOpenInProgress: Promise<void> | null = null;
 
 	/**
-	 * Pre-open a post in response to the browser's active_post signal.
+	 * Pre-open a post in response to the open-post command from the browser.
 	 * Called automatically when the user opens or switches posts in the editor.
 	 *
 	 * If the post is already open, this is a no-op. If a different post is
@@ -1819,7 +1819,10 @@ export class SessionManager {
 			await this._preOpenInProgress;
 		}
 
-		this._preOpenInProgress = this._doPreOpenPost(postId);
+		// Wrap in a non-rejecting promise so serialized callers don't see errors.
+		this._preOpenInProgress = this._doPreOpenPost(postId).catch(() => {
+			// Errors are best-effort — the command handler already catches them.
+		});
 		try {
 			await this._preOpenInProgress;
 		} finally {
@@ -1895,6 +1898,9 @@ export class SessionManager {
 		const handler = new CommandHandler();
 		if (this._channelNotifier) {
 			handler.setNotifier(this._channelNotifier);
+		}
+		if (this._user) {
+			handler.setUserId(this._user.id);
 		}
 		handler.setPreOpenHandler(async (postId) => {
 			await this.preOpenPost(postId);

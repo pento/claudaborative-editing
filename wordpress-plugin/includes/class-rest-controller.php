@@ -448,7 +448,8 @@ class REST_Controller extends \WP_REST_Controller {
 		}
 
 		// Validate the status transition.
-		if ( ! $this->validate_status_transition( $current_status, $new_status ) ) {
+		$prompt = get_post_meta( $command->ID, 'wpce_prompt', true );
+		if ( ! $this->validate_status_transition( $current_status, $new_status, $prompt ) ) {
 			return new \WP_Error(
 				'rest_invalid_transition',
 				sprintf(
@@ -743,9 +744,20 @@ class REST_Controller extends \WP_REST_Controller {
 	 *
 	 * @param string $current_status The current command status.
 	 * @param string $new_status     The requested new status.
+	 * @param string $prompt         The command prompt slug.
 	 * @return bool True if the transition is valid.
 	 */
-	private function validate_status_transition( $current_status, $new_status ) {
+	private function validate_status_transition( string $current_status, string $new_status, string $prompt = '' ) {
+		// Signal commands (e.g., open-post) can skip running and go
+		// directly from pending to completed.
+		if (
+			'pending' === $current_status
+			&& 'completed' === $new_status
+			&& in_array( $prompt, Command_Defs::SIGNAL_PROMPTS, true )
+		) {
+			return true;
+		}
+
 		if ( ! isset( Command_Defs::VALID_TRANSITIONS[ $current_status ] ) ) {
 			return false;
 		}

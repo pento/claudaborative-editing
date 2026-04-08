@@ -80,22 +80,6 @@ export function registerPostTools(
 		},
 		async ({ postId }) => {
 			try {
-				// If the post is already open (e.g., via pre-open), return its content.
-				if (
-					session.getState() === 'editing' &&
-					session.getCurrentPost()?.id === postId
-				) {
-					const content = session.readPost();
-					return {
-						content: [
-							{
-								type: 'text' as const,
-								text: `Post ${postId} is already open.\n\n${content}`,
-							},
-						],
-					};
-				}
-
 				await session.openPost(postId);
 				const content = session.readPost();
 				return {

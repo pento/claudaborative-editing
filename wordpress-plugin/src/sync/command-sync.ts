@@ -299,31 +299,52 @@ async function startStaleCommandCleanup(): Promise<void> {
 /**
  * Write a command to the Y.Doc's state map.
  * Call after a successful REST API operation (submit, respond, cancel).
+ * If the Y.Doc isn't ready yet (collection sync still initializing),
+ * retries on a short interval until it is.
  *
  * @param command The command to write.
  */
 export function writeCommandToSync(command: Command): void {
-	const stateMap = getStateMap();
-	if (!stateMap) return;
+	const RETRY_INTERVAL_MS = 200;
+	const MAX_RETRIES = 50; // 10 seconds
 
-	// Read current commands, update the specific one, write back.
-	const commands = {
-		...((stateMap.get('commands') as Record<string, unknown> | undefined) ??
-			{}),
-	};
+	function doWrite(): boolean {
+		const stateMap = getStateMap();
+		if (!stateMap) return false;
 
-	if (TERMINAL_STATUSES.includes(command.status)) {
-		// Remove terminal commands to prevent stale data persisting
-		// in the Y.Doc after the CPT post is deleted.
-		delete commands[String(command.id)];
-	} else {
-		commands[String(command.id)] = { ...command };
+		// Read current commands, update the specific one, write back.
+		const commands = {
+			...((stateMap.get('commands') as
+				| Record<string, unknown>
+				| undefined) ?? {}),
+		};
+
+		if (TERMINAL_STATUSES.includes(command.status)) {
+			// Remove terminal commands to prevent stale data persisting
+			// in the Y.Doc after the CPT post is deleted.
+			delete commands[String(command.id)];
+		} else {
+			commands[String(command.id)] = { ...command };
+		}
+
+		commandDoc?.transact(() => {
+			stateMap.set('commands', commands);
+			stateMap.set('savedAt', Date.now());
+		});
+
+		return true;
 	}
 
-	commandDoc?.transact(() => {
-		stateMap.set('commands', commands);
-		stateMap.set('savedAt', Date.now());
-	});
+	if (doWrite()) return;
+
+	// Y.Doc not ready — retry until it is.
+	let retries = 0;
+	const interval = setInterval(() => {
+		retries++;
+		if (doWrite() || retries >= MAX_RETRIES) {
+			clearInterval(interval);
+		}
+	}, RETRY_INTERVAL_MS);
 }
 
 /**

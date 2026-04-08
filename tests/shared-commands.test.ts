@@ -97,8 +97,8 @@ describe('shared/commands', () => {
 			expect(VALID_TRANSITIONS).toHaveProperty('awaiting_input');
 		});
 
-		it('pending can transition to running or completed', () => {
-			expect(VALID_TRANSITIONS.pending).toEqual(['running', 'completed']);
+		it('pending can only transition to running', () => {
+			expect(VALID_TRANSITIONS.pending).toEqual(['running']);
 		});
 
 		it('running can transition to completed, failed, or awaiting_input', () => {

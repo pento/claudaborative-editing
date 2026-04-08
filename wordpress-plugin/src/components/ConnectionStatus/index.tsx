@@ -49,8 +49,9 @@ export default function ConnectionStatus() {
 		[]
 	);
 
-	// Send open-post command when MCP is connected and we have a post ID.
+	// Send open-post signal when MCP is connected and we have a post ID.
 	// This triggers the MCP server to pre-open the post and verify channels.
+	// open-post is a signal command, so submitCommand skips active state.
 	const { submitCommand } = useDispatch(aiActionsStore);
 	const openPostSentRef = useRef<number | null>(null);
 	useEffect(() => {

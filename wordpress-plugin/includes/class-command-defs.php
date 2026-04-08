@@ -45,7 +45,6 @@ class Command_Defs {
 	const VALID_TRANSITIONS = [
 		'pending'        => [
 			'running',
-			'completed',
 		],
 		'running'        => [
 			'completed',
@@ -56,6 +55,16 @@ class Command_Defs {
 			'running',
 			'cancelled',
 		],
+	];
+
+	/**
+	 * Signal command prompts — internal lifecycle signals that can
+	 * transition directly from pending to completed.
+	 *
+	 * @var string[]
+	 */
+	const SIGNAL_PROMPTS = [
+		'open-post',
 	];
 
 	/**

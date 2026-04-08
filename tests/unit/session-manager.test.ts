@@ -128,6 +128,7 @@ const mockCommandHandlerStart = vi.fn<() => Promise<boolean>>();
 const mockCommandHandlerStop = vi.fn();
 const mockCommandHandlerSetNotifier = vi.fn();
 const mockCommandHandlerSetPreOpenHandler = vi.fn();
+const mockCommandHandlerSetUserId = vi.fn();
 const mockCommandHandlerSetContentProvider = vi.fn();
 const mockCommandHandlerUpdateCommandStatus = vi.fn<() => Promise<void>>();
 const mockCommandHandlerGetPluginStatus = vi.fn();
@@ -143,6 +144,7 @@ vi.mock('../../src/session/command-handler.js', () => {
 			this.stop = mockCommandHandlerStop;
 			this.setNotifier = mockCommandHandlerSetNotifier;
 			this.setPreOpenHandler = mockCommandHandlerSetPreOpenHandler;
+			this.setUserId = mockCommandHandlerSetUserId;
 			this.setContentProvider = mockCommandHandlerSetContentProvider;
 			this.updateCommandStatus = mockCommandHandlerUpdateCommandStatus;
 			this.getPluginStatus = mockCommandHandlerGetPluginStatus;

@@ -5,12 +5,12 @@ import {
 	getToolText,
 } from './helpers/mcp';
 import {
-	WP_ADMIN_USER,
 	WP_BASE_URL,
-	getSharedAppPassword,
 	createDraftPost,
 	deletePost,
 	trashPost,
+	createTestUser,
+	deleteTestUser,
 } from './helpers/wp-env';
 
 const PARAGRAPH_CONTENT =
@@ -38,19 +38,24 @@ test.describe('deleted post detection', () => {
 	test('detects permanently deleted post and errors on editing operations', async () => {
 		test.setTimeout(120_000);
 
+		const user = await createTestUser();
+		const auth = {
+			username: user.username,
+			appPassword: user.appPassword,
+		};
 		const postId = await createDraftPost(
 			'E2E deleted-post permanent',
-			PARAGRAPH_CONTENT
+			PARAGRAPH_CONTENT,
+			auth
 		);
-		const appPassword = getSharedAppPassword();
 		const { client, close, stderr } = await createMcpTestClient();
 
 		try {
 			// Connect and open the post
 			await callToolOrThrow(client, 'wp_connect', {
 				siteUrl: WP_BASE_URL,
-				username: WP_ADMIN_USER,
-				appPassword,
+				username: user.username,
+				appPassword: user.appPassword,
 			});
 			await callToolOrThrow(client, 'wp_open_post', { postId });
 
@@ -59,7 +64,7 @@ test.describe('deleted post detection', () => {
 			expect(getToolText(readResult)).toContain('Test paragraph');
 
 			// Permanently delete the post via REST API
-			await deletePost(postId);
+			await deletePost(postId, auth);
 
 			// Poll until MCP detects the post is gone
 			// The sync client will get an error on next poll, triggering checkPostStillExists
@@ -108,6 +113,7 @@ test.describe('deleted post detection', () => {
 			);
 		} finally {
 			await close();
+			await deleteTestUser(user.userId);
 			// Post is already permanently deleted, no cleanup needed
 		}
 	});
@@ -115,19 +121,24 @@ test.describe('deleted post detection', () => {
 	test('detects trashed post and errors on editing operations', async () => {
 		test.setTimeout(120_000);
 
+		const user = await createTestUser();
+		const auth = {
+			username: user.username,
+			appPassword: user.appPassword,
+		};
 		const postId = await createDraftPost(
 			'E2E deleted-post trash',
-			PARAGRAPH_CONTENT
+			PARAGRAPH_CONTENT,
+			auth
 		);
-		const appPassword = getSharedAppPassword();
 		const { client, close, stderr } = await createMcpTestClient();
 
 		try {
 			// Connect and open the post
 			await callToolOrThrow(client, 'wp_connect', {
 				siteUrl: WP_BASE_URL,
-				username: WP_ADMIN_USER,
-				appPassword,
+				username: user.username,
+				appPassword: user.appPassword,
 			});
 			await callToolOrThrow(client, 'wp_open_post', { postId });
 
@@ -136,7 +147,7 @@ test.describe('deleted post detection', () => {
 			expect(getToolText(readResult)).toContain('Test paragraph');
 
 			// Trash the post via REST API (not permanent delete)
-			await trashPost(postId);
+			await trashPost(postId, auth);
 
 			// Poll until MCP detects the post is gone
 			await expect
@@ -171,10 +182,11 @@ test.describe('deleted post detection', () => {
 			await close();
 			// Clean up the trashed post
 			try {
-				await deletePost(postId);
+				await deletePost(postId, auth);
 			} catch {
 				// Post may already be gone
 			}
+			await deleteTestUser(user.userId);
 		}
 	});
 });
