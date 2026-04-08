@@ -1769,6 +1769,75 @@ describe('CommandHandler', () => {
 			expect(notification.meta.content_embedded).toBe('true');
 		});
 
+		it('embeds content for respond-to-note with deeply nested replies', async () => {
+			const { dispatchCommand } = setupMockCommandClient({
+				resolve: makePluginStatus(),
+			});
+
+			const notifier = vi
+				.fn<ChannelNotifier>()
+				.mockResolvedValue(undefined);
+			handler.setNotifier(notifier);
+
+			const contentProvider: ContentProvider = vi
+				.fn<ContentProvider>()
+				.mockResolvedValue({
+					postId: 100,
+					postContent: 'Post with nested thread',
+					notes: {
+						notes: [
+							{
+								id: 5,
+								parent: 0,
+								content: { rendered: '<p>Root note</p>' },
+								author_name: 'Reviewer',
+								date: '2026-01-01T00:00:00',
+							} as import('../../src/wordpress/types.js').WPNote,
+							{
+								id: 6,
+								parent: 5,
+								content: {
+									rendered: '<p>Direct reply</p>',
+								},
+								author_name: 'Author',
+								date: '2026-01-01T01:00:00',
+							} as import('../../src/wordpress/types.js').WPNote,
+							{
+								id: 7,
+								parent: 6,
+								content: {
+									rendered: '<p>Nested reply</p>',
+								},
+								author_name: 'Reviewer',
+								date: '2026-01-01T02:00:00',
+							} as import('../../src/wordpress/types.js').WPNote,
+						],
+						noteBlockMap: { 5: '0' },
+					},
+					notesSupported: true,
+				});
+			handler.setContentProvider(contentProvider);
+
+			await handler.start(createMockApiClient(), createCommandMap());
+
+			await dispatchCommand(
+				makeCommand({
+					id: 30,
+					post_id: 100,
+					prompt: 'respond-to-note',
+					arguments: { noteId: 5 },
+				})
+			);
+
+			expect(notifier).toHaveBeenCalledOnce();
+			const notification = notifier.mock.calls[0][0];
+			expect(notification.meta.content_embedded).toBe('true');
+			// All three notes should be included (root + reply + nested reply)
+			expect(notification.content).toContain('Root note');
+			expect(notification.content).toContain('Direct reply');
+			expect(notification.content).toContain('Nested reply');
+		});
+
 		it('falls back to minimal notification for respond-to-note with non-matching noteId', async () => {
 			const { dispatchCommand } = setupMockCommandClient({
 				resolve: makePluginStatus(),

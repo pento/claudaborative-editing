@@ -301,8 +301,24 @@ export class CommandHandler {
 				const noteId = Number(command.arguments.noteId);
 				const targetNote = notes.notes.find((n) => n.id === noteId);
 				if (!targetNote) return null;
-				const relevantNotes = notes.notes.filter(
-					(n) => n.id === noteId || n.parent === noteId
+				// Collect the target note and all descendants (not just
+				// direct children) so formatNotes can render the full thread.
+				const relevantIds = new Set<number>([noteId]);
+				let changed = true;
+				while (changed) {
+					changed = false;
+					for (const n of notes.notes) {
+						if (
+							!relevantIds.has(n.id) &&
+							relevantIds.has(n.parent)
+						) {
+							relevantIds.add(n.id);
+							changed = true;
+						}
+					}
+				}
+				const relevantNotes = notes.notes.filter((n) =>
+					relevantIds.has(n.id)
 				);
 				const relevantMap: Partial<Record<number, string>> = {};
 				const blockIdx = notes.noteBlockMap[noteId];
