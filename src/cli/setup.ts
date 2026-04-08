@@ -23,12 +23,6 @@ import {
 	hasServerInConfig,
 	removeServerFromConfig,
 } from './config-writer.js';
-import { checkboxPrompt } from './checkbox-prompt.js';
-import type {
-	CheckboxItem,
-	CheckboxOptions,
-	CheckboxResult,
-} from './checkbox-prompt.js';
 import type { AuthFlowOptions } from './auth-server.js';
 import type {
 	McpClientConfig,
@@ -67,11 +61,6 @@ export interface SetupDeps {
 	removeConfig?: (config: McpClientConfig) => Promise<boolean>;
 	/** Override config existence check for testing */
 	hasConfig?: (config: McpClientConfig) => boolean;
-	/** Override interactive checkbox selection for testing */
-	selectCheckbox?: (
-		items: CheckboxItem[],
-		options?: CheckboxOptions
-	) => Promise<CheckboxResult>;
 }
 
 /**
@@ -173,12 +162,6 @@ function defaultDeps(): SetupDeps {
 		cleanup: () => {
 			closeRl();
 		},
-		selectCheckbox: (items: CheckboxItem[], opts?: CheckboxOptions) => {
-			closeRl();
-			return checkboxPrompt(items, opts).finally(() => {
-				reopenRl();
-			});
-		},
 	};
 }
 /* v8 ignore stop */
@@ -207,14 +190,14 @@ export async function runSetup(
 	// 2. Validate credentials
 	await validateCredentials(deps, credentials);
 
-	// 3. Detect and select clients
-	const selectedClients = await detectAndSelectClients(deps, options);
+	// 3. Detect Claude Code
+	const selectedClients = detectAndSelectClients(deps);
 
 	// 4. Configure selected clients
 	await configureClients(deps, credentials, selectedClients);
 
 	deps.log('');
-	deps.log('Done! Restart your MCP clients to start editing.');
+	deps.log('Done! Restart Claude Code to start editing.');
 
 	deps.cleanup();
 }
@@ -227,7 +210,7 @@ async function collectCredentials(
 	deps: SetupDeps,
 	options: SetupOptions
 ): Promise<WpCredentials> {
-	if (options.manual || options.client) {
+	if (options.manual) {
 		return collectManualCredentials(deps);
 	}
 	return collectBrowserCredentials(deps);
@@ -412,44 +395,19 @@ async function validateCredentials(
 // Client detection and selection
 // ---------------------------------------------------------------------------
 
-async function detectAndSelectClients(
-	deps: SetupDeps,
-	options: SetupOptions
-): Promise<McpClientConfig[]> {
-	// Single-client mode: skip detection UI
-	if (options.client) {
-		const allClients = deps.detectClients?.() ?? detectInstalledClients();
-		const match = allClients.find((c) => c.type === options.client);
-		if (!match) {
-			deps.error(`Unknown client: ${options.client}`);
-			deps.exit(1);
-		}
-		return [match.config];
+function detectAndSelectClients(deps: SetupDeps): McpClientConfig[] {
+	const clients = deps.detectClients?.() ?? detectInstalledClients();
+	const claudeCode = clients[0];
+
+	if (!claudeCode.detected) {
+		deps.error(
+			'Claude Code is not installed.\n' +
+				'  Install it from https://claude.ai/download'
+		);
+		deps.exit(1);
 	}
 
-	const clients = deps.detectClients?.() ?? detectInstalledClients();
-
-	// Sort: detected first, then undetected, preserving order within each group
-	const sorted = [
-		...clients.filter((c) => c.detected),
-		...clients.filter((c) => !c.detected),
-	];
-
-	deps.log('');
-	deps.log('Select MCP clients to configure:');
-	deps.log('  (use ↑↓ to move, space to toggle, enter to confirm)');
-	deps.log('');
-
-	const items: CheckboxItem[] = sorted.map((c) => ({
-		label: c.config.displayName,
-		hint: c.detected ? undefined : '(not detected)',
-		selected: c.detected,
-	}));
-
-	const doSelect = deps.selectCheckbox ?? checkboxPrompt;
-	const result = await doSelect(items, { requireSelection: true });
-
-	return result.selected.map((i) => sorted[i].config);
+	return [claudeCode.config];
 }
 
 // ---------------------------------------------------------------------------
@@ -542,53 +500,31 @@ async function runRemove(deps: SetupDeps): Promise<void> {
 	deps.log('');
 
 	const clients = deps.detectClients?.() ?? detectInstalledClients();
+	const claudeCode = clients[0];
 
-	// Find which clients have our entry
-	const configured = clients.filter((c) => {
-		try {
-			return (
-				deps.hasConfig?.(c.config) ??
-				hasServerInConfig(
-					c.config.configPath(),
-					c.config.configKey,
-					SERVER_NAME
-				)
+	let isConfigured: boolean;
+	try {
+		isConfigured =
+			deps.hasConfig?.(claudeCode.config) ??
+			hasServerInConfig(
+				claudeCode.config.configPath(),
+				claudeCode.config.configKey,
+				SERVER_NAME
 			);
-		} catch {
-			// Corrupt or unreadable config file — treat as not configured
-			return false;
-		}
-	});
+	} catch {
+		isConfigured = false;
+	}
 
-	if (configured.length === 0) {
-		deps.log('No MCP clients have claudaborative-editing configured.');
+	if (!isConfigured) {
+		deps.log('claudaborative-editing is not configured in Claude Code.');
 		deps.cleanup();
 		return;
 	}
 
-	deps.log('Select clients to remove from:');
-	deps.log('  (use ↑↓ to move, space to toggle, enter to confirm)');
-	deps.log('');
-
-	const removeItems: CheckboxItem[] = configured.map((c) => ({
-		label: c.config.displayName,
-		selected: true,
-	}));
-
-	const doSelect = deps.selectCheckbox ?? checkboxPrompt;
-	const removeResult = await doSelect(removeItems, {
-		requireSelection: true,
-	});
-
-	const selected = removeResult.selected.map((i) => configured[i]);
+	await removeSingleClient(deps, claudeCode.config);
 
 	deps.log('');
-	for (const entry of selected) {
-		await removeSingleClient(deps, entry.config);
-	}
-
-	deps.log('');
-	deps.log('Done! Restart your MCP clients to complete removal.');
+	deps.log('Done! Restart Claude Code to complete removal.');
 	deps.cleanup();
 }
 

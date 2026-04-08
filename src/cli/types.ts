@@ -1,12 +1,6 @@
 // Types shared across CLI modules
 
-export type McpClientType =
-	| 'claude-code'
-	| 'claude-desktop'
-	| 'vscode'
-	| 'vscode-insiders'
-	| 'cursor'
-	| 'windsurf';
+export type McpClientType = 'claude-code';
 
 export interface McpClientConfig {
 	/** Internal identifier */
@@ -33,6 +27,5 @@ export interface WpCredentials {
 
 export interface SetupOptions {
 	manual?: boolean;
-	client?: McpClientType;
 	remove?: boolean;
 }

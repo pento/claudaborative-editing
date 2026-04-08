@@ -15,11 +15,28 @@ Adds AI action controls to the Gutenberg editor for use with the Claudaborative 
 
 Claudaborative Editing adds controls to the WordPress block editor that let you trigger AI-powered actions, including proofreading, reviewing, translating, and more, directly from within WordPress. Commands are sent to a running Claude Code session via the Claudaborative Editing MCP server.
 
-**Requires:** The [Claudaborative Editing MCP server](https://www.npmjs.com/package/claudaborative-editing) must be running in a Claude Code session connected to the same WordPress site.
+**Requires:** [Claude Code](https://claude.ai/download) with the [Claudaborative Editing MCP server](https://www.npmjs.com/package/claudaborative-editing) configured.
 
 **How it works:** This plugin adds REST API endpoints (`/wpce/v1/`) to your WordPress site that the MCP server (running locally on your machine) uses to send and receive commands. The data is not sent to any third-party service along the way; all communication happens between your browser, your WordPress site, and the MCP server running on your local machine. The data then may be shared with Anthropic, depending on how you have Claude Code configured.
 
 The MCP server connects to the same WordPress collaborative editing infrastructure that powers multi-user editing in the block editor.
+
+= Setting up the MCP server =
+
+1. Install [Claude Code](https://claude.ai/download) if you haven't already.
+2. Run the following command in your terminal:
+
+`npx claudaborative-editing start`
+
+This will configure and launch Claude Code with the Claudaborative Editing MCP server. The setup wizard will open your browser to authorize with your WordPress site on the first run.
+
+Alternatively, you can set up the credentials separately:
+
+`npx claudaborative-editing setup`
+
+Then start Claude Code with channels enabled:
+
+`claude --dangerously-load-development-channels server:wpce --permission-mode acceptEdits`
 
 == Frequently Asked Questions ==
 
@@ -46,6 +63,11 @@ The source code is available on GitHub:
 Source files are in the `wordpress-plugin/src/` directory. See the repository `README.md` for build instructions.
 
 == Changelog ==
+
+= 0.4.0 =
+* Simplified installer to Claude Code only (channels required for two-way communication).
+* Added `npx claudaborative-editing start` convenience command.
+* Added MCP server setup instructions to plugin readme.
 
 = 0.3.1 =
 * Toolbar dropdown with Proofread and Review actions.
