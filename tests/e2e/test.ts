@@ -7,12 +7,21 @@
  *   WordPress user + app password, logs the browser in as that user, and
  *   cleans up afterwards). This prevents command cross-contamination when
  *   tests run in parallel, since commands are user-scoped.
+ * - `mcpClient` fixture: MCP subprocess lifecycle with stderr-enhanced errors
+ * - `draftPost` fixture: draft post creation with automatic cleanup
+ * - `connectedMcpClient` fixture: MCP client pre-connected as admin
  */
 import { test as base, expect } from '@wordpress/e2e-test-utils-playwright';
+import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { createMcpTestClient, callToolOrThrow } from './helpers/mcp';
 import {
+	WP_ADMIN_USER,
 	WP_BASE_URL,
+	getSharedAppPassword,
 	createTestUser,
 	deleteTestUser,
+	createDraftPost,
+	deletePost,
 	type TestUser,
 } from './helpers/wp-env';
 
@@ -35,7 +44,23 @@ function isSuppressed(args: unknown[]): boolean {
 	return SUPPRESSED_MESSAGES.some((msg) => text.includes(msg));
 }
 
-const test = base.extend<{ testUser: TestUser }>({
+export interface McpClientFixture {
+	client: Client;
+	stderr: string[];
+}
+
+export type DraftPostFactory = (
+	title: string,
+	content: string,
+	auth?: { username: string; appPassword: string }
+) => Promise<number>;
+
+const test = base.extend<{
+	testUser: TestUser;
+	mcpClient: McpClientFixture;
+	draftPost: DraftPostFactory;
+	connectedMcpClient: McpClientFixture;
+}>({
 	// Per-test user fixture — opt-in. Creates a unique WordPress user,
 	// logs the browser in as that user, and cleans up afterwards.
 	// Tests must explicitly destructure `testUser` to activate it.
@@ -60,6 +85,76 @@ const test = base.extend<{ testUser: TestUser }>({
 			} finally {
 				await deleteTestUser(user.userId);
 			}
+		},
+		{ auto: false },
+	],
+
+	// MCP client fixture — opt-in. Spawns an MCP subprocess, enhances
+	// errors with stderr output on failure, and closes the transport
+	// on teardown.
+	mcpClient: [
+		// eslint-disable-next-line no-empty-pattern -- Playwright requires destructuring
+		async ({}, use) => {
+			const { client, close, stderr } = await createMcpTestClient();
+			try {
+				await use({ client, stderr });
+			} catch (error) {
+				const stderrOutput = stderr.join('').trim();
+				throw new Error(
+					`${error instanceof Error ? error.message : String(error)}${stderrOutput ? `\n\nMCP stderr:\n${stderrOutput}` : ''}`,
+					{ cause: error }
+				);
+			} finally {
+				await close();
+			}
+		},
+		{ auto: false },
+	],
+
+	// Draft post fixture — opt-in. Returns a factory function that
+	// creates a draft post. The post is automatically deleted on teardown.
+	draftPost: [
+		// eslint-disable-next-line no-empty-pattern -- Playwright requires destructuring
+		async ({}, use) => {
+			let createdPostId: number | undefined;
+			let createdAuth:
+				| { username: string; appPassword: string }
+				| undefined;
+
+			const create: DraftPostFactory = async (
+				title,
+				content,
+				postAuth
+			) => {
+				createdAuth = postAuth;
+				createdPostId = await createDraftPost(title, content, postAuth);
+				return createdPostId;
+			};
+
+			await use(create);
+
+			if (createdPostId !== undefined) {
+				try {
+					await deletePost(createdPostId, createdAuth);
+				} catch {
+					// Post may already be deleted (e.g., deleted-post tests)
+				}
+			}
+		},
+		{ auto: false },
+	],
+
+	// Connected MCP client fixture — opt-in. Composes on mcpClient and
+	// calls wp_connect as admin with the shared app password.
+	connectedMcpClient: [
+		async ({ mcpClient }, use) => {
+			const appPassword = getSharedAppPassword();
+			await callToolOrThrow(mcpClient.client, 'wp_connect', {
+				siteUrl: WP_BASE_URL,
+				username: WP_ADMIN_USER,
+				appPassword,
+			});
+			await use(mcpClient);
 		},
 		{ auto: false },
 	],

@@ -1,5 +1,6 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { expect } from '@playwright/test';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -69,4 +70,54 @@ export function getToolText(result: ToolResult): string {
 		.filter((item) => item.type === 'text')
 		.map((item) => item.text ?? '')
 		.join('\n');
+}
+
+/**
+ * Call a tool and return the result without throwing on error.
+ */
+export async function callTool(
+	client: Client,
+	name: string,
+	args: Record<string, unknown> = {}
+): Promise<{ isError: boolean; text: string }> {
+	const result = await client.callTool({ name, arguments: args });
+	const content = result.content as ToolContent[];
+	const text = content
+		.filter((item) => item.type === 'text')
+		.map((item) => item.text ?? '')
+		.join('\n');
+	return { isError: !!result.isError, text };
+}
+
+/**
+ * Poll wp_status until the expected number of collaborators are present.
+ */
+export async function waitForCollaborators(
+	client: Client,
+	count: number = 2
+): Promise<void> {
+	await expect
+		.poll(
+			async () => {
+				const status = await callToolOrThrow(client, 'wp_status');
+				return getToolText(status);
+			},
+			{ timeout: 30_000, intervals: [1000] }
+		)
+		.toContain(`(${count} collaborators)`);
+}
+
+/**
+ * Poll wp_status until the sync queue is fully drained.
+ */
+export async function waitForQueueToDrain(client: Client): Promise<void> {
+	await expect
+		.poll(
+			async () => {
+				const status = await callToolOrThrow(client, 'wp_status');
+				return getToolText(status);
+			},
+			{ timeout: 30_000, intervals: [1000] }
+		)
+		.toContain('Queue: 0 pending updates');
 }
