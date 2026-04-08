@@ -1523,8 +1523,10 @@ class RestControllerTest extends \WP_UnitTestCase {
 	public function test_enqueue_editor_assets_mcp_disconnected() {
 		delete_transient( 'wpce_mcp_last_seen_' . self::$editor_id );
 
-		// Reset WP_Scripts so our inline script is the only one registered.
+		// Reset WP_Scripts and re-register defaults so wp-hooks is available
+		// for wp_add_inline_script.
 		$GLOBALS['wp_scripts'] = null;
+		wp_default_scripts( wp_scripts() );
 
 		\Claudaborative_Editing::enqueue_editor_assets();
 
@@ -1550,8 +1552,10 @@ class RestControllerTest extends \WP_UnitTestCase {
 			REST_Controller::MCP_TIMEOUT_SECONDS * 2
 		);
 
-		// Reset WP_Scripts so our inline script is the only one registered.
+		// Reset WP_Scripts and re-register defaults so wp-hooks is available
+		// for wp_add_inline_script.
 		$GLOBALS['wp_scripts'] = null;
+		wp_default_scripts( wp_scripts() );
 
 		\Claudaborative_Editing::enqueue_editor_assets();
 
