@@ -38,7 +38,8 @@ Claude Code  <--stdio-->  MCP Server (Node.js)  <--HTTP polling-->  WordPress
 - `src/server.ts` — MCP server setup, tool/prompt registration, version re-export
 - `src/cli/setup.ts` — Interactive setup wizard (browser-based auth, multi-client config writing)
 - `src/cli/types.ts` — Shared CLI types (McpClientType, McpClientConfig, WpCredentials, SetupOptions)
-- `src/cli/clients.ts` — MCP client registry, detection, platform path resolution
+- `src/cli/clients.ts` — Claude Code MCP client config, detection, `isOnPath` utility
+- `src/cli/start.ts` — `start` command: prerequisite check, setup-if-needed, spawn Claude Code with channels
 - `src/cli/config-writer.ts` — JSON config read/merge/write for MCP client settings files
 - `src/cli/auth-server.ts` — WordPress Application Password auth with localhost HTTP callback (WP 7.0+) and fallback to non-callback auth page on older versions
 - `src/wordpress/` — REST API client, HTTP polling sync client, command client, MIME type detection
@@ -198,10 +199,10 @@ The entry point (`src/index.ts`) handles CLI flags before starting the MCP serve
 
 - `--version` / `-v` — prints version from `package.json` (injected at build time via tsup `define`)
 - `--help` / `-h` — prints usage
-- `setup` — interactive setup wizard with localhost callback auth (WP 7.0+, falls back to non-callback auth page on older versions) and multi-client config writing
+- `start` — checks prerequisites, runs setup if needed, then spawns `claude --dangerously-load-development-channels server:wpce --permission-mode acceptEdits`
+- `setup` — interactive setup wizard with localhost callback auth (WP 7.0+, falls back to non-callback auth page on older versions), configures Claude Code only
 - `setup --manual` — skip browser auth, prompt for credentials manually
-- `setup --remove` — remove claudaborative-editing config from MCP clients
-- `setup --client <name>` — configure a specific client only (valid: `claude-code`, `claude-desktop`, `vscode`, `vscode-insiders`, `cursor`, `windsurf`)
+- `setup --remove` — remove claudaborative-editing config from Claude Code
 - No args — starts the MCP server (stdio transport)
 
 The version is injected at build time: `tsup.config.ts` reads `package.json` and defines `__PKG_VERSION__`, which `src/server.ts` exports as `VERSION`.

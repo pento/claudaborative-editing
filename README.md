@@ -7,19 +7,26 @@ An MCP server that lets Claude Code collaboratively edit WordPress posts in real
 ## Quickstart
 
 ```bash
-npx claudaborative-editing setup
+npx claudaborative-editing start
 ```
 
-The setup wizard will:
+This will:
 
-1. Open your browser to authorize with your WordPress site (creates an Application Password automatically)
-2. Auto-detect installed MCP clients (Claude Code, Claude Desktop, VS Code, Cursor, Windsurf)
-3. Write the MCP server config directly to each client's settings file
+1. Check that Claude Code is installed
+2. Run the setup wizard if the MCP server isn't configured yet (opens your browser to authorize with WordPress)
+3. Start Claude Code with channels enabled for two-way communication with the WordPress editor
 
-That's it — no manual config editing required.
+The underlying command it runs is:
+
+```bash
+claude --dangerously-load-development-channels server:wpce --permission-mode acceptEdits
+```
+
+The `--dangerously-load-development-channels` flag enables channels, which allow the [Claudaborative Editing WordPress plugin](https://wordpress.org/plugins/claudaborative-editing/) to send commands (like "proofread this post") directly to Claude. The `--permission-mode acceptEdits` flag allows Claude to act on those commands without prompting for each tool call.
 
 ## Prerequisites
 
+- **Claude Code** installed ([download](https://claude.ai/download))
 - **WordPress 7.0+** or **Gutenberg 22.8+** with collaborative editing enabled (Settings → Writing)
 - A WordPress user with `edit_posts` capability
 
@@ -27,13 +34,11 @@ That's it — no manual config editing required.
 
 ### Setup options
 
-| Flag              | Description                                           |
-| ----------------- | ----------------------------------------------------- |
-| `--manual`        | Skip browser auth, prompt for credentials manually    |
-| `--remove`        | Remove claudaborative-editing config from MCP clients |
-| `--client <name>` | Configure a specific client only                      |
-
-Supported `--client` values: `claude-code`, `claude-desktop`, `vscode`, `vscode-insiders`, `cursor`, `windsurf`.
+```bash
+npx claudaborative-editing setup           # Interactive setup wizard
+npx claudaborative-editing setup --manual  # Skip browser auth, enter credentials manually
+npx claudaborative-editing setup --remove  # Remove configuration from Claude Code
+```
 
 ### Manual configuration
 

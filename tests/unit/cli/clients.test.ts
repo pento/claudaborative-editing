@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { assertDefined } from '../../test-utils.js';
 
 vi.mock('child_process', () => ({
-	execSync: vi.fn(),
 	execFileSync: vi.fn(),
 }));
 
@@ -20,14 +19,13 @@ vi.mock('os', () => ({
 	platform: vi.fn(() => 'darwin'),
 }));
 
-const { execSync, execFileSync } = await import('child_process');
+const { execFileSync } = await import('child_process');
 const { existsSync, readFileSync, writeFileSync } = await import('fs');
 const { homedir, platform } = await import('os');
 
-const { MCP_CLIENTS, detectInstalledClients, SERVER_NAME } =
+const { MCP_CLIENTS, detectInstalledClients, SERVER_NAME, isOnPath } =
 	await import('../../../src/cli/clients.js');
 
-const execSyncMock = vi.mocked(execSync);
 const execFileSyncMock = vi.mocked(execFileSync);
 const existsSyncMock = vi.mocked(existsSync);
 const readFileSyncMock = vi.mocked(readFileSync);
@@ -55,16 +53,9 @@ describe('clients registry', () => {
 	});
 
 	describe('MCP_CLIENTS', () => {
-		it('contains all expected client types', () => {
+		it('contains only claude-code', () => {
 			const types = Object.keys(MCP_CLIENTS);
-			expect(types).toEqual([
-				'claude-code',
-				'claude-desktop',
-				'vscode',
-				'vscode-insiders',
-				'cursor',
-				'windsurf',
-			]);
+			expect(types).toEqual(['claude-code']);
 		});
 
 		it('each client has the required properties', () => {
@@ -83,106 +74,31 @@ describe('clients registry', () => {
 			const path = MCP_CLIENTS['claude-code'].configPath();
 			expect(path).toBe('/mock/home/.claude.json');
 		});
-
-		it('claude-desktop returns the Application Support path on macOS', () => {
-			const path = MCP_CLIENTS['claude-desktop'].configPath();
-			expect(path).toContain('Library/Application Support/Claude');
-			expect(path).toContain('claude_desktop_config.json');
-		});
-
-		it('vscode returns the Code User path on macOS', () => {
-			const path = MCP_CLIENTS.vscode.configPath();
-			expect(path).toContain('Library/Application Support/Code/User');
-			expect(path).toContain('mcp.json');
-		});
-
-		it('vscode-insiders returns the Code - Insiders User path on macOS', () => {
-			const path = MCP_CLIENTS['vscode-insiders'].configPath();
-			expect(path).toContain('Code - Insiders/User');
-			expect(path).toContain('mcp.json');
-		});
-
-		it('cursor returns ~/.cursor/mcp.json', () => {
-			const path = MCP_CLIENTS.cursor.configPath();
-			expect(path).toBe('/mock/home/.cursor/mcp.json');
-		});
-
-		it('windsurf returns ~/.codeium/windsurf/mcp_config.json', () => {
-			const path = MCP_CLIENTS.windsurf.configPath();
-			expect(path).toBe('/mock/home/.codeium/windsurf/mcp_config.json');
-		});
-
-		it('uses .config on Linux for app-data-based clients', () => {
-			platformMock.mockReturnValue('linux');
-			const path = MCP_CLIENTS['claude-desktop'].configPath();
-			expect(path).toContain('.config/Claude');
-		});
-
-		it('uses APPDATA on Windows for app-data-based clients', () => {
-			platformMock.mockReturnValue('win32');
-			const originalAppdata = process.env.APPDATA;
-			process.env.APPDATA = 'C:\\Users\\test\\AppData\\Roaming';
-			try {
-				const path = MCP_CLIENTS['claude-desktop'].configPath();
-				expect(path).toContain('AppData');
-				expect(path).toContain('Claude');
-			} finally {
-				if (originalAppdata === undefined) {
-					delete process.env.APPDATA;
-				} else {
-					process.env.APPDATA = originalAppdata;
-				}
-			}
-		});
 	});
 
 	describe('configKey', () => {
-		it('vscode and vscode-insiders use "servers"', () => {
-			expect(MCP_CLIENTS.vscode.configKey).toBe('servers');
-			expect(MCP_CLIENTS['vscode-insiders'].configKey).toBe('servers');
-		});
-
-		it('all other clients use "mcpServers"', () => {
+		it('claude-code uses "mcpServers"', () => {
 			expect(MCP_CLIENTS['claude-code'].configKey).toBe('mcpServers');
-			expect(MCP_CLIENTS['claude-desktop'].configKey).toBe('mcpServers');
-			expect(MCP_CLIENTS.cursor.configKey).toBe('mcpServers');
-			expect(MCP_CLIENTS.windsurf.configKey).toBe('mcpServers');
 		});
 	});
 
 	describe('detectInstall', () => {
 		it('claude-code requires both directory existence and claude on PATH', () => {
 			existsSyncMock.mockReturnValue(true);
-			execSyncMock.mockReturnValue(Buffer.from('/usr/local/bin/claude'));
+			execFileSyncMock.mockReturnValue(
+				Buffer.from('/usr/local/bin/claude')
+			);
 
 			expect(MCP_CLIENTS['claude-code'].detectInstall()).toBe(true);
 		});
 
 		it('claude-code returns false when claude is not on PATH', () => {
 			existsSyncMock.mockReturnValue(true);
-			execSyncMock.mockImplementation(() => {
+			execFileSyncMock.mockImplementation(() => {
 				throw new Error('not found');
 			});
 
 			expect(MCP_CLIENTS['claude-code'].detectInstall()).toBe(false);
-		});
-
-		it('directory-based clients detect via existsSync on parent directory', () => {
-			existsSyncMock.mockReturnValue(true);
-
-			expect(MCP_CLIENTS['claude-desktop'].detectInstall()).toBe(true);
-			expect(MCP_CLIENTS.cursor.detectInstall()).toBe(true);
-			expect(MCP_CLIENTS.windsurf.detectInstall()).toBe(true);
-		});
-
-		it('returns false when parent directory does not exist', () => {
-			existsSyncMock.mockReturnValue(false);
-			execSyncMock.mockImplementation(() => {
-				throw new Error('not found');
-			});
-
-			expect(MCP_CLIENTS['claude-desktop'].detectInstall()).toBe(false);
-			expect(MCP_CLIENTS.cursor.detectInstall()).toBe(false);
 		});
 	});
 
@@ -194,7 +110,6 @@ describe('clients registry', () => {
 		};
 
 		it('runs claude mcp add with correct arguments via execFileSync', async () => {
-			execSyncMock.mockReturnValue(Buffer.from('/usr/local/bin/claude'));
 			execFileSyncMock.mockReturnValue(Buffer.from(''));
 
 			const useCli = MCP_CLIENTS['claude-code'].useCli;
@@ -202,9 +117,10 @@ describe('clients registry', () => {
 			const result = await useCli(credentials);
 
 			expect(result).toBe(true);
-			// isOnPath uses execSync with `which claude`
-			expect(execSyncMock).toHaveBeenCalledWith(
-				expect.stringContaining('which claude'),
+			// isOnPath uses execFileSync with `which` as separate arg
+			expect(execFileSyncMock).toHaveBeenCalledWith(
+				'which',
+				['claude'],
 				expect.anything()
 			);
 			// The actual command uses execFileSync with an args array (no shell injection)
@@ -231,7 +147,7 @@ describe('clients registry', () => {
 		});
 
 		it('returns false when claude is not on PATH', async () => {
-			execSyncMock.mockImplementation(() => {
+			execFileSyncMock.mockImplementation(() => {
 				throw new Error('not found');
 			});
 
@@ -243,10 +159,9 @@ describe('clients registry', () => {
 		});
 
 		it('returns false when claude mcp add fails', async () => {
-			// isOnPath (execSync) succeeds
-			execSyncMock.mockReturnValue(Buffer.from('/usr/local/bin/claude'));
-			// The actual add command (execFileSync) fails
-			execFileSyncMock.mockImplementation(() => {
+			// First call: isOnPath (which) succeeds, second call: claude mcp add fails
+			execFileSyncMock.mockImplementationOnce(() => Buffer.from(''));
+			execFileSyncMock.mockImplementationOnce(() => {
 				throw new Error('command failed');
 			});
 
@@ -309,37 +224,31 @@ describe('clients registry', () => {
 	});
 
 	describe('detectInstalledClients', () => {
-		it('returns an entry for each client type', () => {
+		it('returns an entry for claude-code', () => {
 			existsSyncMock.mockReturnValue(false);
-			execSyncMock.mockImplementation(() => {
+			execFileSyncMock.mockImplementation(() => {
 				throw new Error('not found');
 			});
 
 			const clients = detectInstalledClients();
 
-			expect(clients).toHaveLength(6);
-			const types = clients.map((c) => c.type);
-			expect(types).toContain('claude-code');
-			expect(types).toContain('claude-desktop');
-			expect(types).toContain('vscode');
-			expect(types).toContain('vscode-insiders');
-			expect(types).toContain('cursor');
-			expect(types).toContain('windsurf');
+			expect(clients).toHaveLength(1);
+			expect(clients[0].type).toBe('claude-code');
 		});
 
 		it('marks detected clients correctly', () => {
 			existsSyncMock.mockReturnValue(true);
-			execSyncMock.mockReturnValue(Buffer.from('/usr/local/bin/claude'));
+			execFileSyncMock.mockReturnValue(
+				Buffer.from('/usr/local/bin/claude')
+			);
 
 			const clients = detectInstalledClients();
-			const claudeCode = clients.find((c) => c.type === 'claude-code');
-			assertDefined(claudeCode);
-			expect(claudeCode.detected).toBe(true);
+			expect(clients[0].detected).toBe(true);
 		});
 
 		it('marks undetected clients correctly', () => {
 			existsSyncMock.mockReturnValue(false);
-			execSyncMock.mockImplementation(() => {
+			execFileSyncMock.mockImplementation(() => {
 				throw new Error('not found');
 			});
 
@@ -352,7 +261,7 @@ describe('clients registry', () => {
 
 		it('includes the config object for each client', () => {
 			existsSyncMock.mockReturnValue(false);
-			execSyncMock.mockImplementation(() => {
+			execFileSyncMock.mockImplementation(() => {
 				throw new Error('not found');
 			});
 
@@ -361,6 +270,43 @@ describe('clients registry', () => {
 			for (const client of clients) {
 				expect(client.config).toBe(MCP_CLIENTS[client.type]);
 			}
+		});
+	});
+
+	describe('isOnPath', () => {
+		it('returns true when executable is found', () => {
+			execFileSyncMock.mockReturnValue(
+				Buffer.from('/usr/local/bin/claude')
+			);
+			expect(isOnPath('claude')).toBe(true);
+		});
+
+		it('returns false when executable is not found', () => {
+			execFileSyncMock.mockImplementation(() => {
+				throw new Error('not found');
+			});
+			expect(isOnPath('claude')).toBe(false);
+		});
+
+		it('uses "where" on Windows and "which" on other platforms', () => {
+			platformMock.mockReturnValue('win32');
+			execFileSyncMock.mockReturnValue(Buffer.from(''));
+			isOnPath('claude');
+			expect(execFileSyncMock).toHaveBeenCalledWith(
+				'where',
+				['claude'],
+				expect.anything()
+			);
+
+			execFileSyncMock.mockClear();
+			platformMock.mockReturnValue('darwin');
+			execFileSyncMock.mockReturnValue(Buffer.from(''));
+			isOnPath('claude');
+			expect(execFileSyncMock).toHaveBeenCalledWith(
+				'which',
+				['claude'],
+				expect.anything()
+			);
 		});
 	});
 });

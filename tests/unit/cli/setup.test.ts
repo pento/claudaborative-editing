@@ -3,7 +3,6 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
 import type { SetupDeps } from '../../../src/cli/setup.js';
-import type { CheckboxResult } from '../../../src/cli/checkbox-prompt.js';
 import type { McpClientConfig, McpClientType } from '../../../src/cli/types.js';
 import type {
 	AuthResult,
@@ -68,22 +67,12 @@ const mockClaudeCode = makeMockClient('claude-code', 'Claude Code', {
 	removeCli: () => true,
 });
 
-const mockClaudeDesktop = makeMockClient('claude-desktop', 'Claude Desktop');
-
-const mockVscode = makeMockClient('vscode', 'VS Code', {
-	detectInstall: () => false,
-});
-
 function defaultClientList(): Array<{
 	type: McpClientType;
 	config: McpClientConfig;
 	detected: boolean;
 }> {
-	return [
-		{ type: 'claude-code', config: mockClaudeCode, detected: true },
-		{ type: 'claude-desktop', config: mockClaudeDesktop, detected: true },
-		{ type: 'vscode', config: mockVscode, detected: false },
-	];
+	return [{ type: 'claude-code', config: mockClaudeCode, detected: true }];
 }
 
 // ---------------------------------------------------------------------------
@@ -165,11 +154,6 @@ function mockNeverHandle(authUrl?: string): AuthFlowHandle {
 // Mock openAuth that returns successful credentials via callback
 const mockOpenAuth = vi.fn().mockResolvedValue(mockAuthHandle());
 
-/** Create a selectCheckbox mock that returns the given indices */
-function mockCheckbox(selected: number[]): () => Promise<CheckboxResult> {
-	return vi.fn().mockResolvedValue({ selected });
-}
-
 afterAll(() => {
 	rmSync(testTmpDir, { recursive: true, force: true });
 });
@@ -192,7 +176,6 @@ describe('setup wizard', () => {
 				['https://example.com', 'admin', 'xxxx xxxx xxxx'],
 				{
 					detectClients: () => defaultClientList(),
-					selectCheckbox: mockCheckbox([0, 1]),
 					writeConfig,
 					hasConfig: () => false,
 				}
@@ -206,10 +189,9 @@ describe('setup wizard', () => {
 				'Collaborative editing endpoint available'
 			);
 			expect(output).toContain(
-				'Done! Restart your MCP clients to start editing.'
+				'Done! Restart Claude Code to start editing.'
 			);
-			// writeConfig called for selected clients (claude-code and claude-desktop)
-			expect(writeConfig).toHaveBeenCalledTimes(2);
+			expect(writeConfig).toHaveBeenCalledTimes(1);
 		});
 
 		it('prepends https:// to bare domain URLs', async () => {
@@ -220,7 +202,6 @@ describe('setup wizard', () => {
 				['pento.net', 'admin', 'xxxx xxxx xxxx'],
 				{
 					detectClients: () => defaultClientList(),
-					selectCheckbox: mockCheckbox([0]),
 					writeConfig,
 					hasConfig: () => false,
 				}
@@ -242,7 +223,6 @@ describe('setup wizard', () => {
 				['http://localhost:8080', 'admin', 'xxxx xxxx xxxx'],
 				{
 					detectClients: () => defaultClientList(),
-					selectCheckbox: mockCheckbox([0]),
 					writeConfig,
 					hasConfig: () => false,
 				}
@@ -264,7 +244,6 @@ describe('setup wizard', () => {
 				['https://example.com/', 'admin', 'xxxx xxxx xxxx'],
 				{
 					detectClients: () => defaultClientList(),
-					selectCheckbox: mockCheckbox([0]),
 					writeConfig,
 					hasConfig: () => false,
 				}
@@ -510,7 +489,6 @@ describe('setup wizard', () => {
 				{
 					openAuth,
 					detectClients: () => defaultClientList(),
-					selectCheckbox: mockCheckbox([0]),
 					writeConfig: vi.fn().mockResolvedValue(true),
 					hasConfig: () => false,
 				}
@@ -534,7 +512,6 @@ describe('setup wizard', () => {
 			const { deps, logs } = createTestDeps(['https://example.com', ''], {
 				openAuth,
 				detectClients: () => defaultClientList(),
-				selectCheckbox: mockCheckbox([0, 1]),
 				writeConfig: vi.fn().mockResolvedValue(true),
 				hasConfig: () => false,
 			});
@@ -557,7 +534,7 @@ describe('setup wizard', () => {
 			const { deps } = createTestDeps(['pento.net', ''], {
 				openAuth,
 				detectClients: () => defaultClientList(),
-				selectCheckbox: mockCheckbox([0]),
+
 				writeConfig: vi.fn().mockResolvedValue(true),
 				hasConfig: () => false,
 			});
@@ -609,7 +586,6 @@ describe('setup wizard', () => {
 					openAuth,
 					openBrowser,
 					detectClients: () => defaultClientList(),
-					selectCheckbox: mockCheckbox([0]),
 					writeConfig: vi.fn().mockResolvedValue(true),
 					hasConfig: () => false,
 				}
@@ -680,81 +656,31 @@ describe('setup wizard', () => {
 	});
 
 	// -----------------------------------------------------------------------
-	// Client detection and selection
+	// Claude Code detection
 	// -----------------------------------------------------------------------
 
-	describe('client detection and selection', () => {
-		const manualAnswers = [
-			'https://example.com',
-			'admin',
-			'xxxx xxxx xxxx',
-		];
-
-		it('displays instruction text for checkbox selection', async () => {
+	describe('Claude Code detection', () => {
+		it('exits with error when Claude Code is not detected', async () => {
 			mockSuccessfulValidation();
 
-			const { deps, logs } = createTestDeps(manualAnswers, {
-				detectClients: () => defaultClientList(),
-				selectCheckbox: mockCheckbox([0, 1]),
-				writeConfig: vi.fn().mockResolvedValue(true),
-				hasConfig: () => false,
-			});
+			const { deps, errors } = createTestDeps(
+				['https://example.com', 'admin', 'xxxx xxxx xxxx'],
+				{
+					detectClients: () => [
+						{
+							type: 'claude-code' as McpClientType,
+							config: mockClaudeCode,
+							detected: false,
+						},
+					],
+					hasConfig: () => false,
+				}
+			);
 
-			await runSetup(deps, { manual: true });
-
-			const output = logs.join('\n');
-			expect(output).toContain('Select MCP clients to configure');
-		});
-
-		it('configures all clients when all are selected', async () => {
-			mockSuccessfulValidation();
-			const writeConfig = vi.fn().mockResolvedValue(true);
-
-			const { deps } = createTestDeps(manualAnswers, {
-				detectClients: () => defaultClientList(),
-				selectCheckbox: mockCheckbox([0, 1, 2]),
-				writeConfig,
-				hasConfig: () => false,
-			});
-
-			await runSetup(deps, { manual: true });
-
-			// All 3 clients should be configured
-			expect(writeConfig).toHaveBeenCalledTimes(3);
-		});
-
-		it('configures only selected clients', async () => {
-			mockSuccessfulValidation();
-			const writeConfig = vi.fn().mockResolvedValue(true);
-
-			const { deps } = createTestDeps(manualAnswers, {
-				detectClients: () => defaultClientList(),
-				selectCheckbox: mockCheckbox([0, 2]),
-				writeConfig,
-				hasConfig: () => false,
-			});
-
-			await runSetup(deps, { manual: true });
-
-			// Clients 0 and 2 should be configured
-			expect(writeConfig).toHaveBeenCalledTimes(2);
-		});
-
-		it('configures only detected clients when defaults are used', async () => {
-			mockSuccessfulValidation();
-			const writeConfig = vi.fn().mockResolvedValue(true);
-
-			const { deps } = createTestDeps(manualAnswers, {
-				detectClients: () => defaultClientList(),
-				selectCheckbox: mockCheckbox([0, 1]),
-				writeConfig,
-				hasConfig: () => false,
-			});
-
-			await runSetup(deps, { manual: true });
-
-			// Only the 2 detected clients should be configured
-			expect(writeConfig).toHaveBeenCalledTimes(2);
+			await expect(runSetup(deps, { manual: true })).rejects.toThrow(
+				SetupExitError
+			);
+			expect(errors.join('\n')).toContain('Claude Code is not installed');
 		});
 	});
 
@@ -775,7 +701,7 @@ describe('setup wizard', () => {
 
 			const { deps, logs } = createTestDeps(manualAnswers, {
 				detectClients: () => defaultClientList(),
-				selectCheckbox: mockCheckbox([0]),
+
 				writeConfig,
 				hasConfig: () => false,
 			});
@@ -789,19 +715,26 @@ describe('setup wizard', () => {
 
 		it('falls back to config file for client without useCli', async () => {
 			mockSuccessfulValidation();
-			const writeConfig = vi.fn().mockResolvedValue(true);
+			const clientNoCli = makeMockClient('claude-code', 'Claude Code', {
+				configPath: () =>
+					join(testTmpDir, 'no-cli-fallback', 'config.json'),
+			});
 
 			const { deps, logs } = createTestDeps(manualAnswers, {
-				detectClients: () => defaultClientList(),
-				selectCheckbox: mockCheckbox([1]),
-				writeConfig,
+				detectClients: () => [
+					{
+						type: 'claude-code' as McpClientType,
+						config: clientNoCli,
+						detected: true,
+					},
+				],
 				hasConfig: () => false,
 			});
 
 			await runSetup(deps, { manual: true });
 
 			const output = logs.join('\n');
-			expect(output).toMatch(/Claude Desktop/);
+			expect(output).toContain('Claude Code — written to');
 		});
 
 		it('prompts when entry already exists and skips on decline', async () => {
@@ -811,7 +744,7 @@ describe('setup wizard', () => {
 			// 'n' is the prompt answer for the overwrite confirmation
 			const { deps, logs } = createTestDeps([...manualAnswers, 'n'], {
 				detectClients: () => defaultClientList(),
-				selectCheckbox: mockCheckbox([0]),
+
 				writeConfig,
 				hasConfig: () => true,
 			});
@@ -829,7 +762,7 @@ describe('setup wizard', () => {
 
 			const { deps, logs } = createTestDeps([...manualAnswers, 'Y'], {
 				detectClients: () => defaultClientList(),
-				selectCheckbox: mockCheckbox([0]),
+
 				writeConfig,
 				hasConfig: () => true,
 			});
@@ -847,7 +780,7 @@ describe('setup wizard', () => {
 
 			const { deps } = createTestDeps([...manualAnswers, ''], {
 				detectClients: () => defaultClientList(),
-				selectCheckbox: mockCheckbox([0]),
+
 				writeConfig,
 				hasConfig: () => true,
 			});
@@ -863,7 +796,7 @@ describe('setup wizard', () => {
 
 			const { deps, logs } = createTestDeps(manualAnswers, {
 				detectClients: () => defaultClientList(),
-				selectCheckbox: mockCheckbox([0]),
+
 				writeConfig,
 				hasConfig: () => false,
 			});
@@ -891,7 +824,7 @@ describe('setup wizard', () => {
 						detected: true,
 					},
 				],
-				selectCheckbox: mockCheckbox([0]),
+
 				hasConfig: () => false,
 			});
 
@@ -923,7 +856,7 @@ describe('setup wizard', () => {
 						detected: true,
 					},
 				],
-				selectCheckbox: mockCheckbox([0]),
+
 				hasConfig: () => false,
 			});
 
@@ -942,7 +875,7 @@ describe('setup wizard', () => {
 
 			const { deps, logs } = createTestDeps(manualAnswers, {
 				detectClients: () => defaultClientList(),
-				selectCheckbox: mockCheckbox([0]),
+
 				writeConfig,
 				hasConfig: () => false,
 			});
@@ -955,101 +888,30 @@ describe('setup wizard', () => {
 	});
 
 	// -----------------------------------------------------------------------
-	// --client flag
-	// -----------------------------------------------------------------------
-
-	describe('--client flag', () => {
-		it('configures only the specified client', async () => {
-			mockSuccessfulValidation();
-			const writeConfig = vi.fn().mockResolvedValue(true);
-
-			const { deps, logs } = createTestDeps(
-				[
-					'https://example.com', // site URL
-					'admin', // username
-					'xxxx xxxx xxxx', // app password
-				],
-				{
-					detectClients: () => defaultClientList(),
-					writeConfig,
-					hasConfig: () => false,
-				}
-			);
-
-			await runSetup(deps, { client: 'claude-code' });
-
-			expect(writeConfig).toHaveBeenCalledTimes(1);
-			const output = logs.join('\n');
-			expect(output).toContain('Claude Code — configured via CLI');
-		});
-
-		it('uses manual credential entry when --client is specified', async () => {
-			mockSuccessfulValidation();
-			const openAuth = vi.fn();
-
-			const { deps } = createTestDeps(
-				['https://example.com', 'admin', 'xxxx xxxx xxxx'],
-				{
-					openAuth,
-					detectClients: () => defaultClientList(),
-					writeConfig: vi.fn().mockResolvedValue(true),
-					hasConfig: () => false,
-				}
-			);
-
-			await runSetup(deps, { client: 'claude-desktop' });
-
-			// Browser auth should NOT be called when --client is specified
-			expect(openAuth).not.toHaveBeenCalled();
-		});
-
-		it('exits with error for unknown client', async () => {
-			mockSuccessfulValidation();
-
-			const { deps, errors } = createTestDeps(
-				['https://example.com', 'admin', 'xxxx xxxx xxxx'],
-				{
-					detectClients: () => defaultClientList(),
-					hasConfig: () => false,
-				}
-			);
-
-			await expect(
-				runSetup(deps, { client: 'nonexistent' as McpClientType })
-			).rejects.toThrow(SetupExitError);
-			expect(errors.join('\n')).toContain('Unknown client: nonexistent');
-		});
-	});
-
-	// -----------------------------------------------------------------------
 	// Remove flow
 	// -----------------------------------------------------------------------
 
 	describe('remove flow', () => {
-		it('removes configured clients', async () => {
+		it('removes Claude Code when configured', async () => {
 			const removeConfig = vi.fn().mockResolvedValue(true);
 
 			const { deps, logs } = createTestDeps([], {
 				detectClients: () => defaultClientList(),
-				hasConfig: (config: McpClientConfig) =>
-					config.name !== 'vscode',
-				selectCheckbox: mockCheckbox([0, 1]),
+				hasConfig: () => true,
 				removeConfig,
 			});
 
 			await runSetup(deps, { remove: true });
 
-			// claude-code and claude-desktop have config, vscode does not
-			expect(removeConfig).toHaveBeenCalledTimes(2);
+			expect(removeConfig).toHaveBeenCalledTimes(1);
 			const output = logs.join('\n');
 			expect(output).toContain('Claude Code — removed via CLI');
-			expect(output).toContain('Claude Desktop — removed via CLI');
 			expect(output).toContain(
-				'Done! Restart your MCP clients to complete removal.'
+				'Done! Restart Claude Code to complete removal.'
 			);
 		});
 
-		it('shows message when no clients are configured', async () => {
+		it('shows message when not configured', async () => {
 			const { deps, logs } = createTestDeps([], {
 				detectClients: () => defaultClientList(),
 				hasConfig: () => false,
@@ -1059,43 +921,24 @@ describe('setup wizard', () => {
 
 			const output = logs.join('\n');
 			expect(output).toContain(
-				'No MCP clients have claudaborative-editing configured.'
+				'claudaborative-editing is not configured in Claude Code.'
 			);
 		});
 
-		it('allows selecting specific clients for removal', async () => {
-			const removeConfig = vi.fn().mockResolvedValue(true);
-
+		it('treats corrupt config as not configured', async () => {
 			const { deps, logs } = createTestDeps([], {
 				detectClients: () => defaultClientList(),
-				hasConfig: (config: McpClientConfig) =>
-					config.name !== 'vscode',
-				selectCheckbox: mockCheckbox([0]),
-				removeConfig,
+				hasConfig: () => {
+					throw new Error('invalid JSON');
+				},
 			});
 
 			await runSetup(deps, { remove: true });
 
-			expect(removeConfig).toHaveBeenCalledTimes(1);
 			const output = logs.join('\n');
-			expect(output).toContain('Claude Code — removed via CLI');
-			expect(output).not.toContain('Claude Desktop — removed');
-		});
-
-		it('removes all configured clients when all selected', async () => {
-			const removeConfig = vi.fn().mockResolvedValue(true);
-
-			const { deps } = createTestDeps([], {
-				detectClients: () => defaultClientList(),
-				hasConfig: (config: McpClientConfig) =>
-					config.name !== 'vscode',
-				selectCheckbox: mockCheckbox([0, 1]),
-				removeConfig,
-			});
-
-			await runSetup(deps, { remove: true });
-
-			expect(removeConfig).toHaveBeenCalledTimes(2);
+			expect(output).toContain(
+				'claudaborative-editing is not configured in Claude Code.'
+			);
 		});
 
 		it('uses client.removeCli when no removeConfig override is provided', async () => {
@@ -1115,7 +958,6 @@ describe('setup wizard', () => {
 					},
 				],
 				hasConfig: () => true,
-				selectCheckbox: mockCheckbox([0]),
 			});
 
 			await runSetup(deps, { remove: true });
@@ -1146,7 +988,6 @@ describe('setup wizard', () => {
 					},
 				],
 				hasConfig: () => true,
-				selectCheckbox: mockCheckbox([0]),
 			});
 
 			await runSetup(deps, { remove: true });
@@ -1161,9 +1002,7 @@ describe('setup wizard', () => {
 
 			const { deps, logs } = createTestDeps([], {
 				detectClients: () => defaultClientList(),
-				hasConfig: (config: McpClientConfig) =>
-					config.name === 'claude-code',
-				selectCheckbox: mockCheckbox([0]),
+				hasConfig: () => true,
 				removeConfig,
 			});
 
@@ -1180,9 +1019,7 @@ describe('setup wizard', () => {
 
 			const { deps, logs } = createTestDeps([], {
 				detectClients: () => defaultClientList(),
-				hasConfig: (config: McpClientConfig) =>
-					config.name === 'claude-code',
-				selectCheckbox: mockCheckbox([0]),
+				hasConfig: () => true,
 				removeConfig,
 			});
 
