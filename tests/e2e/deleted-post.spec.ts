@@ -2,27 +2,16 @@ import { test, expect } from './test';
 import { callToolOrThrow, callTool, getToolText } from './helpers/mcp';
 import { deletePost, trashPost } from './helpers/wp-env';
 
-const PARAGRAPH_CONTENT =
-	'<!-- wp:paragraph --><p>Test paragraph</p><!-- /wp:paragraph -->';
-
 test.describe('deleted post detection', () => {
 	test('detects permanently deleted post and errors on editing operations', async ({
 		testUser,
 		mcpClient,
 		draftPost,
 	}) => {
-		const auth = {
-			username: testUser.username,
-			appPassword: testUser.appPassword,
-		};
-		const postId = await draftPost(
-			'E2E deleted-post permanent',
-			PARAGRAPH_CONTENT,
-			auth
-		);
-
 		// Open the post (MCP auto-connected via env vars)
-		await callToolOrThrow(mcpClient.client, 'wp_open_post', { postId });
+		await callToolOrThrow(mcpClient.client, 'wp_open_post', {
+			postId: draftPost,
+		});
 
 		// Verify editing works initially
 		const readResult = await callToolOrThrow(
@@ -33,7 +22,10 @@ test.describe('deleted post detection', () => {
 
 		// Permanently delete the post via REST API
 		// (draftPost fixture will silently handle the 404 on teardown)
-		await deletePost(postId, auth);
+		await deletePost(draftPost, {
+			username: testUser.username,
+			appPassword: testUser.appPassword,
+		});
 
 		// Poll until MCP detects the post is gone
 		// The sync client will get an error on next poll, triggering checkPostStillExists
@@ -84,18 +76,10 @@ test.describe('deleted post detection', () => {
 		mcpClient,
 		draftPost,
 	}) => {
-		const auth = {
-			username: testUser.username,
-			appPassword: testUser.appPassword,
-		};
-		const postId = await draftPost(
-			'E2E deleted-post trash',
-			PARAGRAPH_CONTENT,
-			auth
-		);
-
 		// Open the post (MCP auto-connected via env vars)
-		await callToolOrThrow(mcpClient.client, 'wp_open_post', { postId });
+		await callToolOrThrow(mcpClient.client, 'wp_open_post', {
+			postId: draftPost,
+		});
 
 		// Verify editing works initially
 		const readResult = await callToolOrThrow(
@@ -106,7 +90,10 @@ test.describe('deleted post detection', () => {
 
 		// Trash the post via REST API (not permanent delete)
 		// (draftPost fixture will delete the trashed post on teardown)
-		await trashPost(postId, auth);
+		await trashPost(draftPost, {
+			username: testUser.username,
+			appPassword: testUser.appPassword,
+		});
 
 		// Poll until MCP detects the post is gone
 		await expect

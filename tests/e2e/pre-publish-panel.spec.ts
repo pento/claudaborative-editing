@@ -4,9 +4,6 @@ import { callToolOrThrow, waitForMCPReady } from './helpers/mcp';
 import { openEditor } from './helpers/editor';
 import { listCommands } from './helpers/wp-env';
 
-const PARAGRAPH_CONTENT =
-	'<!-- wp:paragraph --><p>Test paragraph for pre-publish checks</p><!-- /wp:paragraph -->';
-
 /**
  * Opens the pre-publish sidebar by clicking the Publish button.
  *
@@ -25,20 +22,9 @@ test.describe('Pre-Publish Panel', () => {
 	test('panel appears in pre-publish sidebar', async ({
 		page,
 		editor,
-		testUser,
 		draftPost,
 	}) => {
-		const auth = {
-			username: testUser.username,
-			appPassword: testUser.appPassword,
-		};
-		const postId = await draftPost(
-			'E2E pre-publish panel visibility',
-			PARAGRAPH_CONTENT,
-			auth
-		);
-
-		await openEditor(page, editor, postId);
+		await openEditor(page, editor, draftPost);
 		await openPrePublishSidebar(page);
 
 		// The PluginPrePublishPanel should render with our title
@@ -60,20 +46,9 @@ test.describe('Pre-Publish Panel', () => {
 	test('run button disabled when MCP not connected', async ({
 		page,
 		editor,
-		testUser,
 		draftPost,
 	}) => {
-		const auth = {
-			username: testUser.username,
-			appPassword: testUser.appPassword,
-		};
-		const postId = await draftPost(
-			'E2E pre-publish disconnected',
-			PARAGRAPH_CONTENT,
-			auth
-		);
-
-		await openEditor(page, editor, postId);
+		await openEditor(page, editor, draftPost);
 		await openPrePublishSidebar(page);
 
 		// Per-test user isolation ensures no MCP connection exists,
@@ -86,21 +61,10 @@ test.describe('Pre-Publish Panel', () => {
 	test('run button enabled when MCP connected', async ({
 		page,
 		editor,
-		testUser,
 		draftPost,
 		mcpClient,
 	}) => {
-		const auth = {
-			username: testUser.username,
-			appPassword: testUser.appPassword,
-		};
-		const postId = await draftPost(
-			'E2E pre-publish connected',
-			PARAGRAPH_CONTENT,
-			auth
-		);
-
-		await openEditor(page, editor, postId);
+		await openEditor(page, editor, draftPost);
 
 		// Wait for MCP connection to be reflected in the browser
 		await waitForMCPReady(mcpClient.client);
@@ -128,17 +92,7 @@ test.describe('Pre-Publish Panel', () => {
 		draftPost,
 		mcpClient,
 	}) => {
-		const auth = {
-			username: testUser.username,
-			appPassword: testUser.appPassword,
-		};
-		const postId = await draftPost(
-			'E2E pre-publish command submission',
-			PARAGRAPH_CONTENT,
-			auth
-		);
-
-		await openEditor(page, editor, postId);
+		await openEditor(page, editor, draftPost);
 
 		// Wait for MCP connection to be reflected in the browser
 		await waitForMCPReady(mcpClient.client);
@@ -163,11 +117,16 @@ test.describe('Pre-Publish Panel', () => {
 			.getByRole('button', { name: /Run pre-publish checks/ })
 			.click();
 
+		const auth = {
+			username: testUser.username,
+			appPassword: testUser.appPassword,
+		};
+
 		// Verify a pre-publish-check command was created
 		await expect
 			.poll(
 				async () => {
-					const commands = await listCommands(postId, auth);
+					const commands = await listCommands(draftPost, auth);
 					return commands;
 				},
 				{ timeout: 30_000, intervals: [1000] }
@@ -176,7 +135,7 @@ test.describe('Pre-Publish Panel', () => {
 				expect.arrayContaining([
 					expect.objectContaining({
 						prompt: 'pre-publish-check',
-						post_id: postId,
+						post_id: draftPost,
 						status: expect.stringMatching(/^(pending|running)$/),
 					}),
 				])
@@ -190,17 +149,7 @@ test.describe('Pre-Publish Panel', () => {
 		draftPost,
 		mcpClient,
 	}) => {
-		const auth = {
-			username: testUser.username,
-			appPassword: testUser.appPassword,
-		};
-		const postId = await draftPost(
-			'E2E pre-publish results display',
-			PARAGRAPH_CONTENT,
-			auth
-		);
-
-		await openEditor(page, editor, postId);
+		await openEditor(page, editor, draftPost);
 
 		// Wait for MCP connection to be reflected in the browser
 		await waitForMCPReady(mcpClient.client);
@@ -224,12 +173,17 @@ test.describe('Pre-Publish Panel', () => {
 			.getByRole('button', { name: /Run pre-publish checks/ })
 			.click();
 
+		const auth = {
+			username: testUser.username,
+			appPassword: testUser.appPassword,
+		};
+
 		// Wait for the command to be created
 		let commandId: number | null = null;
 		await expect
 			.poll(
 				async () => {
-					const commands = await listCommands(postId, auth);
+					const commands = await listCommands(draftPost, auth);
 					const cmd = commands.find(
 						(c) => c.prompt === 'pre-publish-check'
 					);
@@ -245,7 +199,7 @@ test.describe('Pre-Publish Panel', () => {
 		// Claim the command (transition to running) if still pending.
 		// Use the MCP tool (not direct REST) so the status change is
 		// written to the Y.Doc and syncs to the browser.
-		const commands = await listCommands(postId, auth);
+		const commands = await listCommands(draftPost, auth);
 		const cmd = commands.find((c) => c.prompt === 'pre-publish-check');
 		expect(cmd).toBeDefined();
 		commandId = cmd?.id ?? 0;

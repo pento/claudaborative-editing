@@ -4,9 +4,6 @@ import { openEditor, getFooterStatus } from './helpers/editor';
 import { listCommands } from './helpers/wp-env';
 import { waitForMCPReady } from './helpers/mcp';
 
-const PARAGRAPH_CONTENT =
-	'<!-- wp:paragraph --><p>Test paragraph for AI Actions</p><!-- /wp:paragraph -->';
-
 /**
  * Returns the AI Actions dropdown toggle button in the toolbar.
  */
@@ -28,22 +25,8 @@ async function openDropdown(page: Page): Promise<void> {
 }
 
 test.describe('AI Actions', () => {
-	test('dropdown opens and closes', async ({
-		page,
-		editor,
-		testUser,
-		draftPost,
-	}) => {
-		const auth = {
-			username: testUser.username,
-			appPassword: testUser.appPassword,
-		};
-		const postId = await draftPost(
-			'E2E dropdown open-close',
-			PARAGRAPH_CONTENT,
-			auth
-		);
-		await openEditor(page, editor, postId);
+	test('dropdown opens and closes', async ({ page, editor, draftPost }) => {
+		await openEditor(page, editor, draftPost);
 
 		const toggle = getDropdownToggle(page);
 		await expect(toggle).toBeVisible();
@@ -71,19 +54,9 @@ test.describe('AI Actions', () => {
 	test('footer shows disconnected status without MCP', async ({
 		page,
 		editor,
-		testUser,
 		draftPost,
 	}) => {
-		const auth = {
-			username: testUser.username,
-			appPassword: testUser.appPassword,
-		};
-		const postId = await draftPost(
-			'E2E disconnected status',
-			PARAGRAPH_CONTENT,
-			auth
-		);
-		await openEditor(page, editor, postId);
+		await openEditor(page, editor, draftPost);
 
 		// Footer sparkle should start grey (disconnected), until MCP
 		// receives signal to open this post.
@@ -118,20 +91,10 @@ test.describe('AI Actions', () => {
 	test('footer shows connected status with MCP', async ({
 		page,
 		editor,
-		testUser,
 		mcpClient,
 		draftPost,
 	}) => {
-		const auth = {
-			username: testUser.username,
-			appPassword: testUser.appPassword,
-		};
-		const postId = await draftPost(
-			'E2E connected status',
-			PARAGRAPH_CONTENT,
-			auth
-		);
-		await openEditor(page, editor, postId);
+		await openEditor(page, editor, draftPost);
 
 		await waitForMCPReady(mcpClient.client);
 
@@ -173,16 +136,7 @@ test.describe('AI Actions', () => {
 		mcpClient,
 		draftPost,
 	}) => {
-		const auth = {
-			username: testUser.username,
-			appPassword: testUser.appPassword,
-		};
-		const postId = await draftPost(
-			'E2E proofread command',
-			PARAGRAPH_CONTENT,
-			auth
-		);
-		await openEditor(page, editor, postId);
+		await openEditor(page, editor, draftPost);
 
 		// Wait for connected status
 		await waitForMCPReady(mcpClient.client);
@@ -208,7 +162,10 @@ test.describe('AI Actions', () => {
 		await expect
 			.poll(
 				async () => {
-					const commands = await listCommands(postId, auth);
+					const commands = await listCommands(draftPost, {
+						username: testUser.username,
+						appPassword: testUser.appPassword,
+					});
 					return commands;
 				},
 				{ timeout: 30_000, intervals: [1000] }
@@ -217,7 +174,7 @@ test.describe('AI Actions', () => {
 				expect.arrayContaining([
 					expect.objectContaining({
 						prompt: 'proofread',
-						post_id: postId,
+						post_id: draftPost,
 						status: expect.stringMatching(/^(pending|running)$/),
 					}),
 				])
@@ -231,16 +188,7 @@ test.describe('AI Actions', () => {
 		mcpClient,
 		draftPost,
 	}) => {
-		const auth = {
-			username: testUser.username,
-			appPassword: testUser.appPassword,
-		};
-		const postId = await draftPost(
-			'E2E review command',
-			PARAGRAPH_CONTENT,
-			auth
-		);
-		await openEditor(page, editor, postId);
+		await openEditor(page, editor, draftPost);
 
 		// Wait for connected status
 		await waitForMCPReady(mcpClient.client);
@@ -266,7 +214,10 @@ test.describe('AI Actions', () => {
 		await expect
 			.poll(
 				async () => {
-					const commands = await listCommands(postId, auth);
+					const commands = await listCommands(draftPost, {
+						username: testUser.username,
+						appPassword: testUser.appPassword,
+					});
 					return commands;
 				},
 				{ timeout: 30_000, intervals: [1000] }
@@ -275,7 +226,7 @@ test.describe('AI Actions', () => {
 				expect.arrayContaining([
 					expect.objectContaining({
 						prompt: 'review',
-						post_id: postId,
+						post_id: draftPost,
 						status: expect.stringMatching(/^(pending|running)$/),
 					}),
 				])
@@ -285,20 +236,10 @@ test.describe('AI Actions', () => {
 	test('menu items disabled while command is active', async ({
 		page,
 		editor,
-		testUser,
 		mcpClient,
 		draftPost,
 	}) => {
-		const auth = {
-			username: testUser.username,
-			appPassword: testUser.appPassword,
-		};
-		const postId = await draftPost(
-			'E2E items disabled',
-			PARAGRAPH_CONTENT,
-			auth
-		);
-		await openEditor(page, editor, postId);
+		await openEditor(page, editor, draftPost);
 
 		// Wait for connected status
 		await waitForMCPReady(mcpClient.client);

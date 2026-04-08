@@ -47,16 +47,14 @@ export interface McpClientFixture {
 	stderr: string[];
 }
 
-export type DraftPostFactory = (
-	title: string,
-	content: string,
-	auth?: { username: string; appPassword: string }
-) => Promise<number>;
+/** Default content for auto-created draft posts. */
+const DEFAULT_POST_CONTENT =
+	'<!-- wp:paragraph --><p>Test paragraph</p><!-- /wp:paragraph -->';
 
 const test = base.extend<{
 	testUser: TestUser;
 	mcpClient: McpClientFixture;
-	draftPost: DraftPostFactory;
+	draftPost: number;
 }>({
 	// Per-test user fixture — opt-in. Creates a unique WordPress user,
 	// logs the browser in as that user, and cleans up afterwards.
@@ -112,31 +110,25 @@ const test = base.extend<{
 		{ auto: false },
 	],
 
-	// Draft post fixture — opt-in. Returns a factory function that
-	// creates a draft post. The post is automatically deleted on teardown.
+	// Draft post fixture — opt-in. Creates a draft post owned by the
+	// test user, using the test title as the post title, and deletes it
+	// on teardown. Provides the post ID directly.
 	draftPost: [
-		// eslint-disable-next-line no-empty-pattern -- Playwright requires destructuring
-		async ({}, use) => {
-			let createdPostId: number | undefined;
-			let createdAuth:
-				| { username: string; appPassword: string }
-				| undefined;
-
-			const create: DraftPostFactory = async (
-				title,
-				content,
-				postAuth
-			) => {
-				createdAuth = postAuth;
-				createdPostId = await createDraftPost(title, content, postAuth);
-				return createdPostId;
+		async ({ testUser }, use, testInfo) => {
+			const auth = {
+				username: testUser.username,
+				appPassword: testUser.appPassword,
 			};
-
-			await use(create);
-
-			if (createdPostId !== undefined) {
+			const postId = await createDraftPost(
+				testInfo.title,
+				DEFAULT_POST_CONTENT,
+				auth
+			);
+			try {
+				await use(postId);
+			} finally {
 				try {
-					await deletePost(createdPostId, createdAuth);
+					await deletePost(postId, auth);
 				} catch {
 					// Post may already be deleted (e.g., deleted-post tests)
 				}

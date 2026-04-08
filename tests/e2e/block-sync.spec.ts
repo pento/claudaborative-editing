@@ -7,32 +7,29 @@ import {
 } from './helpers/mcp';
 import { openEditor, getBrowserBlocks } from './helpers/editor';
 
-const HEADING_CONTENT =
-	'<!-- wp:heading {"level":2} --><h2 class="wp-block-heading">Original heading</h2><!-- /wp:heading -->';
-const TWO_PARAGRAPHS =
-	'<!-- wp:paragraph --><p>First paragraph</p><!-- /wp:paragraph --><!-- wp:paragraph --><p>Second paragraph</p><!-- /wp:paragraph -->';
-
 test.describe('block sync', () => {
 	test('MCP inserts blocks visible in browser', async ({
 		page,
 		editor,
-		testUser,
 		mcpClient,
 		draftPost,
 	}) => {
-		const auth = {
-			username: testUser.username,
-			appPassword: testUser.appPassword,
-		};
-		const postId = await draftPost(
-			'E2E block-sync insert',
-			HEADING_CONTENT,
-			auth
-		);
-
-		await openEditor(page, editor, postId);
+		await openEditor(page, editor, draftPost);
 
 		await waitForMCPReady(mcpClient.client);
+
+		// Replace default paragraph with a heading for this test
+		await callToolOrThrow(mcpClient.client, 'wp_remove_blocks', {
+			startIndex: 0,
+			count: 1,
+		});
+		await callToolOrThrow(mcpClient.client, 'wp_insert_block', {
+			position: 0,
+			name: 'core/heading',
+			content: 'Original heading',
+			attributes: { level: 2 },
+		});
+		await waitForQueueToDrain(mcpClient.client);
 
 		// Verify initial content is loaded in the browser
 		await expect
@@ -107,25 +104,14 @@ test.describe('block sync', () => {
 	test('MCP edits block content visible in browser', async ({
 		page,
 		editor,
-		testUser,
 		mcpClient,
 		draftPost,
 	}) => {
-		const auth = {
-			username: testUser.username,
-			appPassword: testUser.appPassword,
-		};
-		const postId = await draftPost(
-			'E2E block-sync edit',
-			HEADING_CONTENT,
-			auth
-		);
-
-		await openEditor(page, editor, postId);
+		await openEditor(page, editor, draftPost);
 
 		await waitForMCPReady(mcpClient.client);
 
-		// Verify initial heading is present
+		// Verify initial paragraph is present
 		await expect
 			.poll(() => getBrowserBlocks(page), {
 				timeout: 30_000,
@@ -134,18 +120,18 @@ test.describe('block sync', () => {
 			.toEqual(
 				expect.arrayContaining([
 					expect.objectContaining({
-						name: 'core/heading',
+						name: 'core/paragraph',
 						attributes: expect.objectContaining({
-							content: 'Original heading',
+							content: 'Test paragraph',
 						}),
 					}),
 				])
 			);
 
-		// Update heading content via MCP
+		// Update paragraph content via MCP
 		await callToolOrThrow(mcpClient.client, 'wp_update_block', {
 			index: '0',
-			content: 'Updated heading from MCP',
+			content: 'Updated content from MCP',
 		});
 
 		await waitForQueueToDrain(mcpClient.client);
@@ -159,29 +145,31 @@ test.describe('block sync', () => {
 				},
 				{ timeout: 30_000, intervals: [1000] }
 			)
-			.toBe('Updated heading from MCP');
+			.toBe('Updated content from MCP');
 	});
 
 	test('MCP changes block attributes visible in browser', async ({
 		page,
 		editor,
-		testUser,
 		mcpClient,
 		draftPost,
 	}) => {
-		const auth = {
-			username: testUser.username,
-			appPassword: testUser.appPassword,
-		};
-		const postId = await draftPost(
-			'E2E block-sync attrs',
-			HEADING_CONTENT,
-			auth
-		);
-
-		await openEditor(page, editor, postId);
+		await openEditor(page, editor, draftPost);
 
 		await waitForMCPReady(mcpClient.client);
+
+		// Replace default paragraph with a heading for this test
+		await callToolOrThrow(mcpClient.client, 'wp_remove_blocks', {
+			startIndex: 0,
+			count: 1,
+		});
+		await callToolOrThrow(mcpClient.client, 'wp_insert_block', {
+			position: 0,
+			name: 'core/heading',
+			content: 'Original heading',
+			attributes: { level: 2 },
+		});
+		await waitForQueueToDrain(mcpClient.client);
 
 		// Verify initial heading is level 2
 		await expect
@@ -217,23 +205,20 @@ test.describe('block sync', () => {
 	test('MCP removes blocks visible in browser', async ({
 		page,
 		editor,
-		testUser,
 		mcpClient,
 		draftPost,
 	}) => {
-		const auth = {
-			username: testUser.username,
-			appPassword: testUser.appPassword,
-		};
-		const postId = await draftPost(
-			'E2E block-sync remove',
-			TWO_PARAGRAPHS,
-			auth
-		);
-
-		await openEditor(page, editor, postId);
+		await openEditor(page, editor, draftPost);
 
 		await waitForMCPReady(mcpClient.client);
+
+		// Insert a second paragraph after the default one
+		await callToolOrThrow(mcpClient.client, 'wp_insert_block', {
+			position: 1,
+			name: 'core/paragraph',
+			content: 'Second paragraph',
+		});
+		await waitForQueueToDrain(mcpClient.client);
 
 		// Verify initial two paragraphs are present
 		await expect
@@ -255,7 +240,7 @@ test.describe('block sync', () => {
 				expect.arrayContaining([
 					expect.objectContaining({
 						attributes: expect.objectContaining({
-							content: 'First paragraph',
+							content: 'Test paragraph',
 						}),
 					}),
 					expect.objectContaining({
@@ -299,23 +284,10 @@ test.describe('block sync', () => {
 	test('browser edits visible in MCP', async ({
 		page,
 		editor,
-		testUser,
 		mcpClient,
 		draftPost,
 	}) => {
-		const auth = {
-			username: testUser.username,
-			appPassword: testUser.appPassword,
-		};
-		const initialContent =
-			'<!-- wp:paragraph --><p>Browser editable paragraph</p><!-- /wp:paragraph -->';
-		const postId = await draftPost(
-			'E2E block-sync browser-to-mcp',
-			initialContent,
-			auth
-		);
-
-		await openEditor(page, editor, postId);
+		await openEditor(page, editor, draftPost);
 
 		await waitForMCPReady(mcpClient.client);
 
@@ -328,7 +300,7 @@ test.describe('block sync', () => {
 				},
 				{ timeout: 30_000, intervals: [1000] }
 			)
-			.toBe('Browser editable paragraph');
+			.toBe('Test paragraph');
 
 		// Edit the paragraph content from the browser side
 		const newContent = 'Content modified by the browser';
@@ -378,25 +350,27 @@ test.describe('block sync', () => {
 	test('multiple sequential edits in a single session', async ({
 		page,
 		editor,
-		testUser,
 		mcpClient,
 		draftPost,
 	}) => {
 		test.setTimeout(180_000);
 
-		const auth = {
-			username: testUser.username,
-			appPassword: testUser.appPassword,
-		};
-		const postId = await draftPost(
-			'E2E block-sync workflow',
-			HEADING_CONTENT,
-			auth
-		);
-
-		await openEditor(page, editor, postId);
+		await openEditor(page, editor, draftPost);
 
 		await waitForMCPReady(mcpClient.client);
+
+		// Replace default paragraph with a heading for this test
+		await callToolOrThrow(mcpClient.client, 'wp_remove_blocks', {
+			startIndex: 0,
+			count: 1,
+		});
+		await callToolOrThrow(mcpClient.client, 'wp_insert_block', {
+			position: 0,
+			name: 'core/heading',
+			content: 'Original heading',
+			attributes: { level: 2 },
+		});
+		await waitForQueueToDrain(mcpClient.client);
 
 		await expect
 			.poll(() => getBrowserBlocks(page), {
