@@ -331,30 +331,35 @@ describe('command-sync', () => {
 		it('retries writing when commandDoc becomes available after initial call', () => {
 			jest.useFakeTimers();
 
-			const mod = loadModule();
-			mod.initCommandSync();
+			try {
+				const mod = loadModule();
+				mod.initCommandSync();
 
-			// Call writeCommandToSync BEFORE createAwareness provides the doc.
-			// The first attempt fails (stateMap is null), starting the retry interval.
-			mod.writeCommandToSync(MOCK_COMMAND);
+				// Call writeCommandToSync BEFORE createAwareness provides the doc.
+				// The first attempt fails (stateMap is null), starting the retry interval.
+				mod.writeCommandToSync(MOCK_COMMAND);
 
-			// Now simulate the Y.Doc becoming available.
-			const syncConfig = mockAddEntities.mock.calls[0][0][0].syncConfig;
-			const doc = new MockYDoc();
-			syncConfig.createAwareness(doc);
+				// Now simulate the Y.Doc becoming available.
+				const syncConfig =
+					mockAddEntities.mock.calls[0][0][0].syncConfig;
+				const doc = new MockYDoc();
+				syncConfig.createAwareness(doc);
 
-			// Advance timers to trigger the retry.
-			jest.advanceTimersByTime(200);
+				// Advance timers to trigger the retry.
+				jest.advanceTimersByTime(200);
 
-			// The retry should have written the command.
-			const stateMap = doc.getMap('state');
-			const commands = stateMap.get('commands') as Record<
-				string,
-				unknown
-			>;
-			expect(commands['42']).toEqual(expect.objectContaining({ id: 42 }));
-
-			jest.useRealTimers();
+				// The retry should have written the command.
+				const stateMap = doc.getMap('state');
+				const commands = stateMap.get('commands') as Record<
+					string,
+					unknown
+				>;
+				expect(commands['42']).toEqual(
+					expect.objectContaining({ id: 42 })
+				);
+			} finally {
+				jest.useRealTimers();
+			}
 		});
 	});
 

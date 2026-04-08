@@ -408,7 +408,10 @@ export class CommandHandler {
 
 		// Auto-claim if channels are verified. Signal commands (e.g., open-post)
 		// skip auto-claim since they can't transition pending → running.
-		const isSignal = COMMANDS[command.prompt].signal === true;
+		// Use `in` check to safely handle unknown prompts from Y.Map deserialization.
+		const isSignal =
+			command.prompt in COMMANDS &&
+			COMMANDS[command.prompt].signal === true;
 		let autoClaimed = false;
 		if (this._channelsVerified && !isSignal) {
 			try {
