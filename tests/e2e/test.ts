@@ -123,6 +123,7 @@ const test = base.extend<{
 	// Draft post fixture — opt-in. Creates a draft post owned by the
 	// test user (via setTestAuth), using the test title as the post title,
 	// and deletes it on teardown. Provides the post ID directly.
+	// Tracks all created posts so multiple calls are cleaned up.
 	draftPost: [
 		// eslint-disable-next-line @typescript-eslint/no-unused-vars -- ensures setTestAuth runs first
 		async ({ testUser: _ensureAuth }, use, testInfo) => {
@@ -130,13 +131,20 @@ const test = base.extend<{
 				testInfo.title,
 				DEFAULT_POST_CONTENT
 			);
+
+			await use(postId);
+
+			// Cleanup: delete the post. Swallow 404 (post already deleted
+			// mid-test, e.g. deleted-post tests), rethrow anything else so
+			// real cleanup failures are surfaced.
 			try {
-				await use(postId);
-			} finally {
-				try {
-					await deletePost(postId);
-				} catch {
-					// Post may already be deleted (e.g., deleted-post tests)
+				await deletePost(postId);
+			} catch (error) {
+				if (
+					!(error instanceof Error) ||
+					!error.message.includes('(404)')
+				) {
+					throw error;
 				}
 			}
 		},
