@@ -88,7 +88,6 @@ test.describe('Pre-Publish Panel', () => {
 	test('clicking run button submits pre-publish-check command', async ({
 		page,
 		editor,
-		testUser,
 		draftPost,
 		mcpClient,
 	}) => {
@@ -117,16 +116,11 @@ test.describe('Pre-Publish Panel', () => {
 			.getByRole('button', { name: /Run pre-publish checks/ })
 			.click();
 
-		const auth = {
-			username: testUser.username,
-			appPassword: testUser.appPassword,
-		};
-
 		// Verify a pre-publish-check command was created
 		await expect
 			.poll(
 				async () => {
-					const commands = await listCommands(draftPost, auth);
+					const commands = await listCommands(draftPost);
 					return commands;
 				},
 				{ timeout: 30_000, intervals: [1000] }
@@ -145,7 +139,6 @@ test.describe('Pre-Publish Panel', () => {
 	test('displays results after command completes with result_data', async ({
 		page,
 		editor,
-		testUser,
 		draftPost,
 		mcpClient,
 	}) => {
@@ -173,17 +166,12 @@ test.describe('Pre-Publish Panel', () => {
 			.getByRole('button', { name: /Run pre-publish checks/ })
 			.click();
 
-		const auth = {
-			username: testUser.username,
-			appPassword: testUser.appPassword,
-		};
-
 		// Wait for the command to be created
 		let commandId: number | null = null;
 		await expect
 			.poll(
 				async () => {
-					const commands = await listCommands(draftPost, auth);
+					const commands = await listCommands(draftPost);
 					const cmd = commands.find(
 						(c) => c.prompt === 'pre-publish-check'
 					);
@@ -199,7 +187,7 @@ test.describe('Pre-Publish Panel', () => {
 		// Claim the command (transition to running) if still pending.
 		// Use the MCP tool (not direct REST) so the status change is
 		// written to the Y.Doc and syncs to the browser.
-		const commands = await listCommands(draftPost, auth);
+		const commands = await listCommands(draftPost);
 		const cmd = commands.find((c) => c.prompt === 'pre-publish-check');
 		expect(cmd).toBeDefined();
 		commandId = cmd?.id ?? 0;

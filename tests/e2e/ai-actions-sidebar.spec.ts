@@ -132,7 +132,6 @@ test.describe('AI Actions', () => {
 	test('Proofread submits command', async ({
 		page,
 		editor,
-		testUser,
 		mcpClient,
 		draftPost,
 	}) => {
@@ -162,10 +161,7 @@ test.describe('AI Actions', () => {
 		await expect
 			.poll(
 				async () => {
-					const commands = await listCommands(draftPost, {
-						username: testUser.username,
-						appPassword: testUser.appPassword,
-					});
+					const commands = await listCommands(draftPost);
 					return commands;
 				},
 				{ timeout: 30_000, intervals: [1000] }
@@ -184,7 +180,6 @@ test.describe('AI Actions', () => {
 	test('Review submits command', async ({
 		page,
 		editor,
-		testUser,
 		mcpClient,
 		draftPost,
 	}) => {
@@ -214,10 +209,7 @@ test.describe('AI Actions', () => {
 		await expect
 			.poll(
 				async () => {
-					const commands = await listCommands(draftPost, {
-						username: testUser.username,
-						appPassword: testUser.appPassword,
-					});
+					const commands = await listCommands(draftPost);
 					return commands;
 				},
 				{ timeout: 30_000, intervals: [1000] }

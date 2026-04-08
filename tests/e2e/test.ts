@@ -18,6 +18,8 @@ import {
 	WP_BASE_URL,
 	createTestUser,
 	deleteTestUser,
+	setTestAuth,
+	clearTestAuth,
 	createDraftPost,
 	deletePost,
 	type TestUser,
@@ -63,6 +65,13 @@ const test = base.extend<{
 		async ({ page }, use) => {
 			const user = await createTestUser();
 
+			// Set as default auth for API helpers so tests don't need
+			// to pass credentials explicitly.
+			setTestAuth({
+				username: user.username,
+				appPassword: user.appPassword,
+			});
+
 			// Log the browser in as the test user. Set values via JS to
 			// avoid interference from wp-login.php's focus timer script
 			// which fires at 200ms and can yank focus between fields.
@@ -78,6 +87,7 @@ const test = base.extend<{
 			try {
 				await use(user);
 			} finally {
+				clearTestAuth();
 				await deleteTestUser(user.userId);
 			}
 		},
@@ -111,24 +121,20 @@ const test = base.extend<{
 	],
 
 	// Draft post fixture — opt-in. Creates a draft post owned by the
-	// test user, using the test title as the post title, and deletes it
-	// on teardown. Provides the post ID directly.
+	// test user (via setTestAuth), using the test title as the post title,
+	// and deletes it on teardown. Provides the post ID directly.
 	draftPost: [
-		async ({ testUser }, use, testInfo) => {
-			const auth = {
-				username: testUser.username,
-				appPassword: testUser.appPassword,
-			};
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars -- ensures setTestAuth runs first
+		async ({ testUser: _ensureAuth }, use, testInfo) => {
 			const postId = await createDraftPost(
 				testInfo.title,
-				DEFAULT_POST_CONTENT,
-				auth
+				DEFAULT_POST_CONTENT
 			);
 			try {
 				await use(postId);
 			} finally {
 				try {
-					await deletePost(postId, auth);
+					await deletePost(postId);
 				} catch {
 					// Post may already be deleted (e.g., deleted-post tests)
 				}

@@ -4,7 +4,6 @@ import { deletePost, trashPost } from './helpers/wp-env';
 
 test.describe('deleted post detection', () => {
 	test('detects permanently deleted post and errors on editing operations', async ({
-		testUser,
 		mcpClient,
 		draftPost,
 	}) => {
@@ -22,10 +21,7 @@ test.describe('deleted post detection', () => {
 
 		// Permanently delete the post via REST API
 		// (draftPost fixture will silently handle the 404 on teardown)
-		await deletePost(draftPost, {
-			username: testUser.username,
-			appPassword: testUser.appPassword,
-		});
+		await deletePost(draftPost);
 
 		// Poll until MCP detects the post is gone
 		// The sync client will get an error on next poll, triggering checkPostStillExists
@@ -72,7 +68,6 @@ test.describe('deleted post detection', () => {
 	});
 
 	test('detects trashed post and errors on editing operations', async ({
-		testUser,
 		mcpClient,
 		draftPost,
 	}) => {
@@ -90,10 +85,7 @@ test.describe('deleted post detection', () => {
 
 		// Trash the post via REST API (not permanent delete)
 		// (draftPost fixture will delete the trashed post on teardown)
-		await trashPost(draftPost, {
-			username: testUser.username,
-			appPassword: testUser.appPassword,
-		});
+		await trashPost(draftPost);
 
 		// Poll until MCP detects the post is gone
 		await expect
