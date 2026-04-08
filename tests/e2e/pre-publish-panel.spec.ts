@@ -25,11 +25,17 @@ test.describe('Pre-Publish Panel', () => {
 	test('panel appears in pre-publish sidebar', async ({
 		page,
 		editor,
+		testUser,
 		draftPost,
 	}) => {
+		const auth = {
+			username: testUser.username,
+			appPassword: testUser.appPassword,
+		};
 		const postId = await draftPost(
 			'E2E pre-publish panel visibility',
-			PARAGRAPH_CONTENT
+			PARAGRAPH_CONTENT,
+			auth
 		);
 
 		await openEditor(page, editor, postId);
@@ -54,36 +60,46 @@ test.describe('Pre-Publish Panel', () => {
 	test('run button disabled when MCP not connected', async ({
 		page,
 		editor,
+		testUser,
 		draftPost,
 	}) => {
+		const auth = {
+			username: testUser.username,
+			appPassword: testUser.appPassword,
+		};
 		const postId = await draftPost(
 			'E2E pre-publish disconnected',
-			PARAGRAPH_CONTENT
+			PARAGRAPH_CONTENT,
+			auth
 		);
 
 		await openEditor(page, editor, postId);
 		await openPrePublishSidebar(page);
 
-		// The run button should be present. It may be enabled or
-		// disabled depending on whether a parallel test's MCP
-		// connection is still reflected in the user-scoped transient.
-		// We just verify the button exists in the panel.
+		// Per-test user isolation ensures no MCP connection exists,
+		// so the button should be disabled.
 		await expect(
 			page.getByRole('button', { name: /Run pre-publish checks/ })
-		).toBeVisible();
+		).toBeDisabled();
 	});
 
 	test('run button enabled when MCP connected', async ({
 		page,
 		editor,
+		testUser,
 		draftPost,
 		connectedMcpClient,
 	}) => {
 		void connectedMcpClient;
 
+		const auth = {
+			username: testUser.username,
+			appPassword: testUser.appPassword,
+		};
 		const postId = await draftPost(
 			'E2E pre-publish connected',
-			PARAGRAPH_CONTENT
+			PARAGRAPH_CONTENT,
+			auth
 		);
 
 		await openEditor(page, editor, postId);
@@ -110,14 +126,20 @@ test.describe('Pre-Publish Panel', () => {
 	test('clicking run button submits pre-publish-check command', async ({
 		page,
 		editor,
+		testUser,
 		draftPost,
 		connectedMcpClient,
 	}) => {
 		void connectedMcpClient;
 
+		const auth = {
+			username: testUser.username,
+			appPassword: testUser.appPassword,
+		};
 		const postId = await draftPost(
 			'E2E pre-publish command submission',
-			PARAGRAPH_CONTENT
+			PARAGRAPH_CONTENT,
+			auth
 		);
 
 		await openEditor(page, editor, postId);
@@ -168,12 +190,18 @@ test.describe('Pre-Publish Panel', () => {
 	test('displays results after command completes with result_data', async ({
 		page,
 		editor,
+		testUser,
 		draftPost,
 		connectedMcpClient,
 	}) => {
+		const auth = {
+			username: testUser.username,
+			appPassword: testUser.appPassword,
+		};
 		const postId = await draftPost(
 			'E2E pre-publish results display',
-			PARAGRAPH_CONTENT
+			PARAGRAPH_CONTENT,
+			auth
 		);
 
 		await openEditor(page, editor, postId);

@@ -9,15 +9,13 @@
  *   tests run in parallel, since commands are user-scoped.
  * - `mcpClient` fixture: MCP subprocess lifecycle with stderr-enhanced errors
  * - `draftPost` fixture: draft post creation with automatic cleanup
- * - `connectedMcpClient` fixture: MCP client pre-connected as admin
+ * - `connectedMcpClient` fixture: MCP client pre-connected as the test user
  */
 import { test as base, expect } from '@wordpress/e2e-test-utils-playwright';
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { createMcpTestClient, callToolOrThrow } from './helpers/mcp';
 import {
-	WP_ADMIN_USER,
 	WP_BASE_URL,
-	getSharedAppPassword,
 	createTestUser,
 	deleteTestUser,
 	createDraftPost,
@@ -145,14 +143,13 @@ const test = base.extend<{
 	],
 
 	// Connected MCP client fixture — opt-in. Composes on mcpClient and
-	// calls wp_connect as admin with the shared app password.
+	// testUser, connecting MCP as the per-test user for full isolation.
 	connectedMcpClient: [
-		async ({ mcpClient }, use) => {
-			const appPassword = getSharedAppPassword();
+		async ({ mcpClient, testUser }, use) => {
 			await callToolOrThrow(mcpClient.client, 'wp_connect', {
 				siteUrl: WP_BASE_URL,
-				username: WP_ADMIN_USER,
-				appPassword,
+				username: testUser.username,
+				appPassword: testUser.appPassword,
 			});
 			await use(mcpClient);
 		},

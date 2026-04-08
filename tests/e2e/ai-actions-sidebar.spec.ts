@@ -31,10 +31,20 @@ async function openDropdown(page: Page): Promise<void> {
 }
 
 test.describe('AI Actions', () => {
-	test('dropdown opens and closes', async ({ page, editor, draftPost }) => {
+	test('dropdown opens and closes', async ({
+		page,
+		editor,
+		testUser,
+		draftPost,
+	}) => {
+		const auth = {
+			username: testUser.username,
+			appPassword: testUser.appPassword,
+		};
 		const postId = await draftPost(
 			'E2E dropdown open-close',
-			PARAGRAPH_CONTENT
+			PARAGRAPH_CONTENT,
+			auth
 		);
 		await openEditor(page, editor, postId);
 
@@ -64,18 +74,23 @@ test.describe('AI Actions', () => {
 	test('footer shows disconnected status without MCP', async ({
 		page,
 		editor,
+		testUser,
 		draftPost,
 	}) => {
+		const auth = {
+			username: testUser.username,
+			appPassword: testUser.appPassword,
+		};
 		const postId = await draftPost(
 			'E2E disconnected status',
-			PARAGRAPH_CONTENT
+			PARAGRAPH_CONTENT,
+			auth
 		);
 		await openEditor(page, editor, postId);
 
-		// Wait for footer sparkle to be grey (disconnected).
-		// Uses polling because a parallel test's MCP connection
-		// may briefly set the user-scoped mcp_connected transient
-		// (30s TTL) — we wait for it to expire.
+		// Footer sparkle should be grey (disconnected). Per-test user
+		// isolation ensures no parallel test can affect this user's
+		// mcp_connected transient.
 		await expect
 			.poll(
 				async () =>
@@ -83,7 +98,7 @@ test.describe('AI Actions', () => {
 						.locator('svg path')
 						.first()
 						.getAttribute('fill'),
-				{ timeout: 45_000, intervals: [1000] }
+				{ timeout: 30_000, intervals: [1000] }
 			)
 			.toBe('#949494');
 
@@ -107,14 +122,20 @@ test.describe('AI Actions', () => {
 	test('footer shows connected status with MCP', async ({
 		page,
 		editor,
+		testUser,
 		connectedMcpClient,
 		draftPost,
 	}) => {
 		void connectedMcpClient;
 
+		const auth = {
+			username: testUser.username,
+			appPassword: testUser.appPassword,
+		};
 		const postId = await draftPost(
 			'E2E connected status',
-			PARAGRAPH_CONTENT
+			PARAGRAPH_CONTENT,
+			auth
 		);
 		await openEditor(page, editor, postId);
 
@@ -143,14 +164,20 @@ test.describe('AI Actions', () => {
 	test('Proofread submits command', async ({
 		page,
 		editor,
+		testUser,
 		connectedMcpClient,
 		draftPost,
 	}) => {
 		void connectedMcpClient;
 
+		const auth = {
+			username: testUser.username,
+			appPassword: testUser.appPassword,
+		};
 		const postId = await draftPost(
 			'E2E proofread command',
-			PARAGRAPH_CONTENT
+			PARAGRAPH_CONTENT,
+			auth
 		);
 		await openEditor(page, editor, postId);
 
@@ -197,12 +224,21 @@ test.describe('AI Actions', () => {
 	test('Review submits command', async ({
 		page,
 		editor,
+		testUser,
 		connectedMcpClient,
 		draftPost,
 	}) => {
 		void connectedMcpClient;
 
-		const postId = await draftPost('E2E review command', PARAGRAPH_CONTENT);
+		const auth = {
+			username: testUser.username,
+			appPassword: testUser.appPassword,
+		};
+		const postId = await draftPost(
+			'E2E review command',
+			PARAGRAPH_CONTENT,
+			auth
+		);
 		await openEditor(page, editor, postId);
 
 		// Wait for connected status
@@ -248,12 +284,21 @@ test.describe('AI Actions', () => {
 	test('menu items disabled while command is active', async ({
 		page,
 		editor,
+		testUser,
 		connectedMcpClient,
 		draftPost,
 	}) => {
 		void connectedMcpClient;
 
-		const postId = await draftPost('E2E items disabled', PARAGRAPH_CONTENT);
+		const auth = {
+			username: testUser.username,
+			appPassword: testUser.appPassword,
+		};
+		const postId = await draftPost(
+			'E2E items disabled',
+			PARAGRAPH_CONTENT,
+			auth
+		);
 		await openEditor(page, editor, postId);
 
 		// Wait for connected status
