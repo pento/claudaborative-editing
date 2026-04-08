@@ -1413,6 +1413,43 @@ describe('CommandHandler', () => {
 			expect(notification.meta).not.toHaveProperty('content_embedded');
 		});
 
+		it('falls back for translate command when language argument is missing', async () => {
+			const { dispatchCommand } = setupMockCommandClient({
+				resolve: makePluginStatus(),
+			});
+
+			const notifier = vi
+				.fn<ChannelNotifier>()
+				.mockResolvedValue(undefined);
+			handler.setNotifier(notifier);
+
+			const contentProvider: ContentProvider = vi
+				.fn<ContentProvider>()
+				.mockResolvedValue({
+					postContent: 'Some post content',
+					notesSupported: false,
+				});
+			handler.setContentProvider(contentProvider);
+
+			await handler.start(createMockApiClient(), createCommandMap());
+
+			await dispatchCommand(
+				makeCommand({
+					id: 16,
+					post_id: 100,
+					prompt: 'translate',
+					arguments: {},
+				})
+			);
+
+			expect(notifier).toHaveBeenCalledOnce();
+			const notification = notifier.mock.calls[0][0];
+			expect(notification.content).toBe(
+				'User requested: translate on post #100.'
+			);
+			expect(notification.meta).not.toHaveProperty('content_embedded');
+		});
+
 		it('embeds content with auto-claim when both features are active', async () => {
 			const { instance, dispatchCommand } = setupMockCommandClient({
 				resolve: makePluginStatus(),
