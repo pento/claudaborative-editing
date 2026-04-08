@@ -328,6 +328,35 @@ describe('command-sync', () => {
 			expect(() => mod.writeCommandToSync(MOCK_COMMAND)).not.toThrow();
 		});
 
+		it('warns and drops pending writes after max retries when Y.Doc never becomes available', () => {
+			jest.useFakeTimers();
+			const warnSpy = jest
+				.spyOn(console, 'warn')
+				.mockImplementation(() => {});
+
+			try {
+				const mod = loadModule();
+				mod.initCommandSync();
+
+				// Call writeCommandToSync BEFORE createAwareness provides the doc.
+				// The Y.Doc never becomes available, so retries will exhaust.
+				mod.writeCommandToSync(MOCK_COMMAND);
+
+				// Advance past all 50 retries (50 × 200ms = 10_000ms).
+				jest.advanceTimersByTime(10_000);
+
+				expect(warnSpy).toHaveBeenCalledWith(
+					expect.stringContaining('Dropping 1 pending command write')
+				);
+				expect(warnSpy).toHaveBeenCalledWith(
+					expect.stringContaining('Y.Doc not ready after 50 retries')
+				);
+			} finally {
+				warnSpy.mockRestore();
+				jest.useRealTimers();
+			}
+		});
+
 		it('retries writing when commandDoc becomes available after initial call', () => {
 			jest.useFakeTimers();
 
