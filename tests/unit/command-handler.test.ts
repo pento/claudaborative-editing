@@ -4,6 +4,7 @@ import { CommandHandler } from '../../src/session/command-handler.js';
 import type {
 	ChannelNotifier,
 	ContentProvider,
+	PreOpenHandler,
 } from '../../src/session/command-handler.js';
 import { WordPressApiError } from '../../src/wordpress/api-client.js';
 import type { WordPressApiClient } from '../../src/wordpress/api-client.js';
@@ -1484,6 +1485,615 @@ describe('CommandHandler', () => {
 			const notification = notifier.mock.calls[0][0];
 			expect(notification.content).toContain('Review this content');
 			expect(notification.meta.content_embedded).toBe('true');
+		});
+	});
+
+	// ---------------------------------------------------------------
+	// setPreOpenHandler / setUserId
+	// ---------------------------------------------------------------
+	describe('setPreOpenHandler()', () => {
+		it('can be called without error', () => {
+			expect(() => {
+				handler.setPreOpenHandler(async () => {});
+			}).not.toThrow();
+		});
+	});
+
+	describe('setUserId()', () => {
+		it('can be called without error', () => {
+			expect(() => {
+				handler.setUserId(42);
+			}).not.toThrow();
+		});
+	});
+
+	// ---------------------------------------------------------------
+	// buildEmbeddedContent — additional prompt cases
+	// ---------------------------------------------------------------
+	describe('content embedding — additional prompts', () => {
+		it('embeds content for edit command with editingFocus argument', async () => {
+			const { dispatchCommand } = setupMockCommandClient({
+				resolve: makePluginStatus(),
+			});
+
+			const notifier = vi
+				.fn<ChannelNotifier>()
+				.mockResolvedValue(undefined);
+			handler.setNotifier(notifier);
+
+			const contentProvider: ContentProvider = vi
+				.fn<ContentProvider>()
+				.mockResolvedValue({
+					postContent: 'Some post content',
+					notesSupported: false,
+				});
+			handler.setContentProvider(contentProvider);
+
+			await handler.start(createMockApiClient(), createCommandMap());
+
+			await dispatchCommand(
+				makeCommand({
+					id: 20,
+					post_id: 100,
+					prompt: 'edit',
+					arguments: { editingFocus: 'Improve the introduction' },
+				})
+			);
+
+			expect(notifier).toHaveBeenCalledOnce();
+			const notification = notifier.mock.calls[0][0];
+			expect(notification.content).toContain('Focus on:');
+			expect(notification.content).toContain('Improve the introduction');
+			expect(notification.content).toContain('Some post content');
+			expect(notification.meta.content_embedded).toBe('true');
+		});
+
+		it('embeds content for respond-to-notes with notes in snapshot', async () => {
+			const { dispatchCommand } = setupMockCommandClient({
+				resolve: makePluginStatus(),
+			});
+
+			const notifier = vi
+				.fn<ChannelNotifier>()
+				.mockResolvedValue(undefined);
+			handler.setNotifier(notifier);
+
+			const contentProvider: ContentProvider = vi
+				.fn<ContentProvider>()
+				.mockResolvedValue({
+					postContent: 'Post with notes',
+					notes: {
+						notes: [
+							{
+								id: 1,
+								parent: 0,
+								content: {
+									rendered: '<p>Fix this paragraph</p>',
+								},
+								author_name: 'Editor',
+								date: '2026-01-01T00:00:00',
+							} as import('../../src/wordpress/types.js').WPNote,
+						],
+						noteBlockMap: { 1: '0' },
+					},
+					notesSupported: true,
+				});
+			handler.setContentProvider(contentProvider);
+
+			await handler.start(createMockApiClient(), createCommandMap());
+
+			await dispatchCommand(
+				makeCommand({
+					id: 21,
+					post_id: 100,
+					prompt: 'respond-to-notes',
+				})
+			);
+
+			expect(notifier).toHaveBeenCalledOnce();
+			const notification = notifier.mock.calls[0][0];
+			expect(notification.content).toContain('wp_resolve_note');
+			expect(notification.content).toContain('Post with notes');
+			expect(notification.meta.content_embedded).toBe('true');
+		});
+
+		it('embeds content for respond-to-note with matching noteId', async () => {
+			const { dispatchCommand } = setupMockCommandClient({
+				resolve: makePluginStatus(),
+			});
+
+			const notifier = vi
+				.fn<ChannelNotifier>()
+				.mockResolvedValue(undefined);
+			handler.setNotifier(notifier);
+
+			const contentProvider: ContentProvider = vi
+				.fn<ContentProvider>()
+				.mockResolvedValue({
+					postContent: 'Post with specific note',
+					notes: {
+						notes: [
+							{
+								id: 5,
+								parent: 0,
+								content: { rendered: '<p>Fix heading</p>' },
+								author_name: 'Reviewer',
+								date: '2026-01-01T00:00:00',
+							} as import('../../src/wordpress/types.js').WPNote,
+							{
+								id: 6,
+								parent: 5,
+								content: { rendered: '<p>Reply to note</p>' },
+								author_name: 'Author',
+								date: '2026-01-01T01:00:00',
+							} as import('../../src/wordpress/types.js').WPNote,
+						],
+						noteBlockMap: { 5: '2' },
+					},
+					notesSupported: true,
+				});
+			handler.setContentProvider(contentProvider);
+
+			await handler.start(createMockApiClient(), createCommandMap());
+
+			await dispatchCommand(
+				makeCommand({
+					id: 22,
+					post_id: 100,
+					prompt: 'respond-to-note',
+					arguments: { noteId: 5 },
+				})
+			);
+
+			expect(notifier).toHaveBeenCalledOnce();
+			const notification = notifier.mock.calls[0][0];
+			expect(notification.content).toContain('wp_resolve_note');
+			expect(notification.content).toContain('Post with specific note');
+			expect(notification.meta.content_embedded).toBe('true');
+		});
+
+		it('falls back to minimal notification for respond-to-note with non-matching noteId', async () => {
+			const { dispatchCommand } = setupMockCommandClient({
+				resolve: makePluginStatus(),
+			});
+
+			const notifier = vi
+				.fn<ChannelNotifier>()
+				.mockResolvedValue(undefined);
+			handler.setNotifier(notifier);
+
+			const contentProvider: ContentProvider = vi
+				.fn<ContentProvider>()
+				.mockResolvedValue({
+					postContent: 'Post with notes',
+					notes: {
+						notes: [
+							{
+								id: 5,
+								parent: 0,
+								content: { rendered: '<p>Some note</p>' },
+								author_name: 'Reviewer',
+								date: '2026-01-01T00:00:00',
+							} as import('../../src/wordpress/types.js').WPNote,
+						],
+						noteBlockMap: { 5: '0' },
+					},
+					notesSupported: true,
+				});
+			handler.setContentProvider(contentProvider);
+
+			await handler.start(createMockApiClient(), createCommandMap());
+
+			await dispatchCommand(
+				makeCommand({
+					id: 23,
+					post_id: 100,
+					prompt: 'respond-to-note',
+					arguments: { noteId: 999 },
+				})
+			);
+
+			expect(notifier).toHaveBeenCalledOnce();
+			const notification = notifier.mock.calls[0][0];
+			expect(notification.content).toBe(
+				'User requested: respond-to-note on post #100. Arguments: noteId: 999.'
+			);
+			expect(notification.meta).not.toHaveProperty('content_embedded');
+		});
+
+		it('embeds content for translate command with language argument', async () => {
+			const { dispatchCommand } = setupMockCommandClient({
+				resolve: makePluginStatus(),
+			});
+
+			const notifier = vi
+				.fn<ChannelNotifier>()
+				.mockResolvedValue(undefined);
+			handler.setNotifier(notifier);
+
+			const contentProvider: ContentProvider = vi
+				.fn<ContentProvider>()
+				.mockResolvedValue({
+					postContent: 'Content to translate',
+					notesSupported: false,
+				});
+			handler.setContentProvider(contentProvider);
+
+			await handler.start(createMockApiClient(), createCommandMap());
+
+			await dispatchCommand(
+				makeCommand({
+					id: 24,
+					post_id: 100,
+					prompt: 'translate',
+					arguments: { language: 'Spanish' },
+				})
+			);
+
+			expect(notifier).toHaveBeenCalledOnce();
+			const notification = notifier.mock.calls[0][0];
+			expect(notification.content).toContain('Spanish');
+			expect(notification.content).toContain('Content to translate');
+			expect(notification.meta.content_embedded).toBe('true');
+		});
+
+		it('embeds content for compose command', async () => {
+			const { dispatchCommand } = setupMockCommandClient({
+				resolve: makePluginStatus(),
+			});
+
+			const notifier = vi
+				.fn<ChannelNotifier>()
+				.mockResolvedValue(undefined);
+			handler.setNotifier(notifier);
+
+			const contentProvider: ContentProvider = vi
+				.fn<ContentProvider>()
+				.mockResolvedValue({
+					postContent: 'Draft post content',
+					notesSupported: true,
+				});
+			handler.setContentProvider(contentProvider);
+
+			await handler.start(createMockApiClient(), createCommandMap());
+
+			await dispatchCommand(
+				makeCommand({
+					id: 25,
+					post_id: 100,
+					prompt: 'compose',
+				})
+			);
+
+			expect(notifier).toHaveBeenCalledOnce();
+			const notification = notifier.mock.calls[0][0];
+			expect(notification.content).toContain('awaiting_input');
+			expect(notification.content).toContain('Draft post content');
+			expect(notification.meta.content_embedded).toBe('true');
+		});
+
+		it('embeds content for pre-publish-check command', async () => {
+			const { dispatchCommand } = setupMockCommandClient({
+				resolve: makePluginStatus(),
+			});
+
+			const notifier = vi
+				.fn<ChannelNotifier>()
+				.mockResolvedValue(undefined);
+			handler.setNotifier(notifier);
+
+			const contentProvider: ContentProvider = vi
+				.fn<ContentProvider>()
+				.mockResolvedValue({
+					postContent: 'Ready to publish content',
+					notesSupported: false,
+				});
+			handler.setContentProvider(contentProvider);
+
+			await handler.start(createMockApiClient(), createCommandMap());
+
+			await dispatchCommand(
+				makeCommand({
+					id: 26,
+					post_id: 100,
+					prompt: 'pre-publish-check' as Command['prompt'],
+				})
+			);
+
+			expect(notifier).toHaveBeenCalledOnce();
+			const notification = notifier.mock.calls[0][0];
+			expect(notification.content).toContain('READ-ONLY');
+			expect(notification.content).toContain('Ready to publish content');
+			expect(notification.meta.content_embedded).toBe('true');
+		});
+
+		it('falls back to minimal notification for unknown prompt', async () => {
+			const { dispatchCommand } = setupMockCommandClient({
+				resolve: makePluginStatus(),
+			});
+
+			const notifier = vi
+				.fn<ChannelNotifier>()
+				.mockResolvedValue(undefined);
+			handler.setNotifier(notifier);
+
+			const contentProvider: ContentProvider = vi
+				.fn<ContentProvider>()
+				.mockResolvedValue({
+					postContent: 'Some content',
+					notesSupported: false,
+				});
+			handler.setContentProvider(contentProvider);
+
+			await handler.start(createMockApiClient(), createCommandMap());
+
+			await dispatchCommand(
+				makeCommand({
+					id: 27,
+					post_id: 100,
+					prompt: 'unknown-future-prompt' as Command['prompt'],
+				})
+			);
+
+			expect(notifier).toHaveBeenCalledOnce();
+			const notification = notifier.mock.calls[0][0];
+			expect(notification.content).toBe(
+				'User requested: unknown-future-prompt on post #100.'
+			);
+			expect(notification.meta).not.toHaveProperty('content_embedded');
+		});
+
+		it('falls back for respond-to-notes when no notes in snapshot', async () => {
+			const { dispatchCommand } = setupMockCommandClient({
+				resolve: makePluginStatus(),
+			});
+
+			const notifier = vi
+				.fn<ChannelNotifier>()
+				.mockResolvedValue(undefined);
+			handler.setNotifier(notifier);
+
+			const contentProvider: ContentProvider = vi
+				.fn<ContentProvider>()
+				.mockResolvedValue({
+					postContent: 'Post without notes',
+					notes: { notes: [], noteBlockMap: {} },
+					notesSupported: true,
+				});
+			handler.setContentProvider(contentProvider);
+
+			await handler.start(createMockApiClient(), createCommandMap());
+
+			await dispatchCommand(
+				makeCommand({
+					id: 28,
+					post_id: 100,
+					prompt: 'respond-to-notes',
+				})
+			);
+
+			expect(notifier).toHaveBeenCalledOnce();
+			const notification = notifier.mock.calls[0][0];
+			expect(notification.content).toBe(
+				'User requested: respond-to-notes on post #100.'
+			);
+			expect(notification.meta).not.toHaveProperty('content_embedded');
+		});
+
+		it('falls back for respond-to-note when notes object is missing', async () => {
+			const { dispatchCommand } = setupMockCommandClient({
+				resolve: makePluginStatus(),
+			});
+
+			const notifier = vi
+				.fn<ChannelNotifier>()
+				.mockResolvedValue(undefined);
+			handler.setNotifier(notifier);
+
+			const contentProvider: ContentProvider = vi
+				.fn<ContentProvider>()
+				.mockResolvedValue({
+					postContent: 'Post without notes',
+					notesSupported: false,
+				});
+			handler.setContentProvider(contentProvider);
+
+			await handler.start(createMockApiClient(), createCommandMap());
+
+			await dispatchCommand(
+				makeCommand({
+					id: 29,
+					post_id: 100,
+					prompt: 'respond-to-note',
+					arguments: { noteId: 1 },
+				})
+			);
+
+			expect(notifier).toHaveBeenCalledOnce();
+			const notification = notifier.mock.calls[0][0];
+			expect(notification.content).toBe(
+				'User requested: respond-to-note on post #100. Arguments: noteId: 1.'
+			);
+			expect(notification.meta).not.toHaveProperty('content_embedded');
+		});
+	});
+
+	// ---------------------------------------------------------------
+	// Pre-open handler in handleCommand
+	// ---------------------------------------------------------------
+	describe('open-post pre-open handler', () => {
+		it('calls preOpenHandler with post_id for open-post command', async () => {
+			const { dispatchCommand } = setupMockCommandClient({
+				resolve: makePluginStatus(),
+			});
+
+			const notifier = vi
+				.fn<ChannelNotifier>()
+				.mockResolvedValue(undefined);
+			handler.setNotifier(notifier);
+
+			const preOpenHandler = vi
+				.fn<PreOpenHandler>()
+				.mockResolvedValue(undefined);
+			handler.setPreOpenHandler(preOpenHandler);
+
+			await handler.start(createMockApiClient(), createCommandMap());
+
+			await dispatchCommand(
+				makeCommand({
+					id: 30,
+					post_id: 200,
+					prompt: 'open-post' as Command['prompt'],
+				})
+			);
+
+			expect(preOpenHandler).toHaveBeenCalledOnce();
+			expect(preOpenHandler).toHaveBeenCalledWith(200);
+			// Notification should still be sent
+			expect(notifier).toHaveBeenCalledOnce();
+		});
+
+		it('still sends notification when preOpenHandler throws', async () => {
+			const { dispatchCommand } = setupMockCommandClient({
+				resolve: makePluginStatus(),
+			});
+
+			const notifier = vi
+				.fn<ChannelNotifier>()
+				.mockResolvedValue(undefined);
+			handler.setNotifier(notifier);
+
+			const preOpenHandler = vi
+				.fn<PreOpenHandler>()
+				.mockRejectedValue(new Error('Pre-open failed'));
+			handler.setPreOpenHandler(preOpenHandler);
+
+			await handler.start(createMockApiClient(), createCommandMap());
+
+			await dispatchCommand(
+				makeCommand({
+					id: 31,
+					post_id: 300,
+					prompt: 'open-post' as Command['prompt'],
+				})
+			);
+
+			expect(preOpenHandler).toHaveBeenCalledOnce();
+			// Notification should still be sent despite error
+			expect(notifier).toHaveBeenCalledOnce();
+		});
+
+		it('does not call preOpenHandler for non-open-post commands', async () => {
+			const { dispatchCommand } = setupMockCommandClient({
+				resolve: makePluginStatus(),
+			});
+
+			const notifier = vi
+				.fn<ChannelNotifier>()
+				.mockResolvedValue(undefined);
+			handler.setNotifier(notifier);
+
+			const preOpenHandler = vi
+				.fn<PreOpenHandler>()
+				.mockResolvedValue(undefined);
+			handler.setPreOpenHandler(preOpenHandler);
+
+			await handler.start(createMockApiClient(), createCommandMap());
+
+			await dispatchCommand(
+				makeCommand({
+					id: 32,
+					post_id: 400,
+					prompt: 'proofread',
+				})
+			);
+
+			expect(preOpenHandler).not.toHaveBeenCalled();
+			expect(notifier).toHaveBeenCalledOnce();
+		});
+	});
+
+	// ---------------------------------------------------------------
+	// User ID filtering
+	// ---------------------------------------------------------------
+	describe('userId filtering', () => {
+		it('ignores command from a different user when userId is set', async () => {
+			const { dispatchCommand } = setupMockCommandClient({
+				resolve: makePluginStatus(),
+			});
+
+			const notifier = vi
+				.fn<ChannelNotifier>()
+				.mockResolvedValue(undefined);
+			handler.setNotifier(notifier);
+			handler.setUserId(10);
+
+			await handler.start(createMockApiClient(), createCommandMap());
+
+			await dispatchCommand(
+				makeCommand({
+					id: 40,
+					post_id: 100,
+					prompt: 'proofread',
+					user_id: 99,
+				})
+			);
+
+			expect(notifier).not.toHaveBeenCalled();
+		});
+
+		it('processes command from the same user when userId is set', async () => {
+			const { dispatchCommand } = setupMockCommandClient({
+				resolve: makePluginStatus(),
+			});
+
+			const notifier = vi
+				.fn<ChannelNotifier>()
+				.mockResolvedValue(undefined);
+			handler.setNotifier(notifier);
+			handler.setUserId(10);
+
+			await handler.start(createMockApiClient(), createCommandMap());
+
+			await dispatchCommand(
+				makeCommand({
+					id: 41,
+					post_id: 100,
+					prompt: 'proofread',
+					user_id: 10,
+				})
+			);
+
+			expect(notifier).toHaveBeenCalledOnce();
+		});
+
+		it('ignores response from a different user when userId is set', async () => {
+			const { dispatchResponse } = setupMockCommandClient({
+				resolve: makePluginStatus(),
+			});
+
+			const notifier = vi
+				.fn<ChannelNotifier>()
+				.mockResolvedValue(undefined);
+			handler.setNotifier(notifier);
+			handler.setUserId(10);
+
+			await handler.start(createMockApiClient(), createCommandMap());
+
+			await dispatchResponse(
+				makeCommand({
+					id: 42,
+					post_id: 100,
+					prompt: 'proofread',
+					status: 'running',
+					user_id: 99,
+					result_data: {
+						messages: [{ role: 'user', content: 'Hello' }],
+					},
+				})
+			);
+
+			expect(notifier).not.toHaveBeenCalled();
 		});
 	});
 
