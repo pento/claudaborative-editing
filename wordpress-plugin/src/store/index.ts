@@ -401,8 +401,11 @@ const actions = {
 
 				const active = commands.find(
 					(command) =>
-						COMMANDS[command.prompt as CommandSlug]?.signal !==
-							true &&
+						!(
+							command.prompt in COMMANDS &&
+							COMMANDS[command.prompt as CommandSlug].signal ===
+								true
+						) &&
 						['pending', 'running', 'awaiting_input'].includes(
 							command.status
 						)
@@ -496,7 +499,10 @@ const actions = {
 				(cmd) =>
 					cmd.post_id === postId &&
 					cmd.user_id === userId &&
-					COMMANDS[cmd.prompt as CommandSlug]?.signal !== true &&
+					!(
+						cmd.prompt in COMMANDS &&
+						COMMANDS[cmd.prompt as CommandSlug].signal === true
+					) &&
 					!TERMINAL_STATUSES.includes(cmd.status)
 			);
 

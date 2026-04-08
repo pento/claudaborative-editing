@@ -346,7 +346,10 @@ export class CommandHandler {
 		if (Array.isArray(messages)) {
 			const typed = messages as Array<{ role: string; content: string }>;
 			for (let i = typed.length - 1; i >= 0; i--) {
-				if (typed[i].role === 'user') {
+				if (
+					typed[i].role === 'user' &&
+					typeof typed[i].content === 'string'
+				) {
 					userContent = typed[i].content;
 					break;
 				}
@@ -396,8 +399,8 @@ export class CommandHandler {
 		if (!this.commandClient) return;
 		if (this._userId !== null && command.user_id !== this._userId) return;
 
-		// For open-post commands, pre-open the post before building the
-		// notification so content can be embedded.
+		// For open-post commands, pre-open the post before sending the
+		// notification so it's ready when a real command arrives.
 		if (command.prompt === 'open-post' && this.preOpenHandler) {
 			try {
 				await this.preOpenHandler(command.post_id);

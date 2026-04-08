@@ -1217,6 +1217,43 @@ describe('CommandHandler', () => {
 			handler.stop();
 			expect(handler.channelsVerified).toBe(false);
 		});
+
+		it('does not auto-claim signal commands (open-post) even when channelsVerified is true', async () => {
+			const { instance, dispatchCommand } = setupMockCommandClient({
+				resolve: makePluginStatus(),
+			});
+			instance.updateCommandStatus.mockResolvedValue(
+				makeCommand({ status: 'running' })
+			);
+
+			const notifier = vi
+				.fn<ChannelNotifier>()
+				.mockResolvedValue(undefined);
+			handler.setNotifier(notifier);
+			await handler.start(createMockApiClient(), createCommandMap());
+
+			// Verify channels first
+			await handler.updateCommandStatus(1, 'running');
+			expect(handler.channelsVerified).toBe(true);
+			instance.updateCommandStatus.mockClear();
+
+			// Dispatch an open-post command — should NOT auto-claim
+			await dispatchCommand(
+				makeCommand({
+					id: 100,
+					post_id: 700,
+					prompt: 'open-post' as Command['prompt'],
+				})
+			);
+
+			// updateCommandStatus should NOT have been called for auto-claim
+			expect(instance.updateCommandStatus).not.toHaveBeenCalled();
+
+			// Notification should still be sent
+			expect(notifier).toHaveBeenCalledOnce();
+			const notification = notifier.mock.calls[0][0];
+			expect(notification.meta).not.toHaveProperty('status');
+		});
 	});
 
 	// ---------------------------------------------------------------

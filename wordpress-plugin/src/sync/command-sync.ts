@@ -366,6 +366,12 @@ export function writeCommandToSync(command: Command): void {
 	pendingWriteTimer = setInterval(() => {
 		retries++;
 		if (flushPendingWrites() || retries >= WRITE_MAX_RETRIES) {
+			if (retries >= WRITE_MAX_RETRIES && pendingWrites.length > 0) {
+				// eslint-disable-next-line no-console
+				console.warn(
+					`[wpce] Dropping ${pendingWrites.length} pending command write(s) — Y.Doc not ready after ${WRITE_MAX_RETRIES} retries`
+				);
+			}
 			clearInterval(pendingWriteTimer!);
 			pendingWriteTimer = null;
 			pendingWrites = [];

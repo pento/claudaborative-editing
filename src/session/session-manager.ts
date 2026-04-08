@@ -771,6 +771,25 @@ export class SessionManager {
 					getAwarenessState: () => null,
 				}
 			);
+
+			// Observe the comment state map for remote note changes.
+			// When savedAt changes (from another client), re-fetch notes
+			// so the embedded content cache stays warm.
+			const commentStateMap = commentDoc.getMap(CRDT_STATE_MAP_KEY);
+			commentStateMap.observe((event, transaction) => {
+				if (transaction.origin === LOCAL_ORIGIN) return;
+				if (!event.keysChanged.has(CRDT_STATE_MAP_SAVED_AT_KEY)) return;
+				// Fire-and-forget: refresh the cache in the background.
+				this.listNotes()
+					.then((result) => {
+						this._cachedNotes = result;
+					})
+					.catch(() => {
+						// Best-effort — cache will be stale but getCachedOrFreshNotes
+						// will fall through to a fresh fetch if cache is null.
+						this._cachedNotes = null;
+					});
+			});
 		}
 
 		// Periodic health check via REST API to detect trashing.
@@ -1813,21 +1832,18 @@ export class SessionManager {
 	 * wait for the previous one to complete.
 	 */
 	async preOpenPost(postId: number): Promise<void> {
-		// Serialize concurrent calls to prevent race conditions from
-		// rapid post switching in the editor.
-		if (this._preOpenInProgress) {
-			await this._preOpenInProgress;
-		}
-
-		// Wrap in a non-rejecting promise so serialized callers don't see errors.
-		this._preOpenInProgress = this._doPreOpenPost(postId).catch(() => {
-			// Errors are best-effort — the command handler already catches them.
-		});
-		try {
-			await this._preOpenInProgress;
-		} finally {
-			this._preOpenInProgress = null;
-		}
+		// Chain onto any in-flight operation so concurrent calls
+		// are properly serialized (no gap between clearing the
+		// sentinel and the next caller checking it).
+		const previous = this._preOpenInProgress;
+		const current = (async () => {
+			if (previous) await previous;
+			await this._doPreOpenPost(postId).catch(() => {
+				// Errors are best-effort — the command handler already catches them.
+			});
+		})();
+		this._preOpenInProgress = current;
+		await current;
 	}
 
 	private async _doPreOpenPost(postId: number): Promise<void> {
