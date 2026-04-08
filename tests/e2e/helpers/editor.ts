@@ -86,20 +86,3 @@ export async function getBrowserBlocks(page: Page): Promise<BrowserBlock[]> {
 export function getFooterStatus(page: Page) {
 	return page.locator('.wpce-footer-status');
 }
-
-/**
- * Poll until the footer sparkle shows connected status (orange).
- */
-export async function waitForConnectedStatus(page: Page): Promise<void> {
-	await expect
-		.poll(
-			async () => {
-				return getFooterStatus(page)
-					.locator('svg path')
-					.first()
-					.getAttribute('fill');
-			},
-			{ timeout: 30_000, intervals: [1000] }
-		)
-		.toBe('#D97706');
-}

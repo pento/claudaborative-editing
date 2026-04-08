@@ -2,11 +2,10 @@ import { test, expect } from './test';
 import {
 	callToolOrThrow,
 	getToolText,
-	waitForCollaborators,
+	waitForMCPReady,
 	waitForQueueToDrain,
 } from './helpers/mcp';
 import { openEditor, getBrowserBlocks } from './helpers/editor';
-import { WP_BASE_URL } from './helpers/wp-env';
 
 const HEADING_CONTENT =
 	'<!-- wp:heading {"level":2} --><h2 class="wp-block-heading">Original heading</h2><!-- /wp:heading -->';
@@ -31,14 +30,9 @@ test.describe('block sync', () => {
 			auth
 		);
 
-		// Connect MCP
-		await callToolOrThrow(mcpClient.client, 'wp_connect', {
-			siteUrl: WP_BASE_URL,
-			username: testUser.username,
-			appPassword: testUser.appPassword,
-		});
-
 		await openEditor(page, editor, postId);
+
+		await waitForMCPReady(mcpClient.client);
 
 		// Verify initial content is loaded in the browser
 		await expect
@@ -51,9 +45,6 @@ test.describe('block sync', () => {
 					expect.objectContaining({ name: 'core/heading' }),
 				])
 			);
-
-		// Wait for 2 collaborators
-		await waitForCollaborators(mcpClient.client);
 
 		// Insert a heading and a paragraph via MCP
 		await callToolOrThrow(mcpClient.client, 'wp_insert_block', {
@@ -130,14 +121,9 @@ test.describe('block sync', () => {
 			auth
 		);
 
-		// Connect MCP
-		await callToolOrThrow(mcpClient.client, 'wp_connect', {
-			siteUrl: WP_BASE_URL,
-			username: testUser.username,
-			appPassword: testUser.appPassword,
-		});
-
 		await openEditor(page, editor, postId);
+
+		await waitForMCPReady(mcpClient.client);
 
 		// Verify initial heading is present
 		await expect
@@ -155,9 +141,6 @@ test.describe('block sync', () => {
 					}),
 				])
 			);
-
-		// Wait for 2 collaborators
-		await waitForCollaborators(mcpClient.client);
 
 		// Update heading content via MCP
 		await callToolOrThrow(mcpClient.client, 'wp_update_block', {
@@ -196,14 +179,9 @@ test.describe('block sync', () => {
 			auth
 		);
 
-		// Connect MCP
-		await callToolOrThrow(mcpClient.client, 'wp_connect', {
-			siteUrl: WP_BASE_URL,
-			username: testUser.username,
-			appPassword: testUser.appPassword,
-		});
-
 		await openEditor(page, editor, postId);
+
+		await waitForMCPReady(mcpClient.client);
 
 		// Verify initial heading is level 2
 		await expect
@@ -215,9 +193,6 @@ test.describe('block sync', () => {
 				{ timeout: 30_000, intervals: [1000] }
 			)
 			.toBe(2);
-
-		// Wait for 2 collaborators
-		await waitForCollaborators(mcpClient.client);
 
 		// Change heading level from 2 to 4
 		await callToolOrThrow(mcpClient.client, 'wp_update_block', {
@@ -256,14 +231,9 @@ test.describe('block sync', () => {
 			auth
 		);
 
-		// Connect MCP
-		await callToolOrThrow(mcpClient.client, 'wp_connect', {
-			siteUrl: WP_BASE_URL,
-			username: testUser.username,
-			appPassword: testUser.appPassword,
-		});
-
 		await openEditor(page, editor, postId);
+
+		await waitForMCPReady(mcpClient.client);
 
 		// Verify initial two paragraphs are present
 		await expect
@@ -295,9 +265,6 @@ test.describe('block sync', () => {
 					}),
 				])
 			);
-
-		// Wait for 2 collaborators
-		await waitForCollaborators(mcpClient.client);
 
 		// Remove the first paragraph
 		await callToolOrThrow(mcpClient.client, 'wp_remove_blocks', {
@@ -348,14 +315,9 @@ test.describe('block sync', () => {
 			auth
 		);
 
-		// Connect MCP
-		await callToolOrThrow(mcpClient.client, 'wp_connect', {
-			siteUrl: WP_BASE_URL,
-			username: testUser.username,
-			appPassword: testUser.appPassword,
-		});
-
 		await openEditor(page, editor, postId);
+
+		await waitForMCPReady(mcpClient.client);
 
 		// Verify initial content in browser
 		await expect
@@ -367,9 +329,6 @@ test.describe('block sync', () => {
 				{ timeout: 30_000, intervals: [1000] }
 			)
 			.toBe('Browser editable paragraph');
-
-		// Wait for 2 collaborators
-		await waitForCollaborators(mcpClient.client);
 
 		// Edit the paragraph content from the browser side
 		const newContent = 'Content modified by the browser';
@@ -435,14 +394,9 @@ test.describe('block sync', () => {
 			auth
 		);
 
-		// Connect MCP
-		await callToolOrThrow(mcpClient.client, 'wp_connect', {
-			siteUrl: WP_BASE_URL,
-			username: testUser.username,
-			appPassword: testUser.appPassword,
-		});
-
 		await openEditor(page, editor, postId);
+
+		await waitForMCPReady(mcpClient.client);
 
 		await expect
 			.poll(() => getBrowserBlocks(page), {
@@ -454,8 +408,6 @@ test.describe('block sync', () => {
 					expect.objectContaining({ name: 'core/heading' }),
 				])
 			);
-
-		await waitForCollaborators(mcpClient.client);
 
 		// Step 1: Update heading content and level in one call
 		await callToolOrThrow(mcpClient.client, 'wp_update_block', {

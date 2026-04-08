@@ -1,11 +1,8 @@
 import { test, expect } from './test';
 import type { Page } from '@playwright/test';
-import {
-	openEditor,
-	getFooterStatus,
-	waitForConnectedStatus,
-} from './helpers/editor';
+import { openEditor, getFooterStatus } from './helpers/editor';
 import { listCommands } from './helpers/wp-env';
+import { waitForMCPReady } from './helpers/mcp';
 
 const PARAGRAPH_CONTENT =
 	'<!-- wp:paragraph --><p>Test paragraph for AI Actions</p><!-- /wp:paragraph -->';
@@ -88,9 +85,8 @@ test.describe('AI Actions', () => {
 		);
 		await openEditor(page, editor, postId);
 
-		// Footer sparkle should be grey (disconnected). Per-test user
-		// isolation ensures no parallel test can affect this user's
-		// mcp_connected transient.
+		// Footer sparkle should start grey (disconnected), until MCP
+		// recieves signal to open this post.
 		await expect
 			.poll(
 				async () =>
@@ -123,10 +119,10 @@ test.describe('AI Actions', () => {
 		page,
 		editor,
 		testUser,
-		connectedMcpClient,
+		mcpClient,
 		draftPost,
 	}) => {
-		void connectedMcpClient;
+		void mcpClient;
 
 		const auth = {
 			username: testUser.username,
@@ -139,8 +135,19 @@ test.describe('AI Actions', () => {
 		);
 		await openEditor(page, editor, postId);
 
+		await waitForMCPReady(mcpClient.client);
+
 		// Wait for connected status (orange sparkle)
-		await waitForConnectedStatus(page);
+		await expect
+			.poll(
+				async () =>
+					getFooterStatus(page)
+						.locator('svg path')
+						.first()
+						.getAttribute('fill'),
+				{ timeout: 30_000, intervals: [1000] }
+			)
+			.toBe('#D97706');
 
 		// Verify menu items become enabled
 		await openDropdown(page);
@@ -165,10 +172,10 @@ test.describe('AI Actions', () => {
 		page,
 		editor,
 		testUser,
-		connectedMcpClient,
+		mcpClient,
 		draftPost,
 	}) => {
-		void connectedMcpClient;
+		void mcpClient;
 
 		const auth = {
 			username: testUser.username,
@@ -182,7 +189,7 @@ test.describe('AI Actions', () => {
 		await openEditor(page, editor, postId);
 
 		// Wait for connected status
-		await waitForConnectedStatus(page);
+		await waitForMCPReady(mcpClient.client);
 
 		// Open dropdown and wait for Proofread to be enabled
 		await openDropdown(page);
@@ -205,7 +212,7 @@ test.describe('AI Actions', () => {
 		await expect
 			.poll(
 				async () => {
-					const commands = await listCommands(postId);
+					const commands = await listCommands(postId, auth);
 					return commands;
 				},
 				{ timeout: 30_000, intervals: [1000] }
@@ -225,10 +232,10 @@ test.describe('AI Actions', () => {
 		page,
 		editor,
 		testUser,
-		connectedMcpClient,
+		mcpClient,
 		draftPost,
 	}) => {
-		void connectedMcpClient;
+		void mcpClient;
 
 		const auth = {
 			username: testUser.username,
@@ -242,7 +249,7 @@ test.describe('AI Actions', () => {
 		await openEditor(page, editor, postId);
 
 		// Wait for connected status
-		await waitForConnectedStatus(page);
+		await waitForMCPReady(mcpClient.client);
 
 		// Open dropdown and wait for Review to be enabled
 		await openDropdown(page);
@@ -265,7 +272,7 @@ test.describe('AI Actions', () => {
 		await expect
 			.poll(
 				async () => {
-					const commands = await listCommands(postId);
+					const commands = await listCommands(postId, auth);
 					return commands;
 				},
 				{ timeout: 30_000, intervals: [1000] }
@@ -285,10 +292,10 @@ test.describe('AI Actions', () => {
 		page,
 		editor,
 		testUser,
-		connectedMcpClient,
+		mcpClient,
 		draftPost,
 	}) => {
-		void connectedMcpClient;
+		void mcpClient;
 
 		const auth = {
 			username: testUser.username,
@@ -302,7 +309,7 @@ test.describe('AI Actions', () => {
 		await openEditor(page, editor, postId);
 
 		// Wait for connected status
-		await waitForConnectedStatus(page);
+		await waitForMCPReady(mcpClient.client);
 
 		// Open dropdown and wait for items to be enabled
 		await openDropdown(page);

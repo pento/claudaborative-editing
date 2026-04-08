@@ -7,13 +7,13 @@
  *   WordPress user + app password, logs the browser in as that user, and
  *   cleans up afterwards). This prevents command cross-contamination when
  *   tests run in parallel, since commands are user-scoped.
- * - `mcpClient` fixture: MCP subprocess lifecycle with stderr-enhanced errors
+ * - `mcpClient` fixture: MCP subprocess auto-connected as the test user,
+ *   with stderr-enhanced errors and automatic cleanup
  * - `draftPost` fixture: draft post creation with automatic cleanup
- * - `connectedMcpClient` fixture: MCP client pre-connected as the test user
  */
 import { test as base, expect } from '@wordpress/e2e-test-utils-playwright';
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { createMcpTestClient, callToolOrThrow } from './helpers/mcp';
+import { createMcpTestClient } from './helpers/mcp';
 import {
 	WP_BASE_URL,
 	createTestUser,
@@ -57,7 +57,6 @@ const test = base.extend<{
 	testUser: TestUser;
 	mcpClient: McpClientFixture;
 	draftPost: DraftPostFactory;
-	connectedMcpClient: McpClientFixture;
 }>({
 	// Per-test user fixture — opt-in. Creates a unique WordPress user,
 	// logs the browser in as that user, and cleans up afterwards.
@@ -87,13 +86,17 @@ const test = base.extend<{
 		{ auto: false },
 	],
 
-	// MCP client fixture — opt-in. Spawns an MCP subprocess, enhances
-	// errors with stderr output on failure, and closes the transport
-	// on teardown.
+	// MCP client fixture — opt-in. Spawns an MCP subprocess with the
+	// test user's credentials so it auto-connects to WordPress on startup.
+	// Enhances errors with stderr output on failure and closes the
+	// transport on teardown.
 	mcpClient: [
-		// eslint-disable-next-line no-empty-pattern -- Playwright requires destructuring
-		async ({}, use) => {
-			const { client, close, stderr } = await createMcpTestClient();
+		async ({ testUser }, use) => {
+			const { client, close, stderr } = await createMcpTestClient({
+				WP_SITE_URL: WP_BASE_URL,
+				WP_USERNAME: testUser.username,
+				WP_APP_PASSWORD: testUser.appPassword,
+			});
 			try {
 				await use({ client, stderr });
 			} catch (error) {
@@ -138,20 +141,6 @@ const test = base.extend<{
 					// Post may already be deleted (e.g., deleted-post tests)
 				}
 			}
-		},
-		{ auto: false },
-	],
-
-	// Connected MCP client fixture — opt-in. Composes on mcpClient and
-	// testUser, connecting MCP as the per-test user for full isolation.
-	connectedMcpClient: [
-		async ({ mcpClient, testUser }, use) => {
-			await callToolOrThrow(mcpClient.client, 'wp_connect', {
-				siteUrl: WP_BASE_URL,
-				username: testUser.username,
-				appPassword: testUser.appPassword,
-			});
-			await use(mcpClient);
 		},
 		{ auto: false },
 	],

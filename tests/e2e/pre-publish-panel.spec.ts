@@ -1,7 +1,7 @@
 import { test, expect } from './test';
 import type { Page } from '@playwright/test';
-import { callToolOrThrow } from './helpers/mcp';
-import { openEditor, waitForConnectedStatus } from './helpers/editor';
+import { callToolOrThrow, waitForMCPReady } from './helpers/mcp';
+import { openEditor } from './helpers/editor';
 import { listCommands } from './helpers/wp-env';
 
 const PARAGRAPH_CONTENT =
@@ -88,9 +88,9 @@ test.describe('Pre-Publish Panel', () => {
 		editor,
 		testUser,
 		draftPost,
-		connectedMcpClient,
+		mcpClient,
 	}) => {
-		void connectedMcpClient;
+		void mcpClient;
 
 		const auth = {
 			username: testUser.username,
@@ -105,7 +105,7 @@ test.describe('Pre-Publish Panel', () => {
 		await openEditor(page, editor, postId);
 
 		// Wait for MCP connection to be reflected in the browser
-		await waitForConnectedStatus(page);
+		await waitForMCPReady(mcpClient.client);
 
 		await openPrePublishSidebar(page);
 
@@ -128,9 +128,9 @@ test.describe('Pre-Publish Panel', () => {
 		editor,
 		testUser,
 		draftPost,
-		connectedMcpClient,
+		mcpClient,
 	}) => {
-		void connectedMcpClient;
+		void mcpClient;
 
 		const auth = {
 			username: testUser.username,
@@ -145,7 +145,7 @@ test.describe('Pre-Publish Panel', () => {
 		await openEditor(page, editor, postId);
 
 		// Wait for MCP connection to be reflected in the browser
-		await waitForConnectedStatus(page);
+		await waitForMCPReady(mcpClient.client);
 
 		await openPrePublishSidebar(page);
 
@@ -192,7 +192,7 @@ test.describe('Pre-Publish Panel', () => {
 		editor,
 		testUser,
 		draftPost,
-		connectedMcpClient,
+		mcpClient,
 	}) => {
 		const auth = {
 			username: testUser.username,
@@ -207,7 +207,7 @@ test.describe('Pre-Publish Panel', () => {
 		await openEditor(page, editor, postId);
 
 		// Wait for MCP connection to be reflected in the browser
-		await waitForConnectedStatus(page);
+		await waitForMCPReady(mcpClient.client);
 
 		await openPrePublishSidebar(page);
 
@@ -256,7 +256,7 @@ test.describe('Pre-Publish Panel', () => {
 
 		if (cmd?.status === 'pending') {
 			await callToolOrThrow(
-				connectedMcpClient.client,
+				mcpClient.client,
 				'wp_update_command_status',
 				{
 					commandId,
@@ -274,16 +274,12 @@ test.describe('Pre-Publish Panel', () => {
 			slug: 'e2e-pre-publish-results',
 		};
 
-		await callToolOrThrow(
-			connectedMcpClient.client,
-			'wp_update_command_status',
-			{
-				commandId,
-				status: 'completed',
-				message: 'Suggested excerpt, 2 categories, 2 tags, and a slug',
-				resultData: JSON.stringify(resultData),
-			}
-		);
+		await callToolOrThrow(mcpClient.client, 'wp_update_command_status', {
+			commandId,
+			status: 'completed',
+			message: 'Suggested excerpt, 2 categories, 2 tags, and a slug',
+			resultData: JSON.stringify(resultData),
+		});
 
 		// Wait for suggestions to appear in the browser
 		await expect

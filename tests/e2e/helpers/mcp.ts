@@ -15,12 +15,15 @@ export interface McpTestClient {
 	stderr: string[];
 }
 
-export async function createMcpTestClient(): Promise<McpTestClient> {
+export async function createMcpTestClient(
+	env?: Record<string, string>
+): Promise<McpTestClient> {
 	const transport = new StdioClientTransport({
 		command: 'node',
 		args: ['./dist/index.js'],
 		cwd: REPO_ROOT,
 		stderr: 'pipe',
+		env: { ...process.env, ...env } as Record<string, string>,
 	});
 	const stderr: string[] = [];
 
@@ -90,12 +93,9 @@ export async function callTool(
 }
 
 /**
- * Poll wp_status until the expected number of collaborators are present.
+ * Poll wp_status until the MCP has joined the post.
  */
-export async function waitForCollaborators(
-	client: Client,
-	count: number = 2
-): Promise<void> {
+export async function waitForMCPReady(client: Client): Promise<void> {
 	await expect
 		.poll(
 			async () => {
@@ -104,7 +104,7 @@ export async function waitForCollaborators(
 			},
 			{ timeout: 30_000, intervals: [1000] }
 		)
-		.toContain(`(${count} collaborators)`);
+		.toContain(`(2 collaborators)`);
 }
 
 /**
