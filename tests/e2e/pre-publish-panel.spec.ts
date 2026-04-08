@@ -90,8 +90,6 @@ test.describe('Pre-Publish Panel', () => {
 		draftPost,
 		mcpClient,
 	}) => {
-		void mcpClient;
-
 		const auth = {
 			username: testUser.username,
 			appPassword: testUser.appPassword,
@@ -130,8 +128,6 @@ test.describe('Pre-Publish Panel', () => {
 		draftPost,
 		mcpClient,
 	}) => {
-		void mcpClient;
-
 		const auth = {
 			username: testUser.username,
 			appPassword: testUser.appPassword,
@@ -171,7 +167,7 @@ test.describe('Pre-Publish Panel', () => {
 		await expect
 			.poll(
 				async () => {
-					const commands = await listCommands(postId);
+					const commands = await listCommands(postId, auth);
 					return commands;
 				},
 				{ timeout: 30_000, intervals: [1000] }
@@ -233,7 +229,7 @@ test.describe('Pre-Publish Panel', () => {
 		await expect
 			.poll(
 				async () => {
-					const commands = await listCommands(postId);
+					const commands = await listCommands(postId, auth);
 					const cmd = commands.find(
 						(c) => c.prompt === 'pre-publish-check'
 					);
@@ -249,7 +245,7 @@ test.describe('Pre-Publish Panel', () => {
 		// Claim the command (transition to running) if still pending.
 		// Use the MCP tool (not direct REST) so the status change is
 		// written to the Y.Doc and syncs to the browser.
-		const commands = await listCommands(postId);
+		const commands = await listCommands(postId, auth);
 		const cmd = commands.find((c) => c.prompt === 'pre-publish-check');
 		expect(cmd).toBeDefined();
 		commandId = cmd?.id ?? 0;

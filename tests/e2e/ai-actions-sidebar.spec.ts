@@ -86,7 +86,7 @@ test.describe('AI Actions', () => {
 		await openEditor(page, editor, postId);
 
 		// Footer sparkle should start grey (disconnected), until MCP
-		// recieves signal to open this post.
+		// receives signal to open this post.
 		await expect
 			.poll(
 				async () =>
@@ -122,8 +122,6 @@ test.describe('AI Actions', () => {
 		mcpClient,
 		draftPost,
 	}) => {
-		void mcpClient;
-
 		const auth = {
 			username: testUser.username,
 			appPassword: testUser.appPassword,
@@ -175,8 +173,6 @@ test.describe('AI Actions', () => {
 		mcpClient,
 		draftPost,
 	}) => {
-		void mcpClient;
-
 		const auth = {
 			username: testUser.username,
 			appPassword: testUser.appPassword,
@@ -235,8 +231,6 @@ test.describe('AI Actions', () => {
 		mcpClient,
 		draftPost,
 	}) => {
-		void mcpClient;
-
 		const auth = {
 			username: testUser.username,
 			appPassword: testUser.appPassword,
@@ -295,8 +289,6 @@ test.describe('AI Actions', () => {
 		mcpClient,
 		draftPost,
 	}) => {
-		void mcpClient;
-
 		const auth = {
 			username: testUser.username,
 			appPassword: testUser.appPassword,
