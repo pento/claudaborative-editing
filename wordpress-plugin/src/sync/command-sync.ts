@@ -465,21 +465,32 @@ export function subscribeToCommandSync(
  * browserType: 'Claudaborative Editing MCP'.
  */
 export function isMcpConnected(): boolean {
-	if (!commandAwareness) return false;
+	if (commandAwareness) {
+		// Real-time check via Yjs awareness (preferred once available)
+		const states = commandAwareness.getStates();
+		for (const [clientId, state] of states) {
+			// Skip our own client
+			if (clientId === commandAwareness.clientID) continue;
+			if (!state || typeof state !== 'object') continue;
 
-	const states = commandAwareness.getStates();
-	for (const [clientId, state] of states) {
-		// Skip our own client
-		if (clientId === commandAwareness.clientID) continue;
-		if (!state || typeof state !== 'object') continue;
-
-		const info = (state as { collaboratorInfo?: { browserType?: string } })
-			.collaboratorInfo;
-		if (info?.browserType === MCP_BROWSER_TYPE) {
-			return true;
+			const info = (
+				state as { collaboratorInfo?: { browserType?: string } }
+			).collaboratorInfo;
+			if (info?.browserType === MCP_BROWSER_TYPE) {
+				return true;
+			}
 		}
+		return false;
 	}
-	return false;
+
+	// Awareness not yet initialized — fall back to server-side hint
+	// injected via wp_add_inline_script on page load.
+	const initialState = (
+		window as Window & {
+			wpceInitialState?: { mcpConnected?: boolean };
+		}
+	).wpceInitialState;
+	return initialState?.mcpConnected ?? false;
 }
 
 /**

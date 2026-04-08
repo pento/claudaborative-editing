@@ -333,6 +333,42 @@ describe('WordPressApiClient', () => {
 			expect(options.body).toBe(JSON.stringify(payload));
 			expect(result).toEqual(syncResponse);
 		});
+
+		it('includes X-WPCE-Client header', async () => {
+			fetchMock.mockResolvedValue(
+				mockResponse({
+					rooms: [
+						{
+							room: 'postType/post:42',
+							end_cursor: 0,
+							awareness: {},
+							updates: [],
+						},
+					],
+				})
+			);
+
+			const client = createClient();
+			await client.sendSyncUpdate({
+				rooms: [
+					{
+						room: 'postType/post:42',
+						client_id: 1,
+						after: 0,
+						awareness: null,
+						updates: [],
+					},
+				],
+			});
+
+			const [, options] = fetchMock.mock.calls[0] as [
+				string,
+				RequestInit,
+			];
+			expect(
+				(options.headers as Record<string, string>)['X-WPCE-Client']
+			).toBe('mcp');
+		});
 	});
 
 	describe('error handling', () => {

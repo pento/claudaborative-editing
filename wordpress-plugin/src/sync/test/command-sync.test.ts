@@ -428,8 +428,43 @@ describe('command-sync', () => {
 	});
 
 	describe('isMcpConnected', () => {
-		it('returns false when no awareness', () => {
+		afterEach(() => {
+			delete (window as any).wpceInitialState;
+		});
+
+		it('returns false when no awareness and no wpceInitialState', () => {
 			const mod = loadModule();
+			expect(mod.isMcpConnected()).toBe(false);
+		});
+
+		it('returns true when no awareness but wpceInitialState.mcpConnected is true', () => {
+			(window as any).wpceInitialState = { mcpConnected: true };
+			const mod = loadModule();
+			expect(mod.isMcpConnected()).toBe(true);
+		});
+
+		it('returns false when no awareness and wpceInitialState.mcpConnected is false', () => {
+			(window as any).wpceInitialState = { mcpConnected: false };
+			const mod = loadModule();
+			expect(mod.isMcpConnected()).toBe(false);
+		});
+
+		it('awareness takes precedence over wpceInitialState', () => {
+			// Set the server-side hint to true…
+			(window as any).wpceInitialState = { mcpConnected: true };
+
+			const mod = loadModule();
+			mod.initCommandSync();
+
+			const syncConfig = mockAddEntities.mock.calls[0][0][0].syncConfig;
+			const doc = new MockYDoc();
+			syncConfig.createAwareness(doc);
+
+			// …but awareness has no MCP client, so it should return false.
+			capturedAwareness!._setRemoteState(99, {
+				collaboratorInfo: { browserType: 'Chrome' },
+			});
+
 			expect(mod.isMcpConnected()).toBe(false);
 		});
 

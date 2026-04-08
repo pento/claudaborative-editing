@@ -1406,4 +1406,163 @@ class RestControllerTest extends \WP_UnitTestCase {
 		$this->assertIsArray( $parsed );
 		$this->assertTrue( $parsed['planReady'] );
 	}
+
+	// -------------------------------------------------------------------------
+	// REST_Controller::is_mcp_connected_for_user()
+	// -------------------------------------------------------------------------
+
+	/**
+	 * is_mcp_connected_for_user returns false when no transient exists.
+	 */
+	public function test_is_mcp_connected_returns_false_without_transient() {
+		delete_transient( 'wpce_mcp_last_seen_' . self::$editor_id );
+
+		$this->assertFalse( REST_Controller::is_mcp_connected_for_user( self::$editor_id ) );
+	}
+
+	/**
+	 * is_mcp_connected_for_user returns true when transient is recent.
+	 */
+	public function test_is_mcp_connected_returns_true_when_recent() {
+		set_transient(
+			'wpce_mcp_last_seen_' . self::$editor_id,
+			gmdate( 'Y-m-d\TH:i:s\Z' ),
+			REST_Controller::MCP_TIMEOUT_SECONDS * 2
+		);
+
+		$this->assertTrue( REST_Controller::is_mcp_connected_for_user( self::$editor_id ) );
+	}
+
+	/**
+	 * is_mcp_connected_for_user returns false when transient is stale.
+	 */
+	public function test_is_mcp_connected_returns_false_when_stale() {
+		$stale_time = gmdate( 'Y-m-d\TH:i:s\Z', time() - REST_Controller::MCP_TIMEOUT_SECONDS - 1 );
+		set_transient(
+			'wpce_mcp_last_seen_' . self::$editor_id,
+			$stale_time,
+			REST_Controller::MCP_TIMEOUT_SECONDS * 2
+		);
+
+		$this->assertFalse( REST_Controller::is_mcp_connected_for_user( self::$editor_id ) );
+	}
+
+	// -------------------------------------------------------------------------
+	// Claudaborative_Editing::track_mcp_sync()
+	// -------------------------------------------------------------------------
+
+	/**
+	 * track_mcp_sync updates the transient for a matching request.
+	 */
+	public function test_track_mcp_sync_updates_transient() {
+		delete_transient( 'wpce_mcp_last_seen_' . self::$editor_id );
+
+		$request = new \WP_REST_Request( 'POST', '/wp-sync/v1/updates' );
+		$request->set_header( 'X-WPCE-Client', 'mcp' );
+		\Claudaborative_Editing::track_mcp_sync( null, rest_get_server(), $request );
+
+		$this->assertTrue( REST_Controller::is_mcp_connected_for_user( self::$editor_id ) );
+	}
+
+	/**
+	 * track_mcp_sync does NOT update the transient when the header is missing.
+	 */
+	public function test_track_mcp_sync_ignores_request_without_header() {
+		delete_transient( 'wpce_mcp_last_seen_' . self::$editor_id );
+
+		$request = new \WP_REST_Request( 'POST', '/wp-sync/v1/updates' );
+		\Claudaborative_Editing::track_mcp_sync( null, rest_get_server(), $request );
+
+		$this->assertFalse( REST_Controller::is_mcp_connected_for_user( self::$editor_id ) );
+	}
+
+	/**
+	 * track_mcp_sync does NOT update the transient for a different route.
+	 */
+	public function test_track_mcp_sync_ignores_different_route() {
+		delete_transient( 'wpce_mcp_last_seen_' . self::$editor_id );
+
+		$request = new \WP_REST_Request( 'GET', '/wpce/v1/commands' );
+		$request->set_header( 'X-WPCE-Client', 'mcp' );
+		\Claudaborative_Editing::track_mcp_sync( null, rest_get_server(), $request );
+
+		$this->assertFalse( REST_Controller::is_mcp_connected_for_user( self::$editor_id ) );
+	}
+
+	/**
+	 * track_mcp_sync throttles: when the transient is already fresh it
+	 * should NOT overwrite it with a new timestamp.
+	 */
+	public function test_track_mcp_sync_throttles_when_fresh() {
+		// Set a "recent" transient with a recognizable timestamp.
+		$sentinel_time = gmdate( 'Y-m-d\TH:i:s\Z', time() - 5 );
+		set_transient(
+			'wpce_mcp_last_seen_' . self::$editor_id,
+			$sentinel_time,
+			REST_Controller::MCP_TIMEOUT_SECONDS * 2
+		);
+
+		$request = new \WP_REST_Request( 'POST', '/wp-sync/v1/updates' );
+		$request->set_header( 'X-WPCE-Client', 'mcp' );
+		\Claudaborative_Editing::track_mcp_sync( null, rest_get_server(), $request );
+
+		// The transient should still hold the sentinel value because
+		// is_mcp_connected_for_user() returned true and the write was skipped.
+		$stored = get_transient( 'wpce_mcp_last_seen_' . self::$editor_id );
+		$this->assertSame( $sentinel_time, $stored );
+	}
+
+	// -------------------------------------------------------------------------
+	// Claudaborative_Editing::enqueue_editor_assets() — inline script
+	// -------------------------------------------------------------------------
+
+	/**
+	 * enqueue_editor_assets sets mcpConnected: false and does NOT add the
+	 * polling interval filter when MCP is not connected.
+	 */
+	public function test_enqueue_editor_assets_mcp_disconnected() {
+		delete_transient( 'wpce_mcp_last_seen_' . self::$editor_id );
+
+		// Reset WP_Scripts so our inline script is the only one registered.
+		$GLOBALS['wp_scripts'] = null;
+
+		\Claudaborative_Editing::enqueue_editor_assets();
+
+		$scripts = wp_scripts();
+		$inline  = $scripts->get_data( 'wp-hooks', 'after' );
+
+		// wp_add_inline_script stores data as an array of script strings.
+		$this->assertIsArray( $inline );
+
+		$joined = implode( "\n", $inline );
+		$this->assertStringContainsString( '"mcpConnected":false', $joined );
+		$this->assertStringNotContainsString( 'pollingInterval', $joined );
+	}
+
+	/**
+	 * enqueue_editor_assets sets mcpConnected: true and adds the polling
+	 * interval filter when MCP IS connected.
+	 */
+	public function test_enqueue_editor_assets_mcp_connected() {
+		set_transient(
+			'wpce_mcp_last_seen_' . self::$editor_id,
+			gmdate( 'Y-m-d\TH:i:s\Z' ),
+			REST_Controller::MCP_TIMEOUT_SECONDS * 2
+		);
+
+		// Reset WP_Scripts so our inline script is the only one registered.
+		$GLOBALS['wp_scripts'] = null;
+
+		\Claudaborative_Editing::enqueue_editor_assets();
+
+		$scripts = wp_scripts();
+		$inline  = $scripts->get_data( 'wp-hooks', 'after' );
+
+		$this->assertIsArray( $inline );
+
+		$joined = implode( "\n", $inline );
+		$this->assertStringContainsString( '"mcpConnected":true', $joined );
+		$this->assertStringContainsString( 'pollingInterval', $joined );
+		$this->assertStringContainsString( 'return 1000', $joined );
+	}
 }
