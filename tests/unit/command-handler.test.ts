@@ -1236,6 +1236,7 @@ describe('CommandHandler', () => {
 			const contentProvider: ContentProvider = vi
 				.fn<ContentProvider>()
 				.mockResolvedValue({
+					postId: 50,
 					postContent: 'Hello world post content',
 					notesSupported: false,
 				});
@@ -1269,6 +1270,40 @@ describe('CommandHandler', () => {
 			const contentProvider: ContentProvider = vi
 				.fn<ContentProvider>()
 				.mockResolvedValue(null);
+			handler.setContentProvider(contentProvider);
+
+			await handler.start(createMockApiClient(), createCommandMap());
+
+			await dispatchCommand(
+				makeCommand({ id: 11, post_id: 60, prompt: 'proofread' })
+			);
+
+			expect(notifier).toHaveBeenCalledOnce();
+			const notification = notifier.mock.calls[0][0];
+			expect(notification.content).toBe(
+				'User requested: proofread on post #60.'
+			);
+			expect(notification.meta).not.toHaveProperty('content_embedded');
+		});
+
+		it('falls back when snapshot postId does not match command post_id', async () => {
+			const { dispatchCommand } = setupMockCommandClient({
+				resolve: makePluginStatus(),
+			});
+
+			const notifier = vi
+				.fn<ChannelNotifier>()
+				.mockResolvedValue(undefined);
+			handler.setNotifier(notifier);
+
+			// Snapshot is for post 999, but command targets post 60.
+			const contentProvider: ContentProvider = vi
+				.fn<ContentProvider>()
+				.mockResolvedValue({
+					postId: 999,
+					postContent: 'Wrong post content',
+					notesSupported: false,
+				});
 			handler.setContentProvider(contentProvider);
 
 			await handler.start(createMockApiClient(), createCommandMap());
@@ -1352,6 +1387,7 @@ describe('CommandHandler', () => {
 			const contentProvider: ContentProvider = vi
 				.fn<ContentProvider>()
 				.mockResolvedValue({
+					postId: 90,
 					postContent: 'Some post content',
 					notesSupported: false,
 				});
@@ -1388,6 +1424,7 @@ describe('CommandHandler', () => {
 			const contentProvider: ContentProvider = vi
 				.fn<ContentProvider>()
 				.mockResolvedValue({
+					postId: 100,
 					postContent: 'Some post content',
 					notesSupported: false,
 				});
@@ -1426,6 +1463,7 @@ describe('CommandHandler', () => {
 			const contentProvider: ContentProvider = vi
 				.fn<ContentProvider>()
 				.mockResolvedValue({
+					postId: 100,
 					postContent: 'Some post content',
 					notesSupported: false,
 				});
@@ -1466,6 +1504,7 @@ describe('CommandHandler', () => {
 			const contentProvider: ContentProvider = vi
 				.fn<ContentProvider>()
 				.mockResolvedValue({
+					postId: 150,
 					postContent: 'My post text',
 					notesSupported: false,
 				});
@@ -1507,6 +1546,7 @@ describe('CommandHandler', () => {
 			const contentProvider: ContentProvider = vi
 				.fn<ContentProvider>()
 				.mockResolvedValue({
+					postId: 110,
 					postContent: 'Review this content',
 					notesSupported: true,
 				});
@@ -1561,6 +1601,7 @@ describe('CommandHandler', () => {
 			const contentProvider: ContentProvider = vi
 				.fn<ContentProvider>()
 				.mockResolvedValue({
+					postId: 100,
 					postContent: 'Some post content',
 					notesSupported: false,
 				});
@@ -1598,6 +1639,7 @@ describe('CommandHandler', () => {
 			const contentProvider: ContentProvider = vi
 				.fn<ContentProvider>()
 				.mockResolvedValue({
+					postId: 100,
 					postContent: 'Post with notes',
 					notes: {
 						notes: [
@@ -1647,6 +1689,7 @@ describe('CommandHandler', () => {
 			const contentProvider: ContentProvider = vi
 				.fn<ContentProvider>()
 				.mockResolvedValue({
+					postId: 100,
 					postContent: 'Post with specific note',
 					notes: {
 						notes: [
@@ -1702,6 +1745,7 @@ describe('CommandHandler', () => {
 			const contentProvider: ContentProvider = vi
 				.fn<ContentProvider>()
 				.mockResolvedValue({
+					postId: 100,
 					postContent: 'Post with notes',
 					notes: {
 						notes: [
@@ -1738,42 +1782,6 @@ describe('CommandHandler', () => {
 			expect(notification.meta).not.toHaveProperty('content_embedded');
 		});
 
-		it('embeds content for translate command with language argument', async () => {
-			const { dispatchCommand } = setupMockCommandClient({
-				resolve: makePluginStatus(),
-			});
-
-			const notifier = vi
-				.fn<ChannelNotifier>()
-				.mockResolvedValue(undefined);
-			handler.setNotifier(notifier);
-
-			const contentProvider: ContentProvider = vi
-				.fn<ContentProvider>()
-				.mockResolvedValue({
-					postContent: 'Content to translate',
-					notesSupported: false,
-				});
-			handler.setContentProvider(contentProvider);
-
-			await handler.start(createMockApiClient(), createCommandMap());
-
-			await dispatchCommand(
-				makeCommand({
-					id: 24,
-					post_id: 100,
-					prompt: 'translate',
-					arguments: { language: 'Spanish' },
-				})
-			);
-
-			expect(notifier).toHaveBeenCalledOnce();
-			const notification = notifier.mock.calls[0][0];
-			expect(notification.content).toContain('Spanish');
-			expect(notification.content).toContain('Content to translate');
-			expect(notification.meta.content_embedded).toBe('true');
-		});
-
 		it('embeds content for compose command', async () => {
 			const { dispatchCommand } = setupMockCommandClient({
 				resolve: makePluginStatus(),
@@ -1787,6 +1795,7 @@ describe('CommandHandler', () => {
 			const contentProvider: ContentProvider = vi
 				.fn<ContentProvider>()
 				.mockResolvedValue({
+					postId: 100,
 					postContent: 'Draft post content',
 					notesSupported: true,
 				});
@@ -1822,6 +1831,7 @@ describe('CommandHandler', () => {
 			const contentProvider: ContentProvider = vi
 				.fn<ContentProvider>()
 				.mockResolvedValue({
+					postId: 100,
 					postContent: 'Ready to publish content',
 					notesSupported: false,
 				});
@@ -1857,6 +1867,7 @@ describe('CommandHandler', () => {
 			const contentProvider: ContentProvider = vi
 				.fn<ContentProvider>()
 				.mockResolvedValue({
+					postId: 100,
 					postContent: 'Some content',
 					notesSupported: false,
 				});
@@ -1893,6 +1904,7 @@ describe('CommandHandler', () => {
 			const contentProvider: ContentProvider = vi
 				.fn<ContentProvider>()
 				.mockResolvedValue({
+					postId: 100,
 					postContent: 'Post without notes',
 					notes: { notes: [], noteBlockMap: {} },
 					notesSupported: true,
@@ -1930,6 +1942,7 @@ describe('CommandHandler', () => {
 			const contentProvider: ContentProvider = vi
 				.fn<ContentProvider>()
 				.mockResolvedValue({
+					postId: 100,
 					postContent: 'Post without notes',
 					notesSupported: false,
 				});

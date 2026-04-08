@@ -297,54 +297,80 @@ async function startStaleCommandCleanup(): Promise<void> {
 }
 
 /**
+ * Pending writes queued while the Y.Doc is still initializing.
+ * Flushed by a single shared retry timer once the state map is available.
+ */
+let pendingWrites: Command[] = [];
+let pendingWriteTimer: ReturnType<typeof setInterval> | null = null;
+const WRITE_RETRY_INTERVAL_MS = 200;
+const WRITE_MAX_RETRIES = 50; // 10 seconds
+
+/**
+ * Flush all pending writes to the Y.Doc's state map.
+ * Returns true if the state map is available (all writes applied).
+ */
+function flushPendingWrites(): boolean {
+	const stateMap = getStateMap();
+	if (!stateMap) return false;
+
+	for (const cmd of pendingWrites) {
+		applyCommandToStateMap(stateMap, cmd);
+	}
+	pendingWrites = [];
+	return true;
+}
+
+/**
+ * Apply a single command write to the state map.
+ * @param stateMap
+ * @param command
+ */
+function applyCommandToStateMap(stateMap: YMap, command: Command): void {
+	const commands = {
+		...((stateMap.get('commands') as Record<string, unknown> | undefined) ??
+			{}),
+	};
+
+	if (TERMINAL_STATUSES.includes(command.status)) {
+		delete commands[String(command.id)];
+	} else {
+		commands[String(command.id)] = { ...command };
+	}
+
+	commandDoc?.transact(() => {
+		stateMap.set('commands', commands);
+		stateMap.set('savedAt', Date.now());
+	});
+}
+
+/**
  * Write a command to the Y.Doc's state map.
  * Call after a successful REST API operation (submit, respond, cancel).
  * If the Y.Doc isn't ready yet (collection sync still initializing),
- * retries on a short interval until it is.
+ * queues the write and retries via a single shared timer.
  *
  * @param command The command to write.
  */
 export function writeCommandToSync(command: Command): void {
-	const RETRY_INTERVAL_MS = 200;
-	const MAX_RETRIES = 50; // 10 seconds
-
-	function doWrite(): boolean {
-		const stateMap = getStateMap();
-		if (!stateMap) return false;
-
-		// Read current commands, update the specific one, write back.
-		const commands = {
-			...((stateMap.get('commands') as
-				| Record<string, unknown>
-				| undefined) ?? {}),
-		};
-
-		if (TERMINAL_STATUSES.includes(command.status)) {
-			// Remove terminal commands to prevent stale data persisting
-			// in the Y.Doc after the CPT post is deleted.
-			delete commands[String(command.id)];
-		} else {
-			commands[String(command.id)] = { ...command };
-		}
-
-		commandDoc?.transact(() => {
-			stateMap.set('commands', commands);
-			stateMap.set('savedAt', Date.now());
-		});
-
-		return true;
+	const stateMap = getStateMap();
+	if (stateMap) {
+		applyCommandToStateMap(stateMap, command);
+		return;
 	}
 
-	if (doWrite()) return;
+	// Y.Doc not ready — queue and start a shared retry timer if needed.
+	pendingWrites.push(command);
+	if (pendingWriteTimer !== null) return;
 
-	// Y.Doc not ready — retry until it is.
 	let retries = 0;
-	const interval = setInterval(() => {
+	pendingWriteTimer = setInterval(() => {
 		retries++;
-		if (doWrite() || retries >= MAX_RETRIES) {
-			clearInterval(interval);
+		if (flushPendingWrites() || retries >= WRITE_MAX_RETRIES) {
+			clearInterval(pendingWriteTimer!);
+			pendingWriteTimer = null;
+			pendingWrites = [];
 		}
-	}, RETRY_INTERVAL_MS);
+	}, WRITE_RETRY_INTERVAL_MS);
 }
 
 /**

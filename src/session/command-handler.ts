@@ -16,6 +16,7 @@ import {
 } from '../wordpress/command-client.js';
 import { WordPressApiError } from '../wordpress/api-client.js';
 import type { WordPressApiClient } from '../wordpress/api-client.js';
+import { COMMANDS } from '../../shared/commands.js';
 import type { CommandStatus } from '../../shared/commands.js';
 import type {
 	Command,
@@ -46,6 +47,7 @@ export type PreOpenHandler = (postId: number) => Promise<void>;
 
 /** Snapshot of post content and metadata for embedding in notifications. */
 export interface ContentSnapshot {
+	postId: number;
 	postContent: string;
 	notes?: { notes: WPNote[]; noteBlockMap: Partial<Record<number, string>> };
 	notesSupported: boolean;
@@ -272,6 +274,9 @@ export class CommandHandler {
 		const snapshot = await this.contentProvider();
 		if (!snapshot) return null;
 
+		// Verify the snapshot matches the command's target post.
+		if (snapshot.postId !== command.post_id) return null;
+
 		const { postContent, notes, notesSupported } = snapshot;
 
 		switch (command.prompt) {
@@ -401,9 +406,11 @@ export class CommandHandler {
 			}
 		}
 
-		// Auto-claim if channels are verified.
+		// Auto-claim if channels are verified. Signal commands (e.g., open-post)
+		// skip auto-claim since they can't transition pending → running.
+		const isSignal = COMMANDS[command.prompt].signal === true;
 		let autoClaimed = false;
-		if (this._channelsVerified) {
+		if (this._channelsVerified && !isSignal) {
 			try {
 				await this.commandClient.updateCommandStatus(
 					command.id,

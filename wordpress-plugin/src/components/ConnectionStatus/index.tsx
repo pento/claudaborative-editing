@@ -55,7 +55,12 @@ export default function ConnectionStatus() {
 	const { submitCommand } = useDispatch(aiActionsStore);
 	const openPostSentRef = useRef<number | null>(null);
 	useEffect(() => {
-		if (!mcpConnected || !currentPostId) return;
+		if (!mcpConnected) {
+			// Reset on disconnect so open-post is re-sent after reconnect.
+			openPostSentRef.current = null;
+			return;
+		}
+		if (!currentPostId) return;
 		if (openPostSentRef.current === currentPostId) return;
 		openPostSentRef.current = currentPostId;
 		submitCommand('open-post', currentPostId);

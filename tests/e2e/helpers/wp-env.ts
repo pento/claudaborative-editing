@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { writeFileSync, existsSync, readFileSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -283,16 +283,14 @@ export interface TestUser {
 	userId: number;
 }
 
-let testUserCounter = 0;
-
 /**
  * Create a unique WordPress editor user with an application password.
  * The user has the `editor` role (has edit_posts but is not an admin).
  */
 export async function createTestUser(): Promise<TestUser> {
-	const id = ++testUserCounter;
-	const username = `e2e-user-${Date.now()}-${id}`;
-	const password = `pass-${Date.now()}-${id}`;
+	const uid = randomUUID().slice(0, 12);
+	const username = `e2e-${uid}`;
+	const password = `pass-${uid}`;
 
 	// Create user as admin
 	const user = await apiFetch<{ id: number }>('/wp/v2/users', {

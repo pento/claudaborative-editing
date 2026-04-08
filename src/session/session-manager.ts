@@ -1906,7 +1906,8 @@ export class SessionManager {
 			await this.preOpenPost(postId);
 		});
 		handler.setContentProvider(async () => {
-			if (this.state !== 'editing') return null;
+			if (this.state !== 'editing' || !this._currentPost) return null;
+			const postId = this._currentPost.id;
 			const postContent = this.readPost();
 			const notesSupported = this.notesSupported;
 			let notes:
@@ -1922,7 +1923,7 @@ export class SessionManager {
 					// Notes unavailable — proceed without them.
 				}
 			}
-			return { postContent, notes, notesSupported };
+			return { postId, postContent, notes, notesSupported };
 		});
 		try {
 			// Collection sync uses the 'state' map (not 'document').
