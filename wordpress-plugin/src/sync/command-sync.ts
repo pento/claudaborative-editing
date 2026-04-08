@@ -297,24 +297,41 @@ async function startStaleCommandCleanup(): Promise<void> {
 }
 
 /**
- * Write a command to the Y.Doc's state map.
- * Call after a successful REST API operation (submit, respond, cancel).
- *
- * @param command The command to write.
+ * Pending writes queued while the Y.Doc is still initializing.
+ * Flushed by a single shared retry timer once the state map is available.
  */
-export function writeCommandToSync(command: Command): void {
-	const stateMap = getStateMap();
-	if (!stateMap) return;
+let pendingWrites: Command[] = [];
+let pendingWriteTimer: ReturnType<typeof setInterval> | null = null;
+const WRITE_RETRY_INTERVAL_MS = 200;
+const WRITE_MAX_RETRIES = 50; // 10 seconds
 
-	// Read current commands, update the specific one, write back.
+/**
+ * Flush all pending writes to the Y.Doc's state map.
+ * Returns true if the state map is available (all writes applied).
+ */
+function flushPendingWrites(): boolean {
+	const stateMap = getStateMap();
+	if (!stateMap) return false;
+
+	for (const cmd of pendingWrites) {
+		applyCommandToStateMap(stateMap, cmd);
+	}
+	pendingWrites = [];
+	return true;
+}
+
+/**
+ * Apply a single command write to the state map.
+ * @param stateMap
+ * @param command
+ */
+function applyCommandToStateMap(stateMap: YMap, command: Command): void {
 	const commands = {
 		...((stateMap.get('commands') as Record<string, unknown> | undefined) ??
 			{}),
 	};
 
 	if (TERMINAL_STATUSES.includes(command.status)) {
-		// Remove terminal commands to prevent stale data persisting
-		// in the Y.Doc after the CPT post is deleted.
 		delete commands[String(command.id)];
 	} else {
 		commands[String(command.id)] = { ...command };
@@ -324,6 +341,42 @@ export function writeCommandToSync(command: Command): void {
 		stateMap.set('commands', commands);
 		stateMap.set('savedAt', Date.now());
 	});
+}
+
+/**
+ * Write a command to the Y.Doc's state map.
+ * Call after a successful REST API operation (submit, respond, cancel).
+ * If the Y.Doc isn't ready yet (collection sync still initializing),
+ * queues the write and retries via a single shared timer.
+ *
+ * @param command The command to write.
+ */
+export function writeCommandToSync(command: Command): void {
+	const stateMap = getStateMap();
+	if (stateMap) {
+		applyCommandToStateMap(stateMap, command);
+		return;
+	}
+
+	// Y.Doc not ready — queue and start a shared retry timer if needed.
+	pendingWrites.push(command);
+	if (pendingWriteTimer !== null) return;
+
+	let retries = 0;
+	pendingWriteTimer = setInterval(() => {
+		retries++;
+		if (flushPendingWrites() || retries >= WRITE_MAX_RETRIES) {
+			if (retries >= WRITE_MAX_RETRIES && pendingWrites.length > 0) {
+				// eslint-disable-next-line no-console
+				console.warn(
+					`[wpce] Dropping ${pendingWrites.length} pending command write(s) — Y.Doc not ready after ${WRITE_MAX_RETRIES} retries`
+				);
+			}
+			clearInterval(pendingWriteTimer!);
+			pendingWriteTimer = null;
+			pendingWrites = [];
+		}
+	}, WRITE_RETRY_INTERVAL_MS);
 }
 
 /**

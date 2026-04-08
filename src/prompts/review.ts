@@ -1,52 +1,12 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { SessionManager } from '../session/session-manager.js';
-import type { WPNote } from '../wordpress/types.js';
-
-function formatNotes(
-	notes: WPNote[],
-	noteBlockMap: Partial<Record<number, string>>
-): string {
-	const topLevel = notes.filter((n) => n.parent === 0);
-	const replyMap = new Map<number, WPNote[]>();
-	for (const note of notes) {
-		if (note.parent !== 0) {
-			const list = replyMap.get(note.parent) ?? [];
-			list.push(note);
-			replyMap.set(note.parent, list);
-		}
-	}
-
-	const lines: string[] = [];
-	const stripHtml = (html: string) => html.replace(/<[^>]*>/g, '');
-	const renderReplies = (parentId: number, depth: number) => {
-		const replies = replyMap.get(parentId) ?? [];
-		const indent = '  '.repeat(depth);
-		for (const reply of replies) {
-			lines.push(
-				`${indent}Reply #${reply.id} by ${reply.author_name} — ${reply.date}`
-			);
-			const replyContent =
-				reply.content.raw ?? stripHtml(reply.content.rendered);
-			lines.push(`${indent}  "${replyContent}"`);
-			renderReplies(reply.id, depth + 1);
-		}
-	};
-
-	for (const note of topLevel) {
-		const blockIdx = noteBlockMap[note.id];
-		const blockInfo =
-			blockIdx !== undefined ? ` (block [${blockIdx}])` : ' (unlinked)';
-		lines.push(
-			`Note #${note.id} by ${note.author_name}${blockInfo} — ${note.date}`
-		);
-		const rawContent = note.content.raw ?? stripHtml(note.content.rendered);
-		lines.push(`  "${rawContent}"`);
-		renderReplies(note.id, 1);
-		lines.push('');
-	}
-	return lines.join('\n').trim();
-}
+import {
+	formatNotes,
+	buildReviewContent,
+	buildRespondToNotesContent,
+	buildRespondToNoteContent,
+} from './prompt-content.js';
 
 export function registerReviewPrompts(
 	server: McpServer,
@@ -95,38 +55,6 @@ export function registerReviewPrompts(
 			const postContent = session.readPost();
 			const notesSupported = session.getNotesSupported();
 
-			if (!notesSupported) {
-				return {
-					description: `Review "${session.getTitle()}"`,
-					messages: [
-						{
-							role: 'user' as const,
-							content: {
-								type: 'text' as const,
-								text: `Review the following WordPress post and provide editorial feedback.
-
-Note: This WordPress site does not support notes (requires WordPress 6.9+). Please provide your feedback as a text summary instead.
-
-Here is the current post content:
-
-${postContent}
-
-Please review for:
-- Clarity and readability
-- Logical flow and structure
-- Factual accuracy concerns
-- Missing information or gaps
-- Tone and audience appropriateness
-- Heading hierarchy and paragraph length
-- Post metadata: are categories, tags, and excerpt set appropriately?
-
-Provide your feedback as a structured summary, written in the same language as the post content.`,
-							},
-						},
-					],
-				};
-			}
-
 			return {
 				description: `Review "${session.getTitle()}"`,
 				messages: [
@@ -134,21 +62,10 @@ Provide your feedback as a structured summary, written in the same language as t
 						role: 'user' as const,
 						content: {
 							type: 'text' as const,
-							text: `Review the following WordPress post and leave editorial notes on individual blocks.
-
-Here is the current post content:
-
-${postContent}
-
-Instructions:
-- Use wp_add_note to attach feedback to specific blocks by their index.
-- Each block can have one note. If a block already has a note (marked [has note]), use wp_list_notes to read existing notes and wp_reply_to_note to add your feedback as a reply.
-- Review for: clarity, logical flow, factual accuracy, missing information, tone, audience fit, heading hierarchy, and paragraph length.
-- Also review post metadata: are categories, tags, and excerpt set appropriately?
-- Be specific and actionable in your notes — explain what should change and why.
-- Not every block needs a note — only flag issues worth addressing.
-- Write all notes in the same language as the post content.
-- After leaving all notes, provide a brief summary of your overall assessment.`,
+							text: buildReviewContent(
+								postContent,
+								notesSupported
+							),
 						},
 					},
 				],
@@ -240,27 +157,10 @@ Instructions:
 						role: 'user' as const,
 						content: {
 							type: 'text' as const,
-							text: `Address the editorial notes on this WordPress post. Read each note, make the requested changes, and resolve notes when done.
-
-Here is the current post content:
-
-${postContent}
-
-Here are the editorial notes:
-
-${formattedNotes}
-
-Instructions:
-- Work through each note one at a time.
-- For each note:
-  1. Read the feedback carefully.
-  2. Use wp_update_block to make the requested changes to the referenced block.
-  3. If the note requires a response or clarification, use wp_reply_to_note.
-  4. Once the note is fully addressed, use wp_resolve_note to mark it done.
-- If a note's feedback doesn't apply or you disagree, use wp_reply_to_note to explain why, then move on without resolving.
-- Write all replies in the same language as the post content.
-- Use wp_read_post to verify your changes after editing.
-- After addressing all notes, use wp_save to save the post.`,
+							text: buildRespondToNotesContent(
+								postContent,
+								formattedNotes
+							),
 						},
 					},
 				],
@@ -353,10 +253,20 @@ Instructions:
 				};
 			}
 
-			// Filter to just this note and its replies for formatting
-			const relevantNotes = notes.filter(
-				(n) => n.id === noteId || n.parent === noteId
-			);
+			// Collect the target note and all descendants (not just
+			// direct children) so formatNotes can render the full thread.
+			const relevantIds = new Set<number>([noteId]);
+			let changed = true;
+			while (changed) {
+				changed = false;
+				for (const n of notes) {
+					if (!relevantIds.has(n.id) && relevantIds.has(n.parent)) {
+						relevantIds.add(n.id);
+						changed = true;
+					}
+				}
+			}
+			const relevantNotes = notes.filter((n) => relevantIds.has(n.id));
 			const relevantMap: Partial<Record<number, string>> = {};
 			const blockIdx = noteBlockMap[noteId];
 			if (blockIdx !== undefined) {
@@ -372,25 +282,10 @@ Instructions:
 						role: 'user' as const,
 						content: {
 							type: 'text' as const,
-							text: `Address this specific editorial note on the WordPress post.
-
-Here is the current post content:
-
-${postContent}
-
-Here is the note to address:
-
-${formattedNote}
-
-Instructions:
-1. Read the feedback carefully.
-2. Use wp_update_block to make the requested changes to the referenced block.
-3. If the note requires a response or clarification, use wp_reply_to_note.
-4. Once the note is fully addressed, use wp_resolve_note to mark it done.
-- If the feedback doesn't apply or you disagree, use wp_reply_to_note to explain why, then move on without resolving.
-- Write all replies in the same language as the post content.
-- Use wp_read_post to verify your changes after editing.
-- After addressing the note, use wp_save to save the post.`,
+							text: buildRespondToNoteContent(
+								postContent,
+								formattedNote
+							),
 						},
 					},
 				],

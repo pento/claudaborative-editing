@@ -64,8 +64,15 @@ export async function startServer(): Promise<void> {
 
 When you receive a <channel source="wpce"> event, it contains a command from a user in the WordPress editor. Check the meta.event_type field:
 
-**New command (no event_type or event_type is absent):**
-1. Call wp_update_command_status with the command_id from the notification metadata and status "running".
+**Content-embedded command (meta.content_embedded = "true"):**
+The notification content contains the full post content and task instructions. The post is already open.
+1. If meta.status is "already_claimed", proceed directly to step 3.
+2. Otherwise, call wp_update_command_status with the command_id and status "running".
+3. Execute the task described in the notification content. Do NOT call wp_open_post or wp_read_post — the content is already embedded.
+4. Call wp_update_command_status with status "completed" and a brief summary, or "failed" with an error message.
+
+**New command (no event_type or event_type is absent, no content_embedded):**
+1. If meta.status is "already_claimed", skip this step. Otherwise, call wp_update_command_status with the command_id from the notification metadata and status "running".
 2. If no post is open, call wp_open_post with the post_id from the notification metadata. If a different post is open, call wp_close_post first.
 3. Execute the requested action based on the prompt field: ${promptDescriptions}.
 4. Call wp_update_command_status with status "completed" and a brief summary, or "failed" with an error message.

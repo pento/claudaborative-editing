@@ -16,18 +16,48 @@ import {
 } from '../wordpress/command-client.js';
 import { WordPressApiError } from '../wordpress/api-client.js';
 import type { WordPressApiClient } from '../wordpress/api-client.js';
+import { COMMANDS } from '../../shared/commands.js';
 import type { CommandStatus } from '../../shared/commands.js';
 import type {
 	Command,
 	PluginStatus,
 	CommandTransport,
 } from '../wordpress/command-client.js';
+import type { WPNote } from '../wordpress/types.js';
+import {
+	formatNotes,
+	buildProofreadContent,
+	buildEditContent,
+	buildReviewContent,
+	buildRespondToNotesContent,
+	buildRespondToNoteContent,
+	buildTranslateContent,
+	buildComposeContent,
+	buildPrePublishCheckContent,
+} from '../prompts/prompt-content.js';
 
 /** Callback for sending channel notifications to Claude Code. */
 export type ChannelNotifier = (params: {
 	content: string;
 	meta: Record<string, string>;
 }) => Promise<void>;
+
+/** Callback to pre-open a post before notification dispatch. */
+export type PreOpenHandler = (postId: number) => Promise<void>;
+
+/** Snapshot of post content and metadata for embedding in notifications. */
+export interface ContentSnapshot {
+	postId: number;
+	postContent: string;
+	notes?: { notes: WPNote[]; noteBlockMap: Partial<Record<number, string>> };
+	notesSupported: boolean;
+}
+
+/**
+ * Provider that returns a content snapshot for the currently-open post,
+ * or null if the post is not ready (not pre-opened).
+ */
+export type ContentProvider = () => Promise<ContentSnapshot | null>;
 
 /** Strip HTML tags and normalize whitespace to produce plain text. */
 function stripHtml(html: string): string {
@@ -46,6 +76,18 @@ export class CommandHandler {
 		meta: Record<string, string>;
 	}> = [];
 	private notifier: ChannelNotifier | null = null;
+	private preOpenHandler: PreOpenHandler | null = null;
+	private contentProvider: ContentProvider | null = null;
+	/** Connected user's ID — commands from other users are ignored. */
+	private _userId: number | null = null;
+
+	/**
+	 * Whether the MCP client has been verified as channel-capable.
+	 * Set to true after the first successful updateCommandStatus call
+	 * (which can only happen in response to a channel notification).
+	 * Once verified, commands are auto-claimed before notification.
+	 */
+	private _channelsVerified = false;
 
 	/**
 	 * Set the channel notifier callback. Flushes any buffered notifications.
@@ -63,6 +105,29 @@ export class CommandHandler {
 				);
 			});
 		}
+	}
+
+	/**
+	 * Set the pre-open handler for open-post commands.
+	 * Called to pre-open a post before sending the notification.
+	 */
+	setPreOpenHandler(handler: PreOpenHandler): void {
+		this.preOpenHandler = handler;
+	}
+
+	/**
+	 * Set the connected user's ID. Commands from other users are ignored.
+	 */
+	setUserId(userId: number): void {
+		this._userId = userId;
+	}
+
+	/**
+	 * Set the content provider for embedding post content in notifications.
+	 * Called from the session manager to provide access to readPost/listNotes.
+	 */
+	setContentProvider(provider: ContentProvider): void {
+		this.contentProvider = provider;
 	}
 
 	/**
@@ -132,6 +197,8 @@ export class CommandHandler {
 		}
 		this._pluginStatus = null;
 		this._protocolWarning = null;
+		this._channelsVerified = false;
+		this._userId = null;
 		this.pendingNotifications = [];
 	}
 
@@ -156,6 +223,19 @@ export class CommandHandler {
 			message,
 			resultData
 		);
+
+		// If Claude called this, channels are working. Future commands
+		// can be auto-claimed without waiting for Claude to claim them.
+		if (!this._channelsVerified) {
+			this._channelsVerified = true;
+		}
+	}
+
+	/**
+	 * Whether channels have been verified (for testing/status reporting).
+	 */
+	get channelsVerified(): boolean {
+		return this._channelsVerified;
 	}
 
 	/**
@@ -183,12 +263,95 @@ export class CommandHandler {
 	// --- Internal ---
 
 	/**
+	 * Build embedded notification content for a command, or return null
+	 * if the content provider is not available or the post isn't ready.
+	 */
+	private async buildEmbeddedContent(
+		command: Command
+	): Promise<string | null> {
+		if (!this.contentProvider) return null;
+
+		const snapshot = await this.contentProvider();
+		if (!snapshot) return null;
+
+		// Verify the snapshot matches the command's target post.
+		if (snapshot.postId !== command.post_id) return null;
+
+		const { postContent, notes, notesSupported } = snapshot;
+
+		switch (command.prompt) {
+			case 'proofread':
+				return buildProofreadContent(postContent);
+			case 'edit': {
+				const editingFocus = command.arguments.editingFocus;
+				if (typeof editingFocus !== 'string' || !editingFocus) {
+					return null; // Required argument missing — fall back to non-embedded.
+				}
+				return buildEditContent(postContent, editingFocus);
+			}
+			case 'review':
+				return buildReviewContent(postContent, notesSupported);
+			case 'respond-to-notes': {
+				if (!notes || notes.notes.length === 0) return null;
+				const formatted = formatNotes(notes.notes, notes.noteBlockMap);
+				return buildRespondToNotesContent(postContent, formatted);
+			}
+			case 'respond-to-note': {
+				if (!notes) return null;
+				const noteId = Number(command.arguments.noteId);
+				const targetNote = notes.notes.find((n) => n.id === noteId);
+				if (!targetNote) return null;
+				// Collect the target note and all descendants (not just
+				// direct children) so formatNotes can render the full thread.
+				const relevantIds = new Set<number>([noteId]);
+				let changed = true;
+				while (changed) {
+					changed = false;
+					for (const n of notes.notes) {
+						if (
+							!relevantIds.has(n.id) &&
+							relevantIds.has(n.parent)
+						) {
+							relevantIds.add(n.id);
+							changed = true;
+						}
+					}
+				}
+				const relevantNotes = notes.notes.filter((n) =>
+					relevantIds.has(n.id)
+				);
+				const relevantMap: Partial<Record<number, string>> = {};
+				const blockIdx = notes.noteBlockMap[noteId];
+				if (blockIdx !== undefined) {
+					relevantMap[noteId] = blockIdx;
+				}
+				const formatted = formatNotes(relevantNotes, relevantMap);
+				return buildRespondToNoteContent(postContent, formatted);
+			}
+			case 'translate': {
+				const language = command.arguments.language;
+				if (typeof language !== 'string' || !language) {
+					return null; // Required argument missing — fall back to non-embedded.
+				}
+				return buildTranslateContent(postContent, language);
+			}
+			case 'compose':
+				return buildComposeContent(postContent, notesSupported);
+			case 'pre-publish-check':
+				return buildPrePublishCheckContent(postContent);
+			default:
+				return null;
+		}
+	}
+
+	/**
 	 * Handle a response from the user on an in-progress command.
 	 * Extracts conversation messages from result_data and sends a
 	 * channel notification so Claude Code can continue the conversation.
 	 */
 	private async handleResponse(command: Command): Promise<void> {
 		if (!this.commandClient) return;
+		if (this._userId !== null && command.user_id !== this._userId) return;
 
 		// Extract conversation messages from result_data
 		const messages = command.result_data?.messages;
@@ -199,7 +362,10 @@ export class CommandHandler {
 		if (Array.isArray(messages)) {
 			const typed = messages as Array<{ role: string; content: string }>;
 			for (let i = typed.length - 1; i >= 0; i--) {
-				if (typed[i].role === 'user') {
+				if (
+					typed[i].role === 'user' &&
+					typeof typed[i].content === 'string'
+				) {
 					userContent = typed[i].content;
 					break;
 				}
@@ -239,25 +405,62 @@ export class CommandHandler {
 	}
 
 	/**
-	 * Handle an incoming command: send a channel notification without
-	 * claiming. The claim happens when the client calls
-	 * `wp_update_command_status("running")`, which performs an atomic
-	 * pending→running transition on the WordPress side (409 on conflict).
-	 * This way, instances whose clients ignore the notification (e.g.,
-	 * channels not enabled) never claim the command.
+	 * Handle an incoming command. When channels have been verified,
+	 * auto-claims the command (pending→running) before sending the
+	 * notification so Claude can start immediately without calling
+	 * wp_update_command_status. Otherwise, sends the notification
+	 * without claiming (the legacy path).
 	 */
 	private async handleCommand(command: Command): Promise<void> {
 		if (!this.commandClient) return;
+		if (this._userId !== null && command.user_id !== this._userId) return;
+
+		// For open-post commands, pre-open the post before sending the
+		// notification so it's ready when a real command arrives.
+		if (command.prompt === 'open-post' && this.preOpenHandler) {
+			try {
+				await this.preOpenHandler(command.post_id);
+			} catch {
+				// Pre-open failed — continue with notification anyway.
+			}
+		}
+
+		// Auto-claim if channels are verified. Signal commands (e.g., open-post)
+		// skip auto-claim since they can't transition pending → running.
+		// Use `in` check to safely handle unknown prompts from Y.Map deserialization.
+		const isSignal =
+			command.prompt in COMMANDS &&
+			COMMANDS[command.prompt].signal === true;
+		let autoClaimed = false;
+		if (this._channelsVerified && !isSignal) {
+			try {
+				await this.commandClient.updateCommandStatus(
+					command.id,
+					'running'
+				);
+				autoClaimed = true;
+			} catch (error) {
+				if (
+					error instanceof WordPressApiError &&
+					error.status === 409
+				) {
+					// Another instance already claimed it — skip notification.
+					return;
+				}
+				// Other error — fall through to manual claim path.
+			}
+		}
+
+		// Try to build embedded content (includes post content + instructions).
+		let embeddedContent: string | null = null;
+		try {
+			embeddedContent = await this.buildEmbeddedContent(command);
+		} catch {
+			// Content building failed — fall back to minimal notification.
+		}
 
 		// Build the notification
 		const argsEntries = Object.entries(command.arguments);
-		let argsDescription = '';
-		if (argsEntries.length > 0) {
-			const parts = argsEntries.map(
-				([key, value]) => `${key}: ${String(value)}`
-			);
-			argsDescription = ` Arguments: ${parts.join(', ')}.`;
-		}
 
 		const meta: Record<string, string> = {
 			command_id: String(command.id),
@@ -269,10 +472,26 @@ export class CommandHandler {
 			meta.arguments = JSON.stringify(command.arguments);
 		}
 
-		const notification = {
-			content: `User requested: ${command.prompt} on post #${command.post_id}.${argsDescription}`,
-			meta,
-		};
+		if (autoClaimed) {
+			meta.status = 'already_claimed';
+		}
+
+		let content: string;
+		if (embeddedContent) {
+			content = embeddedContent;
+			meta.content_embedded = 'true';
+		} else {
+			let argsDescription = '';
+			if (argsEntries.length > 0) {
+				const parts = argsEntries.map(
+					([key, value]) => `${key}: ${String(value)}`
+				);
+				argsDescription = ` Arguments: ${parts.join(', ')}.`;
+			}
+			content = `User requested: ${command.prompt} on post #${command.post_id}.${argsDescription}`;
+		}
+
+		const notification = { content, meta };
 
 		// Send or buffer the notification
 		if (this.notifier) {

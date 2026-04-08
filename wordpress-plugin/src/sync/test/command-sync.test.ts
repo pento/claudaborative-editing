@@ -327,6 +327,69 @@ describe('command-sync', () => {
 			// Should not throw.
 			expect(() => mod.writeCommandToSync(MOCK_COMMAND)).not.toThrow();
 		});
+
+		it('warns and drops pending writes after max retries when Y.Doc never becomes available', () => {
+			jest.useFakeTimers();
+			const warnSpy = jest
+				.spyOn(console, 'warn')
+				.mockImplementation(() => {});
+
+			try {
+				const mod = loadModule();
+				mod.initCommandSync();
+
+				// Call writeCommandToSync BEFORE createAwareness provides the doc.
+				// The Y.Doc never becomes available, so retries will exhaust.
+				mod.writeCommandToSync(MOCK_COMMAND);
+
+				// Advance past all 50 retries (50 × 200ms = 10_000ms).
+				jest.advanceTimersByTime(10_000);
+
+				expect(warnSpy).toHaveBeenCalledWith(
+					expect.stringContaining('Dropping 1 pending command write')
+				);
+				expect(warnSpy).toHaveBeenCalledWith(
+					expect.stringContaining('Y.Doc not ready after 50 retries')
+				);
+			} finally {
+				warnSpy.mockRestore();
+				jest.useRealTimers();
+			}
+		});
+
+		it('retries writing when commandDoc becomes available after initial call', () => {
+			jest.useFakeTimers();
+
+			try {
+				const mod = loadModule();
+				mod.initCommandSync();
+
+				// Call writeCommandToSync BEFORE createAwareness provides the doc.
+				// The first attempt fails (stateMap is null), starting the retry interval.
+				mod.writeCommandToSync(MOCK_COMMAND);
+
+				// Now simulate the Y.Doc becoming available.
+				const syncConfig =
+					mockAddEntities.mock.calls[0][0][0].syncConfig;
+				const doc = new MockYDoc();
+				syncConfig.createAwareness(doc);
+
+				// Advance timers to trigger the retry.
+				jest.advanceTimersByTime(200);
+
+				// The retry should have written the command.
+				const stateMap = doc.getMap('state');
+				const commands = stateMap.get('commands') as Record<
+					string,
+					unknown
+				>;
+				expect(commands['42']).toEqual(
+					expect.objectContaining({ id: 42 })
+				);
+			} finally {
+				jest.useRealTimers();
+			}
+		});
 	});
 
 	describe('getCommandsFromSync', () => {

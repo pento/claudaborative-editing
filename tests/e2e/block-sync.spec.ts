@@ -6,13 +6,7 @@ import {
 	callToolOrThrow,
 	getToolText,
 } from './helpers/mcp';
-import {
-	WP_ADMIN_USER,
-	WP_BASE_URL,
-	getSharedAppPassword,
-	createDraftPost,
-	deletePost,
-} from './helpers/wp-env';
+import { WP_BASE_URL, createDraftPost, deletePost } from './helpers/wp-env';
 
 const HEADING_CONTENT =
 	'<!-- wp:heading {"level":2} --><h2 class="wp-block-heading">Original heading</h2><!-- /wp:heading -->';
@@ -95,17 +89,32 @@ async function waitForQueueToDrain(
 }
 
 test.describe('block sync', () => {
-	test('MCP inserts blocks visible in browser', async ({ page, editor }) => {
+	test('MCP inserts blocks visible in browser', async ({
+		page,
+		editor,
+		testUser,
+	}) => {
 		test.setTimeout(120_000);
 
+		const auth = {
+			username: testUser.username,
+			appPassword: testUser.appPassword,
+		};
 		const postId = await createDraftPost(
 			'E2E block-sync insert',
-			HEADING_CONTENT
+			HEADING_CONTENT,
+			auth
 		);
-		const appPassword = getSharedAppPassword();
 		const { client, close, stderr } = await createMcpTestClient();
 
 		try {
+			// Connect MCP
+			await callToolOrThrow(client, 'wp_connect', {
+				siteUrl: WP_BASE_URL,
+				username: testUser.username,
+				appPassword: testUser.appPassword,
+			});
+
 			await openEditor(page, editor, postId);
 
 			// Verify initial content is loaded in the browser
@@ -119,14 +128,6 @@ test.describe('block sync', () => {
 						expect.objectContaining({ name: 'core/heading' }),
 					])
 				);
-
-			// Connect MCP and open the post
-			await callToolOrThrow(client, 'wp_connect', {
-				siteUrl: WP_BASE_URL,
-				username: WP_ADMIN_USER,
-				appPassword,
-			});
-			await callToolOrThrow(client, 'wp_open_post', { postId });
 
 			// Wait for 2 collaborators
 			await expect
@@ -206,24 +207,36 @@ test.describe('block sync', () => {
 			);
 		} finally {
 			await close();
-			await deletePost(postId);
+			await deletePost(postId, auth);
 		}
 	});
 
 	test('MCP edits block content visible in browser', async ({
 		page,
 		editor,
+		testUser,
 	}) => {
 		test.setTimeout(120_000);
 
+		const auth = {
+			username: testUser.username,
+			appPassword: testUser.appPassword,
+		};
 		const postId = await createDraftPost(
 			'E2E block-sync edit',
-			HEADING_CONTENT
+			HEADING_CONTENT,
+			auth
 		);
-		const appPassword = getSharedAppPassword();
 		const { client, close, stderr } = await createMcpTestClient();
 
 		try {
+			// Connect MCP
+			await callToolOrThrow(client, 'wp_connect', {
+				siteUrl: WP_BASE_URL,
+				username: testUser.username,
+				appPassword: testUser.appPassword,
+			});
+
 			await openEditor(page, editor, postId);
 
 			// Verify initial heading is present
@@ -242,14 +255,6 @@ test.describe('block sync', () => {
 						}),
 					])
 				);
-
-			// Connect MCP and open the post
-			await callToolOrThrow(client, 'wp_connect', {
-				siteUrl: WP_BASE_URL,
-				username: WP_ADMIN_USER,
-				appPassword,
-			});
-			await callToolOrThrow(client, 'wp_open_post', { postId });
 
 			// Wait for 2 collaborators
 			await expect
@@ -291,24 +296,36 @@ test.describe('block sync', () => {
 			);
 		} finally {
 			await close();
-			await deletePost(postId);
+			await deletePost(postId, auth);
 		}
 	});
 
 	test('MCP changes block attributes visible in browser', async ({
 		page,
 		editor,
+		testUser,
 	}) => {
 		test.setTimeout(120_000);
 
+		const auth = {
+			username: testUser.username,
+			appPassword: testUser.appPassword,
+		};
 		const postId = await createDraftPost(
 			'E2E block-sync attrs',
-			HEADING_CONTENT
+			HEADING_CONTENT,
+			auth
 		);
-		const appPassword = getSharedAppPassword();
 		const { client, close, stderr } = await createMcpTestClient();
 
 		try {
+			// Connect MCP
+			await callToolOrThrow(client, 'wp_connect', {
+				siteUrl: WP_BASE_URL,
+				username: testUser.username,
+				appPassword: testUser.appPassword,
+			});
+
 			await openEditor(page, editor, postId);
 
 			// Verify initial heading is level 2
@@ -321,14 +338,6 @@ test.describe('block sync', () => {
 					{ timeout: 30_000, intervals: [1000] }
 				)
 				.toBe(2);
-
-			// Connect MCP and open the post
-			await callToolOrThrow(client, 'wp_connect', {
-				siteUrl: WP_BASE_URL,
-				username: WP_ADMIN_USER,
-				appPassword,
-			});
-			await callToolOrThrow(client, 'wp_open_post', { postId });
 
 			// Wait for 2 collaborators
 			await expect
@@ -370,21 +379,36 @@ test.describe('block sync', () => {
 			);
 		} finally {
 			await close();
-			await deletePost(postId);
+			await deletePost(postId, auth);
 		}
 	});
 
-	test('MCP removes blocks visible in browser', async ({ page, editor }) => {
+	test('MCP removes blocks visible in browser', async ({
+		page,
+		editor,
+		testUser,
+	}) => {
 		test.setTimeout(120_000);
 
+		const auth = {
+			username: testUser.username,
+			appPassword: testUser.appPassword,
+		};
 		const postId = await createDraftPost(
 			'E2E block-sync remove',
-			TWO_PARAGRAPHS
+			TWO_PARAGRAPHS,
+			auth
 		);
-		const appPassword = getSharedAppPassword();
 		const { client, close, stderr } = await createMcpTestClient();
 
 		try {
+			// Connect MCP
+			await callToolOrThrow(client, 'wp_connect', {
+				siteUrl: WP_BASE_URL,
+				username: testUser.username,
+				appPassword: testUser.appPassword,
+			});
+
 			await openEditor(page, editor, postId);
 
 			// Verify initial two paragraphs are present
@@ -417,14 +441,6 @@ test.describe('block sync', () => {
 						}),
 					])
 				);
-
-			// Connect MCP and open the post
-			await callToolOrThrow(client, 'wp_connect', {
-				siteUrl: WP_BASE_URL,
-				username: WP_ADMIN_USER,
-				appPassword,
-			});
-			await callToolOrThrow(client, 'wp_open_post', { postId });
 
 			// Wait for 2 collaborators
 			await expect
@@ -476,23 +492,34 @@ test.describe('block sync', () => {
 			);
 		} finally {
 			await close();
-			await deletePost(postId);
+			await deletePost(postId, auth);
 		}
 	});
 
-	test('browser edits visible in MCP', async ({ page, editor }) => {
+	test('browser edits visible in MCP', async ({ page, editor, testUser }) => {
 		test.setTimeout(120_000);
 
+		const auth = {
+			username: testUser.username,
+			appPassword: testUser.appPassword,
+		};
 		const initialContent =
 			'<!-- wp:paragraph --><p>Browser editable paragraph</p><!-- /wp:paragraph -->';
 		const postId = await createDraftPost(
 			'E2E block-sync browser-to-mcp',
-			initialContent
+			initialContent,
+			auth
 		);
-		const appPassword = getSharedAppPassword();
 		const { client, close, stderr } = await createMcpTestClient();
 
 		try {
+			// Connect MCP
+			await callToolOrThrow(client, 'wp_connect', {
+				siteUrl: WP_BASE_URL,
+				username: testUser.username,
+				appPassword: testUser.appPassword,
+			});
+
 			await openEditor(page, editor, postId);
 
 			// Verify initial content in browser
@@ -505,14 +532,6 @@ test.describe('block sync', () => {
 					{ timeout: 30_000, intervals: [1000] }
 				)
 				.toBe('Browser editable paragraph');
-
-			// Connect MCP and open the post
-			await callToolOrThrow(client, 'wp_connect', {
-				siteUrl: WP_BASE_URL,
-				username: WP_ADMIN_USER,
-				appPassword,
-			});
-			await callToolOrThrow(client, 'wp_open_post', { postId });
 
 			// Wait for 2 collaborators
 			await expect
@@ -581,24 +600,36 @@ test.describe('block sync', () => {
 			);
 		} finally {
 			await close();
-			await deletePost(postId);
+			await deletePost(postId, auth);
 		}
 	});
 
 	test('multiple sequential edits in a single session', async ({
 		page,
 		editor,
+		testUser,
 	}) => {
 		test.setTimeout(180_000);
 
+		const auth = {
+			username: testUser.username,
+			appPassword: testUser.appPassword,
+		};
 		const postId = await createDraftPost(
 			'E2E block-sync workflow',
-			HEADING_CONTENT
+			HEADING_CONTENT,
+			auth
 		);
-		const appPassword = getSharedAppPassword();
 		const { client, close, stderr } = await createMcpTestClient();
 
 		try {
+			// Connect MCP
+			await callToolOrThrow(client, 'wp_connect', {
+				siteUrl: WP_BASE_URL,
+				username: testUser.username,
+				appPassword: testUser.appPassword,
+			});
+
 			await openEditor(page, editor, postId);
 
 			await expect
@@ -611,13 +642,6 @@ test.describe('block sync', () => {
 						expect.objectContaining({ name: 'core/heading' }),
 					])
 				);
-
-			await callToolOrThrow(client, 'wp_connect', {
-				siteUrl: WP_BASE_URL,
-				username: WP_ADMIN_USER,
-				appPassword,
-			});
-			await callToolOrThrow(client, 'wp_open_post', { postId });
 
 			await expect
 				.poll(
@@ -714,7 +738,7 @@ test.describe('block sync', () => {
 			);
 		} finally {
 			await close();
-			await deletePost(postId);
+			await deletePost(postId, auth);
 		}
 	});
 });

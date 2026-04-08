@@ -8,6 +8,7 @@
 // --- Command types ---
 
 export type CommandSlug =
+	| 'open-post'
 	| 'proofread'
 	| 'review'
 	| 'respond-to-notes'
@@ -31,11 +32,27 @@ export interface CommandDefinition {
 	args: Record<string, CommandArgDef>;
 	/** Override the auto-generated channel instruction hint for this command. */
 	channelHint?: string;
+	/**
+	 * Signal commands are internal lifecycle signals (e.g., open-post) that
+	 * skip active command state in the UI, don't block user actions, and
+	 * can transition directly from pending to completed.
+	 */
+	signal?: boolean;
 }
 
 // --- Command definitions ---
 
 export const COMMANDS: Record<CommandSlug, CommandDefinition> = {
+	'open-post': {
+		slug: 'open-post',
+		label: 'Open Post',
+		description: 'Signal that a post was opened in the editor',
+		progressLabel: 'Connecting\u2026',
+		args: {},
+		signal: true,
+		channelHint:
+			'"open-post" (Post opened in the editor — the post is already loaded. Just call wp_update_command_status with status "completed" to acknowledge.)',
+	},
 	proofread: {
 		slug: 'proofread',
 		label: 'Proofread',

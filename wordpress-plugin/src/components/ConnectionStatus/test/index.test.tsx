@@ -94,6 +94,9 @@ describe('ConnectionStatus', () => {
 			if (s === noticesStore) {
 				return { createNotice: mockCreateNotice };
 			}
+			if (s === aiActionsStore) {
+				return { submitCommand: jest.fn() };
+			}
 			return {};
 		});
 

@@ -19,7 +19,11 @@ import { store as editorStore } from '@wordpress/editor';
 /**
  * Internal dependencies
  */
-import { TERMINAL_STATUSES, type CommandSlug } from '#shared/commands';
+import {
+	COMMANDS,
+	TERMINAL_STATUSES,
+	type CommandSlug,
+} from '#shared/commands';
 import type {
 	Command,
 	StoreState,
@@ -263,7 +267,13 @@ const actions = {
 			args: Record<string, unknown> = {}
 		) =>
 		async ({ dispatch }: StoreThunkArgs) => {
-			dispatch({ type: 'SUBMIT_COMMAND_START' });
+			const isSignal = COMMANDS[prompt]?.signal === true;
+
+			// Signal commands skip active command state — they're internal
+			// lifecycle signals that shouldn't block user actions.
+			if (!isSignal) {
+				dispatch({ type: 'SUBMIT_COMMAND_START' });
+			}
 
 			try {
 				const command = await apiFetch<Command>({
@@ -276,19 +286,31 @@ const actions = {
 					},
 				});
 
-				dispatch({
-					type: 'SUBMIT_COMMAND_SUCCESS',
-					command,
-				});
+				if (!isSignal) {
+					dispatch({
+						type: 'SUBMIT_COMMAND_SUCCESS',
+						command,
+					});
+				}
 
 				// Mirror to Yjs sync so the MCP server sees it.
 				writeCommandToSync(command);
 			} catch (error: unknown) {
-				dispatch({
-					type: 'SUBMIT_COMMAND_ERROR',
-					error:
-						error instanceof Error ? error.message : String(error),
-				});
+				if (isSignal) {
+					// eslint-disable-next-line no-console
+					console.error(
+						`[wpce] Signal command "${prompt}" failed:`,
+						error
+					);
+				} else {
+					dispatch({
+						type: 'SUBMIT_COMMAND_ERROR',
+						error:
+							error instanceof Error
+								? error.message
+								: String(error),
+					});
+				}
 			}
 		},
 
@@ -377,10 +399,16 @@ const actions = {
 					path: `/wpce/v1/commands${query}`,
 				});
 
-				const active = commands.find((command) =>
-					['pending', 'running', 'awaiting_input'].includes(
-						command.status
-					)
+				const active = commands.find(
+					(command) =>
+						!(
+							command.prompt in COMMANDS &&
+							COMMANDS[command.prompt as CommandSlug].signal ===
+								true
+						) &&
+						['pending', 'running', 'awaiting_input'].includes(
+							command.status
+						)
 				);
 
 				if (active) {
@@ -471,6 +499,10 @@ const actions = {
 				(cmd) =>
 					cmd.post_id === postId &&
 					cmd.user_id === userId &&
+					!(
+						cmd.prompt in COMMANDS &&
+						COMMANDS[cmd.prompt as CommandSlug].signal === true
+					) &&
 					!TERMINAL_STATUSES.includes(cmd.status)
 			);
 

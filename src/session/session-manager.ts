@@ -771,6 +771,25 @@ export class SessionManager {
 					getAwarenessState: () => null,
 				}
 			);
+
+			// Observe the comment state map for remote note changes.
+			// When savedAt changes (from another client), re-fetch notes
+			// so the embedded content cache stays warm.
+			const commentStateMap = commentDoc.getMap(CRDT_STATE_MAP_KEY);
+			commentStateMap.observe((event, transaction) => {
+				if (transaction.origin === LOCAL_ORIGIN) return;
+				if (!event.keysChanged.has(CRDT_STATE_MAP_SAVED_AT_KEY)) return;
+				// Fire-and-forget: refresh the cache in the background.
+				this.listNotes()
+					.then((result) => {
+						this._cachedNotes = result;
+					})
+					.catch(() => {
+						// Best-effort — cache will be stale but getCachedOrFreshNotes
+						// will fall through to a fresh fetch if cache is null.
+						this._cachedNotes = null;
+					});
+			});
 		}
 
 		// Periodic health check via REST API to detect trashing.
@@ -875,6 +894,7 @@ export class SessionManager {
 		this.collaborators = [];
 		this._cachedCategories = [];
 		this._cachedTags = [];
+		this._cachedNotes = null;
 		this.postGone = false;
 		this.postGoneReason = null;
 		this.postGoneCheck = null;
@@ -1800,6 +1820,76 @@ export class SessionManager {
 		};
 	}
 
+	/** In-flight preOpenPost promise for serialization. */
+	private _preOpenInProgress: Promise<void> | null = null;
+
+	/**
+	 * Pre-open a post in response to the open-post command from the browser.
+	 * Called automatically when the user opens or switches posts in the editor.
+	 *
+	 * If the post is already open, this is a no-op. If a different post is
+	 * open, the current post is closed first. Serialized: concurrent calls
+	 * wait for the previous one to complete.
+	 */
+	async preOpenPost(postId: number): Promise<void> {
+		// Chain onto any in-flight operation so concurrent calls
+		// are properly serialized (no gap between clearing the
+		// sentinel and the next caller checking it).
+		const previous = this._preOpenInProgress;
+		const current = (async () => {
+			if (previous) await previous;
+			await this._doPreOpenPost(postId).catch(() => {
+				// Errors are best-effort — the command handler already catches them.
+			});
+		})();
+		this._preOpenInProgress = current;
+		await current;
+	}
+
+	private async _doPreOpenPost(postId: number): Promise<void> {
+		if (this.state === 'disconnected') return;
+
+		// Already editing this post — nothing to do.
+		if (this.state === 'editing' && this._currentPost?.id === postId) {
+			return;
+		}
+
+		// Editing a different post — close it first.
+		if (this.state === 'editing') {
+			await this.closePost();
+		}
+
+		// Now in 'connected' state — open the requested post.
+		await this.openPost(postId);
+
+		// Pre-cache notes if supported (useful for review/respond-to-notes commands).
+		if (this.notesSupported) {
+			try {
+				this._cachedNotes = await this.listNotes();
+			} catch {
+				// Best-effort — notes will be fetched on demand if needed.
+			}
+		}
+	}
+
+	/** Pre-cached notes from preOpenPost. Cleared on closePost. */
+	private _cachedNotes: {
+		notes: WPNote[];
+		noteBlockMap: Partial<Record<number, string>>;
+	} | null = null;
+
+	/**
+	 * Return the pre-cached notes if available, otherwise fetch fresh.
+	 * Used by the content provider for embedding notes in notifications.
+	 */
+	async getCachedOrFreshNotes(): Promise<{
+		notes: WPNote[];
+		noteBlockMap: Partial<Record<number, string>>;
+	}> {
+		if (this._cachedNotes) return this._cachedNotes;
+		return this.listNotes();
+	}
+
 	/**
 	 * Detect the WordPress editor plugin and start the command listener.
 	 * Stops any existing command handler first. Safe to call multiple times
@@ -1825,6 +1915,32 @@ export class SessionManager {
 		if (this._channelNotifier) {
 			handler.setNotifier(this._channelNotifier);
 		}
+		if (this._user) {
+			handler.setUserId(this._user.id);
+		}
+		handler.setPreOpenHandler(async (postId) => {
+			await this.preOpenPost(postId);
+		});
+		handler.setContentProvider(async () => {
+			if (this.state !== 'editing' || !this._currentPost) return null;
+			const postId = this._currentPost.id;
+			const postContent = this.readPost();
+			const notesSupported = this.notesSupported;
+			let notes:
+				| {
+						notes: WPNote[];
+						noteBlockMap: Partial<Record<number, string>>;
+				  }
+				| undefined;
+			if (notesSupported) {
+				try {
+					notes = await this.getCachedOrFreshNotes();
+				} catch {
+					// Notes unavailable — proceed without them.
+				}
+			}
+			return { postId, postContent, notes, notesSupported };
+		});
 		try {
 			// Collection sync uses the 'state' map (not 'document').
 			// Commands are stored under the 'commands' key in the state map.

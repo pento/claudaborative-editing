@@ -15,6 +15,7 @@ describe('shared/commands', () => {
 	describe('COMMANDS', () => {
 		it('defines all expected command slugs', () => {
 			const expectedSlugs: CommandSlug[] = [
+				'open-post',
 				'proofread',
 				'review',
 				'respond-to-notes',

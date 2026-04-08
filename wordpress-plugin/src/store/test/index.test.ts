@@ -904,6 +904,44 @@ describe('AI Actions store', () => {
 			});
 		});
 
+		describe('submitCommand signal commands', () => {
+			it('logs to console.error instead of dispatching SUBMIT_COMMAND_ERROR when a signal command fails', async () => {
+				const consoleSpy = jest
+					.spyOn(console, 'error')
+					.mockImplementation(() => {});
+				mockedApiFetch.mockRejectedValueOnce(new Error('Server error'));
+
+				await actions.submitCommand(
+					'open-post',
+					789,
+					{}
+				)({
+					dispatch,
+				});
+
+				expect(consoleSpy).toHaveBeenCalledWith(
+					'[wpce] Signal command "open-post" failed:',
+					expect.any(Error)
+				);
+
+				// Should NOT dispatch SUBMIT_COMMAND_ERROR for signal commands
+				expect(dispatch).not.toHaveBeenCalledWith(
+					expect.objectContaining({
+						type: 'SUBMIT_COMMAND_ERROR',
+					})
+				);
+
+				// Should NOT dispatch SUBMIT_COMMAND_START either
+				expect(dispatch).not.toHaveBeenCalledWith(
+					expect.objectContaining({
+						type: 'SUBMIT_COMMAND_START',
+					})
+				);
+
+				consoleSpy.mockRestore();
+			});
+		});
+
 		describe('submitCommand calls writeCommandToSync', () => {
 			it('mirrors submitted command to Yjs sync', async () => {
 				const { writeCommandToSync } = jest.requireMock(

@@ -18,6 +18,8 @@ const pluginDir = resolve(__dirname, '../wordpress-plugin');
 const { COMMANDS, COMMAND_SLUGS, TERMINAL_STATUSES, VALID_TRANSITIONS } =
 	await import('../shared/commands.ts');
 
+const SIGNAL_SLUGS = COMMAND_SLUGS.filter((s) => COMMANDS[s].signal === true);
+
 // --- PHP generation ---
 
 function phpArray(arr, indent = '') {
@@ -70,6 +72,14 @@ class Command_Defs {
 	 * @var array<string, string[]>
 	 */
 	const VALID_TRANSITIONS = ${phpAssocArray(VALID_TRANSITIONS, '\t')};
+
+	/**
+	 * Signal command prompts — internal lifecycle signals that can
+	 * transition directly from pending to completed.
+	 *
+	 * @var string[]
+	 */
+	const SIGNAL_PROMPTS = ${phpArray(SIGNAL_SLUGS, '\t')};
 
 	/**
 	 * Terminal command statuses.

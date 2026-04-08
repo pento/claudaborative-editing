@@ -1,14 +1,20 @@
 /**
  * Extended Playwright test fixtures for WordPress E2E tests.
  *
- * Wraps the `page` fixture from @wordpress/e2e-test-utils-playwright
- * to suppress known harmless console messages from test output.
- *
- * The package's observeConsoleLogging handler forwards browser console
- * warnings/errors to Node's console. Since fixture extension wraps (not
- * replaces) the base, we intercept at the Node console level instead.
+ * Provides:
+ * - Console suppression for known harmless messages
+ * - Per-test user isolation via the `testUser` fixture (creates a unique
+ *   WordPress user + app password, logs the browser in as that user, and
+ *   cleans up afterwards). This prevents command cross-contamination when
+ *   tests run in parallel, since commands are user-scoped.
  */
 import { test as base, expect } from '@wordpress/e2e-test-utils-playwright';
+import {
+	WP_BASE_URL,
+	createTestUser,
+	deleteTestUser,
+	type TestUser,
+} from './helpers/wp-env';
 
 /**
  * Console message substrings to suppress from test output.
@@ -29,7 +35,35 @@ function isSuppressed(args: unknown[]): boolean {
 	return SUPPRESSED_MESSAGES.some((msg) => text.includes(msg));
 }
 
-const test = base.extend({
+const test = base.extend<{ testUser: TestUser }>({
+	// Per-test user fixture — opt-in. Creates a unique WordPress user,
+	// logs the browser in as that user, and cleans up afterwards.
+	// Tests must explicitly destructure `testUser` to activate it.
+	testUser: [
+		async ({ page }, use) => {
+			const user = await createTestUser();
+
+			// Log the browser in as the test user. Set values via JS to
+			// avoid interference from wp-login.php's focus timer script
+			// which fires at 200ms and can yank focus between fields.
+			await page.goto(`${WP_BASE_URL}/wp-login.php`);
+			await page.waitForSelector('#user_login');
+			await page.evaluate(`
+				document.getElementById('user_login').value = ${JSON.stringify(user.username)};
+				document.getElementById('user_pass').value = ${JSON.stringify(user.password)};
+			`);
+			await page.click('#wp-submit');
+			await page.waitForURL('**/wp-admin/**');
+
+			try {
+				await use(user);
+			} finally {
+				await deleteTestUser(user.userId);
+			}
+		},
+		{ auto: false },
+	],
+
 	page: async ({ page }, use) => {
 		// Intercept Node console methods to filter messages forwarded
 		// by the package's observeConsoleLogging page handler.

@@ -26,6 +26,7 @@ class Command_Defs {
 	 * @var string[]
 	 */
 	const ALLOWED_PROMPTS = [
+		'open-post',
 		'proofread',
 		'review',
 		'respond-to-notes',
@@ -54,6 +55,16 @@ class Command_Defs {
 			'running',
 			'cancelled',
 		],
+	];
+
+	/**
+	 * Signal command prompts — internal lifecycle signals that can
+	 * transition directly from pending to completed.
+	 *
+	 * @var string[]
+	 */
+	const SIGNAL_PROMPTS = [
+		'open-post',
 	];
 
 	/**
