@@ -3,7 +3,7 @@
  * detection logic, and optional CLI integration.
  */
 
-import { execFileSync, execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import { existsSync } from 'fs';
 import { homedir, platform } from 'os';
 import { dirname, join } from 'path';
@@ -15,19 +15,17 @@ import type { McpClientConfig, McpClientType, WpCredentials } from './types.js';
 export const SERVER_NAME = 'wpce';
 
 /**
- * Returns the command to check if an executable exists on PATH,
- * appropriate for the current platform.
+ * Returns the executable name used to locate commands on PATH
+ * for the current platform.
  */
-function whichCommand(executable: string): string {
-	return platform() === 'win32'
-		? `where ${executable}`
-		: `which ${executable}`;
+function whichExecutable(): string {
+	return platform() === 'win32' ? 'where' : 'which';
 }
 
 /** Returns true if the given executable is found on PATH. */
 export function isOnPath(executable: string): boolean {
 	try {
-		execSync(whichCommand(executable), { stdio: 'ignore' });
+		execFileSync(whichExecutable(), [executable], { stdio: 'ignore' });
 		return true;
 	} catch {
 		return false;

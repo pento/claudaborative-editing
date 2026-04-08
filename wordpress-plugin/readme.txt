@@ -64,7 +64,7 @@ Source files are in the `wordpress-plugin/src/` directory. See the repository `R
 
 == Changelog ==
 
-= 0.4.0 =
+= Unreleased =
 * Simplified installer to Claude Code only (channels required for two-way communication).
 * Added `npx claudaborative-editing start` convenience command.
 * Added MCP server setup instructions to plugin readme.

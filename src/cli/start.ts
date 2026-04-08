@@ -4,6 +4,7 @@
  */
 
 import { spawn as nodeSpawn } from 'child_process';
+import { constants } from 'os';
 
 import { isOnPath, MCP_CLIENTS, SERVER_NAME } from './clients.js';
 import { hasServerInConfig } from './config-writer.js';
@@ -18,8 +19,8 @@ export interface StartDeps {
 	hasConfig?: () => boolean;
 	/** Override setup for testing */
 	runSetup?: () => Promise<void>;
-	/** Override spawn for testing — returns exit code or null (signal) */
-	spawn?: (command: string, args: string[]) => Promise<number | null>;
+	/** Override spawn for testing — returns exit code (128+N for signals) */
+	spawn?: (command: string, args: string[]) => Promise<number>;
 }
 
 /* v8 ignore start -- default deps use real child_process/readline */
@@ -64,14 +65,24 @@ function defaultDeps(): StartDeps {
 					process.on(signal, handler);
 				}
 
-				child.on('close', (code, signal) => {
-					// Clean up signal handlers
+				function cleanup(): void {
 					for (const [sig, handler] of handlers) {
 						process.removeListener(sig, handler);
 					}
+				}
 
-					if (signal) {
-						resolve(null);
+				child.on('error', (err) => {
+					cleanup();
+					// ENOENT = command not found, EACCES = permission denied
+					console.error(`Failed to start claude: ${err.message}`);
+					resolve(1);
+				});
+
+				child.on('close', (code, sig) => {
+					cleanup();
+					if (sig) {
+						const num = constants.signals[sig];
+						resolve(num ? 128 + num : 143);
 					} else {
 						resolve(code ?? 0);
 					}
@@ -100,13 +111,18 @@ export async function runStart(deps: StartDeps = defaultDeps()): Promise<void> {
 
 	const checkConfig =
 		deps.hasConfig ??
+		/* v8 ignore next 9 -- inline fallback only used without injected deps */
 		(() => {
-			const config = MCP_CLIENTS['claude-code'];
-			return hasServerInConfig(
-				config.configPath(),
-				config.configKey,
-				SERVER_NAME
-			);
+			try {
+				const config = MCP_CLIENTS['claude-code'];
+				return hasServerInConfig(
+					config.configPath(),
+					config.configKey,
+					SERVER_NAME
+				);
+			} catch {
+				return false;
+			}
 		});
 
 	if (!checkConfig()) {
@@ -114,6 +130,7 @@ export async function runStart(deps: StartDeps = defaultDeps()): Promise<void> {
 		deps.log('');
 		const doSetup =
 			deps.runSetup ??
+			/* v8 ignore next 3 -- inline fallback only used without injected deps */
 			(async () => {
 				const { runSetup: realSetup } = await import('./setup.js');
 				await realSetup();
@@ -126,8 +143,9 @@ export async function runStart(deps: StartDeps = defaultDeps()): Promise<void> {
 
 	const doSpawn =
 		deps.spawn ??
+		/* v8 ignore next 5 -- inline fallback only used without injected deps */
 		((command: string, args: string[]) =>
-			new Promise<number | null>((resolve) => {
+			new Promise<number>((resolve) => {
 				const child = nodeSpawn(command, args, { stdio: 'inherit' });
 				child.on('close', (code) => {
 					resolve(code ?? 0);
@@ -135,11 +153,5 @@ export async function runStart(deps: StartDeps = defaultDeps()): Promise<void> {
 			}));
 
 	const exitCode = await doSpawn('claude', CLAUDE_ARGS);
-
-	if (exitCode === null) {
-		// Child was killed by signal — exit with the conventional 128+signal code
-		deps.exit(143); // SIGTERM = 15, 128+15=143
-	} else {
-		deps.exit(exitCode);
-	}
+	deps.exit(exitCode);
 }

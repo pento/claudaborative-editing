@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { assertDefined } from '../../test-utils.js';
 
 vi.mock('child_process', () => ({
-	execSync: vi.fn(),
 	execFileSync: vi.fn(),
 }));
 
@@ -20,14 +19,13 @@ vi.mock('os', () => ({
 	platform: vi.fn(() => 'darwin'),
 }));
 
-const { execSync, execFileSync } = await import('child_process');
+const { execFileSync } = await import('child_process');
 const { existsSync, readFileSync, writeFileSync } = await import('fs');
 const { homedir, platform } = await import('os');
 
 const { MCP_CLIENTS, detectInstalledClients, SERVER_NAME, isOnPath } =
 	await import('../../../src/cli/clients.js');
 
-const execSyncMock = vi.mocked(execSync);
 const execFileSyncMock = vi.mocked(execFileSync);
 const existsSyncMock = vi.mocked(existsSync);
 const readFileSyncMock = vi.mocked(readFileSync);
@@ -87,14 +85,16 @@ describe('clients registry', () => {
 	describe('detectInstall', () => {
 		it('claude-code requires both directory existence and claude on PATH', () => {
 			existsSyncMock.mockReturnValue(true);
-			execSyncMock.mockReturnValue(Buffer.from('/usr/local/bin/claude'));
+			execFileSyncMock.mockReturnValue(
+				Buffer.from('/usr/local/bin/claude')
+			);
 
 			expect(MCP_CLIENTS['claude-code'].detectInstall()).toBe(true);
 		});
 
 		it('claude-code returns false when claude is not on PATH', () => {
 			existsSyncMock.mockReturnValue(true);
-			execSyncMock.mockImplementation(() => {
+			execFileSyncMock.mockImplementation(() => {
 				throw new Error('not found');
 			});
 
@@ -110,7 +110,6 @@ describe('clients registry', () => {
 		};
 
 		it('runs claude mcp add with correct arguments via execFileSync', async () => {
-			execSyncMock.mockReturnValue(Buffer.from('/usr/local/bin/claude'));
 			execFileSyncMock.mockReturnValue(Buffer.from(''));
 
 			const useCli = MCP_CLIENTS['claude-code'].useCli;
@@ -118,9 +117,10 @@ describe('clients registry', () => {
 			const result = await useCli(credentials);
 
 			expect(result).toBe(true);
-			// isOnPath uses execSync with `which claude`
-			expect(execSyncMock).toHaveBeenCalledWith(
-				expect.stringContaining('which claude'),
+			// isOnPath uses execFileSync with `which` as separate arg
+			expect(execFileSyncMock).toHaveBeenCalledWith(
+				'which',
+				['claude'],
 				expect.anything()
 			);
 			// The actual command uses execFileSync with an args array (no shell injection)
@@ -147,7 +147,7 @@ describe('clients registry', () => {
 		});
 
 		it('returns false when claude is not on PATH', async () => {
-			execSyncMock.mockImplementation(() => {
+			execFileSyncMock.mockImplementation(() => {
 				throw new Error('not found');
 			});
 
@@ -159,10 +159,9 @@ describe('clients registry', () => {
 		});
 
 		it('returns false when claude mcp add fails', async () => {
-			// isOnPath (execSync) succeeds
-			execSyncMock.mockReturnValue(Buffer.from('/usr/local/bin/claude'));
-			// The actual add command (execFileSync) fails
-			execFileSyncMock.mockImplementation(() => {
+			// First call: isOnPath (which) succeeds, second call: claude mcp add fails
+			execFileSyncMock.mockImplementationOnce(() => Buffer.from(''));
+			execFileSyncMock.mockImplementationOnce(() => {
 				throw new Error('command failed');
 			});
 
@@ -227,7 +226,7 @@ describe('clients registry', () => {
 	describe('detectInstalledClients', () => {
 		it('returns an entry for claude-code', () => {
 			existsSyncMock.mockReturnValue(false);
-			execSyncMock.mockImplementation(() => {
+			execFileSyncMock.mockImplementation(() => {
 				throw new Error('not found');
 			});
 
@@ -239,7 +238,9 @@ describe('clients registry', () => {
 
 		it('marks detected clients correctly', () => {
 			existsSyncMock.mockReturnValue(true);
-			execSyncMock.mockReturnValue(Buffer.from('/usr/local/bin/claude'));
+			execFileSyncMock.mockReturnValue(
+				Buffer.from('/usr/local/bin/claude')
+			);
 
 			const clients = detectInstalledClients();
 			expect(clients[0].detected).toBe(true);
@@ -247,7 +248,7 @@ describe('clients registry', () => {
 
 		it('marks undetected clients correctly', () => {
 			existsSyncMock.mockReturnValue(false);
-			execSyncMock.mockImplementation(() => {
+			execFileSyncMock.mockImplementation(() => {
 				throw new Error('not found');
 			});
 
@@ -260,7 +261,7 @@ describe('clients registry', () => {
 
 		it('includes the config object for each client', () => {
 			existsSyncMock.mockReturnValue(false);
-			execSyncMock.mockImplementation(() => {
+			execFileSyncMock.mockImplementation(() => {
 				throw new Error('not found');
 			});
 
@@ -274,12 +275,14 @@ describe('clients registry', () => {
 
 	describe('isOnPath', () => {
 		it('returns true when executable is found', () => {
-			execSyncMock.mockReturnValue(Buffer.from('/usr/local/bin/claude'));
+			execFileSyncMock.mockReturnValue(
+				Buffer.from('/usr/local/bin/claude')
+			);
 			expect(isOnPath('claude')).toBe(true);
 		});
 
 		it('returns false when executable is not found', () => {
-			execSyncMock.mockImplementation(() => {
+			execFileSyncMock.mockImplementation(() => {
 				throw new Error('not found');
 			});
 			expect(isOnPath('claude')).toBe(false);
@@ -287,19 +290,21 @@ describe('clients registry', () => {
 
 		it('uses "where" on Windows and "which" on other platforms', () => {
 			platformMock.mockReturnValue('win32');
-			execSyncMock.mockReturnValue(Buffer.from(''));
+			execFileSyncMock.mockReturnValue(Buffer.from(''));
 			isOnPath('claude');
-			expect(execSyncMock).toHaveBeenCalledWith(
-				'where claude',
+			expect(execFileSyncMock).toHaveBeenCalledWith(
+				'where',
+				['claude'],
 				expect.anything()
 			);
 
-			execSyncMock.mockClear();
+			execFileSyncMock.mockClear();
 			platformMock.mockReturnValue('darwin');
-			execSyncMock.mockReturnValue(Buffer.from(''));
+			execFileSyncMock.mockReturnValue(Buffer.from(''));
 			isOnPath('claude');
-			expect(execSyncMock).toHaveBeenCalledWith(
-				'which claude',
+			expect(execFileSyncMock).toHaveBeenCalledWith(
+				'which',
+				['claude'],
 				expect.anything()
 			);
 		});

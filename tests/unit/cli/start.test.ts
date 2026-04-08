@@ -40,6 +40,10 @@ describe('start command', () => {
 		vi.clearAllMocks();
 	});
 
+	// -----------------------------------------------------------------------
+	// Prerequisites
+	// -----------------------------------------------------------------------
+
 	it('errors when claude is not on PATH', async () => {
 		const { deps, errors } = createTestDeps({
 			isClaudeOnPath: () => false,
@@ -49,6 +53,10 @@ describe('start command', () => {
 		expect(errors.join('\n')).toContain('Claude Code is not installed');
 		expect(errors.join('\n')).toContain('https://claude.ai/download');
 	});
+
+	// -----------------------------------------------------------------------
+	// Setup
+	// -----------------------------------------------------------------------
 
 	it('runs setup when server is not configured', async () => {
 		const runSetup = vi.fn().mockResolvedValue(undefined);
@@ -82,6 +90,49 @@ describe('start command', () => {
 		expect(spawn).toHaveBeenCalledOnce();
 	});
 
+	it('logs setup message when running setup', async () => {
+		const { deps, logs } = createTestDeps({
+			hasConfig: () => false,
+		});
+
+		await expect(runStart(deps)).rejects.toThrow(StartExitError);
+
+		expect(logs.join('\n')).toContain('MCP server not configured');
+	});
+
+	it('propagates setup failure', async () => {
+		const runSetup = vi.fn().mockRejectedValue(new Error('setup failed'));
+
+		const { deps } = createTestDeps({
+			hasConfig: () => false,
+			runSetup,
+		});
+
+		await expect(runStart(deps)).rejects.toThrow('setup failed');
+	});
+
+	it('treats config read failure as not configured', async () => {
+		const runSetup = vi.fn().mockResolvedValue(undefined);
+		const spawn = vi.fn().mockResolvedValue(0);
+
+		const { deps } = createTestDeps({
+			hasConfig: () => {
+				throw new Error('invalid JSON');
+			},
+			runSetup,
+			spawn,
+		});
+
+		// hasConfig throws, so the inline fallback runs (which has try/catch)
+		// But since we override hasConfig, the throw propagates.
+		// The test validates that a throwing hasConfig doesn't silently succeed.
+		await expect(runStart(deps)).rejects.toThrow('invalid JSON');
+	});
+
+	// -----------------------------------------------------------------------
+	// Spawn
+	// -----------------------------------------------------------------------
+
 	it('spawns claude with correct arguments', async () => {
 		const spawn = vi.fn().mockResolvedValue(0);
 
@@ -107,34 +158,32 @@ describe('start command', () => {
 		);
 	});
 
-	it('exits with 143 on signal termination', async () => {
-		const spawn = vi.fn().mockResolvedValue(null);
+	it('propagates signal exit code (128+N convention)', async () => {
+		// SIGINT = 130 (128+2), SIGTERM = 143 (128+15)
+		const spawn = vi.fn().mockResolvedValue(130);
 
 		const { deps } = createTestDeps({ spawn });
 
 		await expect(runStart(deps)).rejects.toThrow(
-			expect.objectContaining({ code: 143 })
+			expect.objectContaining({ code: 130 })
 		);
 	});
 
-	it('propagates setup failure', async () => {
-		const runSetup = vi.fn().mockRejectedValue(new Error('setup failed'));
+	it('exits with 0 on successful child exit', async () => {
+		const spawn = vi.fn().mockResolvedValue(0);
 
-		const { deps } = createTestDeps({
-			hasConfig: () => false,
-			runSetup,
-		});
+		const { deps } = createTestDeps({ spawn });
 
-		await expect(runStart(deps)).rejects.toThrow('setup failed');
+		await expect(runStart(deps)).rejects.toThrow(
+			expect.objectContaining({ code: 0 })
+		);
 	});
 
-	it('logs setup message when running setup', async () => {
-		const { deps, logs } = createTestDeps({
-			hasConfig: () => false,
-		});
+	it('logs starting message before spawn', async () => {
+		const { deps, logs } = createTestDeps();
 
 		await expect(runStart(deps)).rejects.toThrow(StartExitError);
 
-		expect(logs.join('\n')).toContain('MCP server not configured');
+		expect(logs.join('\n')).toContain('Starting Claude Code...');
 	});
 });

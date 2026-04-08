@@ -925,6 +925,22 @@ describe('setup wizard', () => {
 			);
 		});
 
+		it('treats corrupt config as not configured', async () => {
+			const { deps, logs } = createTestDeps([], {
+				detectClients: () => defaultClientList(),
+				hasConfig: () => {
+					throw new Error('invalid JSON');
+				},
+			});
+
+			await runSetup(deps, { remove: true });
+
+			const output = logs.join('\n');
+			expect(output).toContain(
+				'claudaborative-editing is not configured in Claude Code.'
+			);
+		});
+
 		it('uses client.removeCli when no removeConfig override is provided', async () => {
 			const removeCli = vi.fn().mockResolvedValue(true);
 			const clientWithRemove = makeMockClient(
