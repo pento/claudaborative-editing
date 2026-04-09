@@ -64,10 +64,12 @@ Source files are in the `wordpress-plugin/src/` directory. See the repository `R
 
 == Changelog ==
 
-= Unreleased =
-* Simplified installer to Claude Code only (channels required for two-way communication).
-* Added `npx claudaborative-editing start` convenience command.
-* Added MCP server setup instructions to plugin readme.
+= 0.4.0 =
+* Added pre-publish checks panel with AI-powered metadata suggestions (excerpt, categories, tags, slug).
+* Added compose tool for interactive post planning and outlining with two-way conversation support.
+* Simplified installer to Claude Code only, added `npx claudaborative-editing start` command.
+* Pre-open posts and auto-claim commands on editor load for faster response times.
+* Server-side MCP connection detection reduces sync handshake from ~10-15s to ~2-3s.
 
 = 0.3.1 =
 * Toolbar dropdown with Proofread and Review actions.
