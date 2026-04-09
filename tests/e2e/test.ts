@@ -82,6 +82,15 @@ const test = base.extend<{
 
 				await use(user);
 			} finally {
+				// Navigate away from the editor so Gutenberg's sync polling
+				// stops before we delete the user (and draftPost deletes
+				// the post). Without this, a final poll can 403 on a
+				// just-deleted post room.
+				try {
+					await page.goto('about:blank');
+				} catch {
+					// Page may already be closed.
+				}
 				clearTestAuth();
 				await deleteTestUser(user.userId);
 			}
@@ -170,10 +179,6 @@ const test = base.extend<{
 
 			try {
 				await page.evaluate('window.localStorage.clear()');
-				// Navigate away from the editor so Gutenberg's sync polling
-				// stops before other fixtures tear down (deleting posts/users).
-				// Without this, a final poll can 403 on the just-deleted post.
-				await page.goto('about:blank');
 			} catch {
 				// noop — page may already be closed (e.g., skipped tests).
 			}
