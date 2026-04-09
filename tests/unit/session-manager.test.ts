@@ -324,7 +324,7 @@ describe('SessionManager', () => {
 			// SyncClient.start() should be called with the command room
 			expect(mockSyncStart).toHaveBeenCalledTimes(1);
 			const [room] = mockSyncStart.mock.calls[0];
-			expect(room).toBe('root/wpce_commands');
+			expect(room).toBe('root/wpce_commands_1');
 		});
 
 		it('registers updateV2 handler that queues LOCAL_ORIGIN updates', async () => {
@@ -422,7 +422,7 @@ describe('SessionManager', () => {
 			// openPost() adds the post room via addRoom().
 			expect(mockSyncStart).toHaveBeenCalledTimes(1);
 			const [startRoom] = mockSyncStart.mock.calls[0];
-			expect(startRoom).toBe('root/wpce_commands');
+			expect(startRoom).toBe('root/wpce_commands_1');
 
 			expect(mockSyncAddRoom).toHaveBeenCalled();
 			const postRoomCall = mockSyncAddRoom.mock.calls.find(

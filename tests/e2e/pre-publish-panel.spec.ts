@@ -193,14 +193,22 @@ test.describe('Pre-Publish Panel', () => {
 		commandId = cmd?.id ?? 0;
 
 		if (cmd?.status === 'pending') {
-			await callToolOrThrow(
-				mcpClient.client,
-				'wp_update_command_status',
-				{
-					commandId,
-					status: 'running',
+			// The MCP may have already auto-claimed this (channels verified
+			// after open-post was completed). Tolerate 409 race.
+			try {
+				await callToolOrThrow(
+					mcpClient.client,
+					'wp_update_command_status',
+					{
+						commandId,
+						status: 'running',
+					}
+				);
+			} catch (e) {
+				if (!(e instanceof Error) || !e.message.includes('409')) {
+					throw e;
 				}
-			);
+			}
 		}
 
 		// Complete the command with structured suggestions

@@ -25,6 +25,9 @@ export async function openEditor(
 	await page.goto(`/wp-admin/post.php?post=${postId}&action=edit`);
 	await editor.setPreferences('core/edit-post', {
 		welcomeGuide: false,
+		welcomeGuideStyles: false,
+		welcomeGuidePage: false,
+		welcomeGuideTemplate: false,
 		fullscreenMode: false,
 	});
 	await expect

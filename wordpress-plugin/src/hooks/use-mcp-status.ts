@@ -25,7 +25,7 @@ export interface McpStatus {
 /**
  * Hook that provides MCP connection status via Yjs awareness.
  *
- * Subscribes to awareness changes in the root/wpce_commands room.
+ * Subscribes to awareness changes in the per-user command room.
  * The MCP server's presence is detected by its browserType field.
  *
  * @return Status object with `mcpConnected`.

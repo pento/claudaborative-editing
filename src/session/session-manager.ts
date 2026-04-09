@@ -349,8 +349,6 @@ export class SessionManager {
 
 	/** Room name for the comment sync room. */
 	private static readonly COMMENT_ROOM = 'root/comment';
-	/** Room name for the command sync room (collection format, no ID). */
-	private static readonly COMMAND_ROOM = 'root/wpce_commands';
 	/** Y.Doc for the command room (created on connect, destroyed on disconnect). */
 	private commandDoc: Y.Doc | null = null;
 	/** Update handler for the command doc. */
@@ -403,6 +401,11 @@ export class SessionManager {
 		if (!this._currentPost)
 			throw new Error('No current post (no post open)');
 		return this._currentPost;
+	}
+
+	/** Per-user command room name. Only valid after connect() sets _user. */
+	private get commandRoom(): string {
+		return `root/wpce_commands_${this.user.id}`;
 	}
 
 	constructor() {
@@ -466,20 +469,20 @@ export class SessionManager {
 		debugLog(
 			'session',
 			'Creating command doc and joining room',
-			SessionManager.COMMAND_ROOM
+			this.commandRoom
 		);
 		this.commandDoc = new Y.Doc();
 		this.commandUpdateHandler = (update: Uint8Array, origin: unknown) => {
 			if (origin === LOCAL_ORIGIN) {
 				const syncUpdate = createUpdateFromChange(update);
-				syncClient.queueUpdate(SessionManager.COMMAND_ROOM, syncUpdate);
+				syncClient.queueUpdate(this.commandRoom, syncUpdate);
 			}
 		};
 		this.commandDoc.on('updateV2', this.commandUpdateHandler);
 
 		const cmdDoc = this.commandDoc;
 		syncClient.start(
-			SessionManager.COMMAND_ROOM,
+			this.commandRoom,
 			cmdDoc.clientID,
 			[createSyncStep1(cmdDoc)],
 			{

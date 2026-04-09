@@ -163,15 +163,26 @@ class REST_Controller extends \WP_REST_Controller {
 			)
 		);
 
-		// Lightweight endpoint for the core-data entity resolver.
-		// Returns an empty array so getEntityRecords() succeeds and
-		// triggers collection Yjs sync for the root/wpce_commands room.
+		// Lightweight endpoints for the core-data entity resolver.
+		// The collection endpoint returns an empty array so getEntityRecords()
+		// succeeds and triggers collection Yjs sync for a per-user command
+		// room: root/wpce_commands_{userId}.
+		// The single-entity endpoint exists for forward compatibility.
 		register_rest_route(
 			self::API_NAMESPACE,
 			'/sync-entity',
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
 				'callback'            => array( $this, 'get_sync_entity' ),
+				'permission_callback' => array( $this, 'edit_posts_permissions' ),
+			)
+		);
+		register_rest_route(
+			self::API_NAMESPACE,
+			'/sync-entity/(?P<id>[\d]+)',
+			array(
+				'methods'             => \WP_REST_Server::READABLE,
+				'callback'            => array( $this, 'get_sync_entity_single' ),
 				'permission_callback' => array( $this, 'edit_posts_permissions' ),
 			)
 		);
@@ -318,16 +329,28 @@ class REST_Controller extends \WP_REST_Controller {
 	 * @return \WP_REST_Response|\WP_Error Response or error.
 	 */
 	public function create_command( $request ) {
-		$post_id   = (int) $request->get_param( 'post_id' );
-		$prompt    = $request->get_param( 'prompt' );
-		$arguments = $request->get_param( 'arguments' );
+		$post_id    = (int) $request->get_param( 'post_id' );
+		$prompt     = $request->get_param( 'prompt' );
+		$arguments  = $request->get_param( 'arguments' );
+		$expires_at = gmdate( 'Y-m-d\TH:i:s\Z', time() + self::EXPIRY_MINUTES * MINUTE_IN_SECONDS );
 
+		// Create as draft with all meta set via meta_input so the command
+		// is never visible with incomplete meta. A concurrent list_commands
+		// query between wp_insert_post and update_post_meta would otherwise
+		// see default (empty) meta values.
 		$command_id = wp_insert_post(
 			array(
 				'post_type'   => Command_Store::POST_TYPE,
-				'post_status' => 'publish',
+				'post_status' => 'draft',
 				'post_author' => get_current_user_id(),
 				'post_parent' => $post_id,
+				'meta_input'  => array(
+					'wpce_prompt'         => $prompt,
+					'wpce_arguments'      => wp_json_encode( $arguments ),
+					'wpce_command_status' => 'pending',
+					'wpce_result_data'    => '{}',
+					'wpce_expires_at'     => $expires_at,
+				),
 			),
 			true
 		);
@@ -336,13 +359,18 @@ class REST_Controller extends \WP_REST_Controller {
 			return $command_id;
 		}
 
-		$expires_at = gmdate( 'Y-m-d\TH:i:s\Z', time() + self::EXPIRY_MINUTES * MINUTE_IN_SECONDS );
-
-		update_post_meta( $command_id, 'wpce_prompt', $prompt );
-		update_post_meta( $command_id, 'wpce_arguments', wp_json_encode( $arguments ) );
-		update_post_meta( $command_id, 'wpce_command_status', 'pending' );
-		update_post_meta( $command_id, 'wpce_result_data', '{}' );
-		update_post_meta( $command_id, 'wpce_expires_at', $expires_at );
+		// Publish now that meta is fully set.
+		$result = wp_update_post(
+			array(
+				'ID'          => $command_id,
+				'post_status' => 'publish',
+			),
+			true
+		);
+		if ( is_wp_error( $result ) ) {
+			wp_delete_post( $command_id, true );
+			return $result;
+		}
 
 		$command = get_post( $command_id );
 
@@ -363,7 +391,7 @@ class REST_Controller extends \WP_REST_Controller {
 
 		$args = array(
 			'post_type'      => Command_Store::POST_TYPE,
-			'post_status'    => 'any',
+			'post_status'    => 'publish',
 			'author'         => $user_id,
 			'posts_per_page' => 100,
 			'no_found_rows'  => true,
@@ -688,13 +716,26 @@ class REST_Controller extends \WP_REST_Controller {
 	/**
 	 * GET /wpce/v1/sync-entity — minimal record for core-data entity resolver.
 	 *
-	 * Returns an empty array so that getEntityRecords() succeeds and
-	 * triggers collection Yjs sync for the root/wpce_commands room.
+	 * Returns an empty array for backward compatibility with collection sync.
 	 *
 	 * @return \WP_REST_Response Response.
 	 */
 	public function get_sync_entity() {
 		return rest_ensure_response( array() );
+	}
+
+	/**
+	 * GET /wpce/v1/sync-entity/{id} — single-entity record for core-data.
+	 *
+	 * Returns a minimal { id } object for forward compatibility with
+	 * single-entity sync. Currently unused — collection sync via
+	 * getEntityRecords() is the active path.
+	 *
+	 * @param \WP_REST_Request $request The request object.
+	 * @return \WP_REST_Response Response.
+	 */
+	public function get_sync_entity_single( $request ) {
+		return rest_ensure_response( array( 'id' => (int) $request['id'] ) );
 	}
 
 	/**

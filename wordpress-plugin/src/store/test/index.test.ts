@@ -284,6 +284,33 @@ describe('AI Actions store', () => {
 			expect(state.commands.history[9].id).toBe(8);
 		});
 
+		it('CLEAR_ACTIVE_COMMAND deduplicates by command ID', () => {
+			const completed = {
+				...MOCK_COMMAND,
+				id: 42,
+				status: 'completed',
+				message: 'first',
+			};
+			const initial = {
+				...DEFAULT_STATE,
+				commands: {
+					...DEFAULT_STATE.commands,
+					active: null,
+					history: [completed],
+				},
+			};
+			const updated = {
+				...completed,
+				message: 'second',
+			};
+			const state = reducer(initial, {
+				type: 'CLEAR_ACTIVE_COMMAND',
+				command: updated,
+			});
+			expect(state.commands.history).toHaveLength(1);
+			expect(state.commands.history[0].message).toBe('second');
+		});
+
 		it('handles SET_COMMAND_HISTORY', () => {
 			const history = [MOCK_COMMAND];
 			const state = reducer(DEFAULT_STATE, {
@@ -689,6 +716,24 @@ describe('AI Actions store', () => {
 				);
 			});
 
+			it('skips signal commands when detecting active command', async () => {
+				const signalRunning = {
+					...MOCK_COMMAND,
+					id: 50,
+					prompt: 'open-post',
+					status: 'running',
+				};
+				mockedApiFetch.mockResolvedValueOnce([signalRunning]);
+
+				await actions.fetchActiveCommand(123)({ dispatch });
+
+				expect(dispatch).not.toHaveBeenCalledWith(
+					expect.objectContaining({
+						type: 'SUBMIT_COMMAND_SUCCESS',
+					})
+				);
+			});
+
 			it('filters active commands from history', async () => {
 				const running = { ...MOCK_COMMAND, status: 'running' };
 				const completed = {
@@ -879,6 +924,42 @@ describe('AI Actions store', () => {
 				actions.handleSyncUpdate(commands, 123, null)({ dispatch });
 
 				expect(dispatch).not.toHaveBeenCalled();
+			});
+
+			it('skips signal commands as active', () => {
+				const signalPending = {
+					...MOCK_COMMAND,
+					id: 50,
+					prompt: 'open-post',
+					status: 'pending',
+				};
+				const commands = { '50': signalPending };
+
+				actions.handleSyncUpdate(commands, 123, 1)({ dispatch });
+
+				expect(dispatch).not.toHaveBeenCalledWith(
+					expect.objectContaining({
+						type: 'UPDATE_ACTIVE_COMMAND',
+					})
+				);
+			});
+
+			it('skips signal commands as terminal', () => {
+				const signalCompleted = {
+					...MOCK_COMMAND,
+					id: 50,
+					prompt: 'open-post',
+					status: 'completed',
+				};
+				const commands = { '50': signalCompleted };
+
+				actions.handleSyncUpdate(commands, 123, 1)({ dispatch });
+
+				expect(dispatch).not.toHaveBeenCalledWith(
+					expect.objectContaining({
+						type: 'CLEAR_ACTIVE_COMMAND',
+					})
+				);
 			});
 
 			it('prefers active commands over terminal commands', () => {

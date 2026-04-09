@@ -1,10 +1,10 @@
 /**
  * Command sync via core-data collection entity registration.
  *
- * Registers a custom `root/wpce_commands` entity with syncConfig so that
- * Gutenberg's polling manager includes the command room in its HTTP requests.
- * Uses collection sync (loadCollection) which creates a Y.Doc with a state
- * map. Both browser and MCP server read/write commands in the state map.
+ * Registers a per-user `root/wpce_commands_{userId}` entity with syncConfig
+ * so that Gutenberg's polling manager includes the command room in its HTTP
+ * requests. Each user gets their own collection room, preventing concurrent
+ * write races between different users sharing a single Y.Map.
  *
  * The Y.Doc reference is captured via the syncConfig.createAwareness callback,
  * which receives the doc during loadCollection initialization.
@@ -27,19 +27,18 @@ import { TERMINAL_STATUSES } from '#shared/commands';
 import { store as coreDataStore } from '@wordpress/core-data';
 
 /**
- * Raise the connection limit for the command room. The polling manager enforces
- * DEFAULT_CLIENT_LIMIT_PER_ROOM (3) on the primary room's awareness count.
- * The command room is shared across all site-wide sessions (unlike per-post
- * rooms), so its awareness count grows with the number of active editors and
- * MCP servers. We defer initCommandSync() so the post room registers first as
+ * Raise the connection limit for per-user command rooms. The polling manager
+ * enforces DEFAULT_CLIENT_LIMIT_PER_ROOM (3) on the primary room's awareness
+ * count. We defer initCommandSync() so the post room registers first as
  * primary, but this filter is a safety net for edge cases (pages without a post
- * room, race conditions).
+ * room, race conditions). Uses prefix matching since the full room name
+ * includes the user ID (root/wpce_commands_{userId}).
  */
 addFilter(
 	'sync.pollingProvider.maxClientsPerRoom',
 	'claudaborative-editing/command-room-limit',
 	(limit: number, room: string) => {
-		return room === 'root/wpce_commands' ? 100 : limit;
+		return room.startsWith('root/wpce_commands_') ? 100 : limit;
 	}
 );
 
@@ -56,8 +55,27 @@ type YMapEvent = Y.YMapEvent<unknown>;
 /** Whether the entity has been registered and sync started. */
 let initialized = false;
 
+/** Computed room name for the per-user command room (set in initCommandSync). */
+let commandRoomName: string | null = null;
+
 /** Whether the fetch interceptor has been installed. */
 let fetchInterceptorInstalled = false;
+
+/**
+ * Set once awareness has received at least one remote state. After that,
+ * isMcpConnected() trusts awareness as authoritative and stops falling
+ * through to the wpceInitialState page-load hint (which can go stale
+ * after an MCP disconnect).
+ */
+let awarenessWarmedUp = false;
+
+/**
+ * Dirty flag: set when writeCommandToSync() modifies the Y.Doc after the
+ * fetch interceptor has already sent a compaction. Forces the interceptor
+ * to re-inject the full state on the next poll, bypassing the
+ * lastInjectedStateVector dedup guard.
+ */
+let commandDocDirty = false;
 
 /** Captured Y.Doc from the collection sync initialization. */
 let commandDoc: YDoc | null = null;
@@ -118,11 +136,11 @@ function installFetchInterceptor(): void {
 					}>;
 				};
 				const cmdRoom = body.rooms?.find(
-					(r) => r.room === 'root/wpce_commands'
+					(r) => r.room === commandRoomName
 				);
 				if (cmdRoom && cmdRoom.updates.length === 0) {
 					const sv = uint8ToBase64(Y.encodeStateVector(commandDoc));
-					if (sv !== lastInjectedStateVector) {
+					if (commandDocDirty || sv !== lastInjectedStateVector) {
 						const update = Y.encodeStateAsUpdateV2(commandDoc);
 						cmdRoom.updates = [
 							{
@@ -135,6 +153,7 @@ function installFetchInterceptor(): void {
 							body: JSON.stringify(body),
 						};
 						lastInjectedStateVector = sv;
+						commandDocDirty = false;
 					}
 				}
 			} catch {
@@ -180,37 +199,59 @@ const syncConfig = {
 /**
  * Initialize the command sync entity.
  *
- * Registers the entity with core-data and triggers collection sync via
- * getEntityRecords (plural) with per_page=-1. Call once during plugin
- * initialization.
+ * Resolves the current user, registers a per-user entity with core-data,
+ * and triggers collection sync via getEntityRecords. Each user gets their
+ * own command room (root/wpce_commands_{userId}) to prevent concurrent
+ * write races in the shared Y.Map.
+ *
+ * Call once during plugin initialization.
  */
-export function initCommandSync(): void {
+export async function initCommandSync(): Promise<void> {
 	if (initialized) {
 		return;
 	}
 	initialized = true;
 
-	// Register the entity. addEntities is a public core-data action.
+	// Resolve the current user ID for the per-user command room.
+	let currentUser: { id: number } | undefined;
+	try {
+		currentUser = (await resolveSelect(coreDataStore).getCurrentUser()) as
+			| { id: number }
+			| undefined;
+	} catch {
+		initialized = false;
+		return;
+	}
+	if (!currentUser?.id) {
+		initialized = false;
+		return;
+	}
+	const entityName = `wpce_commands_${currentUser.id}`;
+	commandRoomName = `root/${entityName}`;
+
+	// Register a per-user entity. The entity name includes the user ID so
+	// each user gets their own collection room (root/wpce_commands_{userId}).
+	// We use collection sync rather than single-entity sync because
+	// Gutenberg's sync server enforces per-record permission checks on
+	// single-entity rooms that don't apply to our custom entity.
 	dispatch(coreDataStore).addEntities([
 		{
 			kind: 'root',
-			name: 'wpce_commands',
+			name: entityName,
 			baseURL: '/wpce/v1/sync-entity',
 			baseURLParams: { context: 'edit' },
-			plural: 'wpceCommands',
+			plural: entityName,
 			syncConfig,
 		},
 	]);
 
 	// Trigger the collection resolver, which starts collection sync.
 	// getEntityRecords with per_page=-1 calls getSyncManager().loadCollection()
-	// which creates the Y.Doc and registers room 'root/wpce_commands' with
-	// the polling manager.
-	void resolveSelect(coreDataStore).getEntityRecords(
-		'root',
-		'wpce_commands',
-		{ per_page: -1 }
-	);
+	// which creates the Y.Doc and registers room 'root/wpce_commands_{userId}'
+	// with the polling manager.
+	void resolveSelect(coreDataStore).getEntityRecords('root', entityName, {
+		per_page: -1,
+	});
 
 	// Periodically validate commands in the Y.Doc against the REST API.
 	// Stale data can persist from previous sessions since the sync server
@@ -252,12 +293,8 @@ async function startStaleCommandCleanup(): Promise<void> {
 		if (!commands || Object.keys(commands).length === 0) return;
 
 		try {
-			// Get current user ID to scope cleanup.
-			const currentUser = (await resolveSelect(
-				coreDataStore
-			).getCurrentUser()) as { id: number } | undefined;
-			if (!currentUser?.id) return;
-
+			// Per-user room: all commands belong to the current user,
+			// so no user_id filtering is needed.
 			const apiCommands = await apiFetch<Command[]>({
 				path: '/wpce/v1/commands',
 			});
@@ -270,9 +307,7 @@ async function startStaleCommandCleanup(): Promise<void> {
 			const cleaned: Record<string, unknown> = {};
 			let changed = false;
 			for (const [id, value] of Object.entries(commands)) {
-				const cmd = value as { user_id?: number };
-				if (cmd.user_id !== currentUser.id || activeIds.has(id)) {
-					// Keep: either belongs to another user, or is active for current user
+				if (activeIds.has(id)) {
 					cleaned[id] = value;
 				} else {
 					changed = true;
@@ -284,6 +319,7 @@ async function startStaleCommandCleanup(): Promise<void> {
 					stateMap.set('commands', cleaned);
 					stateMap.set('savedAt', Date.now());
 				});
+				commandDocDirty = true;
 			}
 		} catch {
 			// Best-effort
@@ -341,6 +377,11 @@ function applyCommandToStateMap(stateMap: YMap, command: Command): void {
 		stateMap.set('commands', commands);
 		stateMap.set('savedAt', Date.now());
 	});
+
+	// Signal the fetch interceptor to re-inject on the next poll.
+	// Without this, the interceptor's lastInjectedStateVector guard
+	// may skip re-injection after a queued write completes.
+	commandDocDirty = true;
 }
 
 /**
@@ -399,6 +440,8 @@ export function removeCommandFromSync(commandId: number): void {
 		stateMap.set('commands', commands);
 		stateMap.set('savedAt', Date.now());
 	});
+
+	commandDocDirty = true;
 }
 
 /**
@@ -465,13 +508,16 @@ export function subscribeToCommandSync(
  * browserType: 'Claudaborative Editing MCP'.
  */
 export function isMcpConnected(): boolean {
+	// Real-time check via Yjs awareness (authoritative once warmed up).
 	if (commandAwareness) {
-		// Real-time check via Yjs awareness (preferred once available)
 		const states = commandAwareness.getStates();
 		for (const [clientId, state] of states) {
-			// Skip our own client
 			if (clientId === commandAwareness.clientID) continue;
 			if (!state || typeof state !== 'object') continue;
+
+			// Any remote state means awareness has completed at least one
+			// sync round-trip — it's warm and can be trusted.
+			awarenessWarmedUp = true;
 
 			const info = (
 				state as { collaboratorInfo?: { browserType?: string } }
@@ -480,11 +526,17 @@ export function isMcpConnected(): boolean {
 				return true;
 			}
 		}
-		return false;
+
+		// If awareness has ever seen remote data, trust it — the MCP
+		// is genuinely not connected. Only fall through to the page-load
+		// hint when awareness is freshly initialized with no remote data.
+		if (awarenessWarmedUp) {
+			return false;
+		}
 	}
 
-	// Awareness not yet initialized — fall back to server-side hint
-	// injected via wp_add_inline_script on page load.
+	// Server-side hint injected via wp_add_inline_script on page load.
+	// Used only until awareness warms up (receives its first remote state).
 	const initialState = (
 		window as Window & {
 			wpceInitialState?: { mcpConnected?: boolean };
