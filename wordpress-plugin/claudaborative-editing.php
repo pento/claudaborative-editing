@@ -17,12 +17,19 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-if ( file_exists( plugin_dir_path( __FILE__ ) . 'vendor/autoload.php' ) ) {
-	require_once plugin_dir_path( __FILE__ ) . 'vendor/autoload.php';
-} else {
-	wp_trigger_error( 'Claudaborative_Editing', 'Autoload file not found. Please run `composer install`.', E_USER_ERROR );
-	return;
-}
+spl_autoload_register(
+	function ( $class_name ) {
+		$prefix = 'Claudaborative_Editing\\';
+		if ( 0 !== strpos( $class_name, $prefix ) ) {
+			return;
+		}
+		$relative_class = substr( $class_name, strlen( $prefix ) );
+		$file           = __DIR__ . '/includes/class-' . str_replace( '_', '-', strtolower( $relative_class ) ) . '.php';
+		if ( file_exists( $file ) ) {
+			require_once $file;
+		}
+	}
+);
 
 use Claudaborative_Editing\Command_Defs;
 use Claudaborative_Editing\Command_Formatter;

@@ -64,6 +64,9 @@ Source files are in the `wordpress-plugin/src/` directory. See the repository `R
 
 == Changelog ==
 
+= 0.4.1 =
+* Added missing autoload handling.
+
 = 0.4.0 =
 * Added pre-publish checks panel with AI-powered metadata suggestions (excerpt, categories, tags, slug).
 * Added compose tool for interactive post planning and outlining with two-way conversation support.
