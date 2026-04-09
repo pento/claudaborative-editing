@@ -279,8 +279,8 @@ export class SyncClient {
 			}
 		} catch (error) {
 			// If the sync server rejected a specific room (e.g. post was
-			// deleted/trashed mid-session), remove that room and retry
-			// immediately so other rooms aren't blocked.
+			// deleted/trashed mid-session), remove that room and continue
+			// polling the remaining rooms at the normal interval.
 			const invalidRoom = this.extractInvalidRoom(error);
 			if (invalidRoom && this.rooms.has(invalidRoom)) {
 				debugLog(
@@ -288,20 +288,23 @@ export class SyncClient {
 					'Removing invalid room from sync:',
 					invalidRoom
 				);
-				this.rooms.delete(invalidRoom);
+				this.removeRoom(invalidRoom);
 				if (this.rooms.size === 0) {
-					this.stop();
 					this.pollInProgress = false;
 					return;
 				}
 				// Restore un-sent updates for the REMAINING rooms only
 				this.restoreQueues(drainedQueues, invalidRoom);
-				// Notify the room's status callback so the session can react
+				// Reset backoff so the next poll runs at the normal interval
+				this.currentBackoff = this.anyCollaborators()
+					? this.config.pollingIntervalWithCollaborators
+					: this.config.pollingInterval;
+				// Notify with a descriptive error (not the raw API error,
+				// which would be misleading for a recovered room rejection)
 				this.onStatusChange?.(
 					'error',
-					error instanceof Error ? error : undefined
+					new Error(`Sync room removed: ${invalidRoom}`)
 				);
-				// Don't back off — the next poll without the bad room should succeed
 			} else {
 				// Generic error — restore all rooms' updates and back off
 				this.restoreQueues(drainedQueues);
