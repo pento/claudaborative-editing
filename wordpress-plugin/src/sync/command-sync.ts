@@ -205,9 +205,15 @@ export async function initCommandSync(): Promise<void> {
 	initialized = true;
 
 	// Resolve the current user ID for the per-user command room.
-	const currentUser = (await resolveSelect(
-		coreDataStore
-	).getCurrentUser()) as { id: number } | undefined;
+	let currentUser: { id: number } | undefined;
+	try {
+		currentUser = (await resolveSelect(coreDataStore).getCurrentUser()) as
+			| { id: number }
+			| undefined;
+	} catch {
+		initialized = false;
+		return;
+	}
 	if (!currentUser?.id) {
 		initialized = false;
 		return;
