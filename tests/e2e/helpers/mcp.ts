@@ -3,6 +3,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { expect } from '@playwright/test';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { listCommands } from './wp-env';
 
 const REPO_ROOT = path.resolve(
 	path.dirname(fileURLToPath(import.meta.url)),
@@ -99,12 +100,31 @@ export async function waitForMCPReady(client: Client): Promise<void> {
 	await expect
 		.poll(
 			async () => {
-				const status = await callToolOrThrow(client, 'wp_status');
-				return getToolText(status);
+				const s = await callToolOrThrow(client, 'wp_status');
+				return getToolText(s);
 			},
 			{ timeout: 30_000, intervals: [1000] }
 		)
 		.toContain(`(2 collaborators)`);
+
+	// Complete the open-post signal command. In production, Claude Code
+	// acknowledges this via the channel; in e2e tests we do it here.
+	// This has two effects:
+	// 1. Clears the pending signal from the Y.Doc, preventing write
+	//    conflicts when the MCP later updates other commands.
+	// 2. Sets _channelsVerified on the MCP's CommandHandler, enabling
+	//    auto-claim for subsequent commands (so tests may see commands
+	//    transition to "running" without an explicit claim step).
+	const commands = await listCommands();
+	const openPost = commands.find(
+		(c) => c.prompt === 'open-post' && c.status === 'pending'
+	);
+	if (openPost) {
+		await callToolOrThrow(client, 'wp_update_command_status', {
+			commandId: openPost.id,
+			status: 'completed',
+		});
+	}
 }
 
 /**

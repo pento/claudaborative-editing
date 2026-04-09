@@ -73,15 +73,10 @@ const test = base.extend<{
 			});
 
 			try {
-				// Log the browser in as the test user. Set values via JS to
-				// avoid interference from wp-login.php's focus timer script
-				// which fires at 200ms and can yank focus between fields.
-				await page.goto(`${WP_BASE_URL}/wp-login.php`);
-				await page.waitForSelector('#user_login');
-				await page.evaluate(`
-					document.getElementById('user_login').value = ${JSON.stringify(user.username)};
-					document.getElementById('user_pass').value = ${JSON.stringify(user.password)};
-				`);
+				// Log the browser in as the test user.
+				await page.goto(`${WP_BASE_URL}/wp-login.php?reauth=1`);
+				await page.fill('#user_login', user.username);
+				await page.fill('#user_pass', user.password);
 				await page.click('#wp-submit');
 				await page.waitForURL('**/wp-admin/**');
 
@@ -175,6 +170,10 @@ const test = base.extend<{
 
 			try {
 				await page.evaluate('window.localStorage.clear()');
+				// Navigate away from the editor so Gutenberg's sync polling
+				// stops before other fixtures tear down (deleting posts/users).
+				// Without this, a final poll can 403 on the just-deleted post.
+				await page.goto('about:blank');
 			} catch {
 				// noop — page may already be closed (e.g., skipped tests).
 			}
