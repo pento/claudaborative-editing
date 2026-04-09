@@ -1241,6 +1241,41 @@ describe('SyncClient', () => {
 			expect(payload.rooms[0].room).toBe(ROOM_A);
 		});
 
+		it('falls through to generic backoff when 403 body is not valid JSON', async () => {
+			const malformed403 = new WordPressApiError(
+				'Forbidden',
+				403,
+				'not valid json'
+			);
+
+			apiClient.sendSyncUpdate
+				.mockRejectedValueOnce(malformed403)
+				.mockResolvedValue(emptyRoomResponse(ROOM_A, 1));
+
+			const callbacks = createMockCallbacks();
+			syncClient.start(ROOM_A, 100, [], callbacks);
+
+			// First poll fails with unparseable body
+			await vi.advanceTimersByTimeAsync(0);
+			expect(callbacks.onStatusChange).toHaveBeenCalledWith(
+				'error',
+				malformed403
+			);
+
+			// Should use exponential backoff, not normal interval
+			apiClient.sendSyncUpdate.mockClear();
+			await vi.advanceTimersByTimeAsync(config.pollingInterval);
+			expect(apiClient.sendSyncUpdate).not.toHaveBeenCalled();
+			await vi.advanceTimersByTimeAsync(config.pollingInterval);
+			expect(apiClient.sendSyncUpdate).toHaveBeenCalledTimes(1);
+
+			// Room should still be intact
+			const payload = apiClient.sendSyncUpdate.mock
+				.calls[0][0] as SyncPayload;
+			expect(payload.rooms).toHaveLength(1);
+			expect(payload.rooms[0].room).toBe(ROOM_A);
+		});
+
 		it('stops polling when last room is removed', async () => {
 			apiClient.sendSyncUpdate.mockRejectedValueOnce(
 				make403Error(ROOM_A)
