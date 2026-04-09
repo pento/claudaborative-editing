@@ -980,6 +980,32 @@ class RestControllerTest extends \WP_UnitTestCase {
 	}
 
 	// -------------------------------------------------------------------------
+	// GET /wpce/v1/sync-entity/{id}
+	// -------------------------------------------------------------------------
+
+	/**
+	 * The sync-entity single endpoint returns the requested ID.
+	 */
+	public function test_sync_entity_single_returns_id() {
+		$request  = new \WP_REST_Request( 'GET', '/wpce/v1/sync-entity/42' );
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( [ 'id' => 42 ], $response->get_data() );
+	}
+
+	/**
+	 * A subscriber cannot access the sync-entity single endpoint.
+	 */
+	public function test_sync_entity_single_no_permission() {
+		wp_set_current_user( self::$subscriber_id );
+		$request  = new \WP_REST_Request( 'GET', '/wpce/v1/sync-entity/42' );
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 403, $response->get_status() );
+	}
+
+	// -------------------------------------------------------------------------
 	// PATCH /wpce/v1/commands/{id} — awaiting_input transitions
 	// -------------------------------------------------------------------------
 

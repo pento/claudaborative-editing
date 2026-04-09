@@ -175,39 +175,51 @@ describe('command-sync', () => {
 	});
 
 	describe('initCommandSync', () => {
-		it('registers entity and triggers resolver', () => {
+		it('registers entity and triggers resolver', async () => {
 			const mod = loadModule();
-			mod.initCommandSync();
+			await mod.initCommandSync();
 
 			expect(mockAddEntities).toHaveBeenCalledWith([
 				expect.objectContaining({
 					kind: 'root',
-					name: 'wpce_commands',
+					name: 'wpce_commands_1',
 					baseURL: '/wpce/v1/sync-entity',
-					plural: 'wpceCommands',
+					plural: 'wpce_commands_1',
 					syncConfig: expect.any(Object),
 				}),
 			]);
 
 			expect(mockGetEntityRecords).toHaveBeenCalledWith(
 				'root',
-				'wpce_commands',
+				'wpce_commands_1',
 				{ per_page: -1 }
 			);
 		});
 
-		it('only initializes once', () => {
+		it('only initializes once', async () => {
 			const mod = loadModule();
-			mod.initCommandSync();
-			mod.initCommandSync();
+			await mod.initCommandSync();
+			await mod.initCommandSync();
 
 			expect(mockAddEntities).toHaveBeenCalledTimes(1);
 			expect(mockGetEntityRecords).toHaveBeenCalledTimes(1);
 		});
+
+		it('bails out and resets when getCurrentUser returns undefined', async () => {
+			mockGetCurrentUser.mockResolvedValueOnce(undefined);
+			const mod = loadModule();
+
+			await mod.initCommandSync();
+			expect(mockAddEntities).not.toHaveBeenCalled();
+
+			// Should allow retry after reset.
+			await mod.initCommandSync();
+			expect(mockAddEntities).toHaveBeenCalledTimes(1);
+		});
 	});
 
 	describe('connection limit filter', () => {
-		it('registers a filter that raises the limit for the command room', () => {
+		it('registers a filter that raises the limit for per-user command rooms', () => {
 			loadModule();
 
 			expect(mockAddFilter).toHaveBeenCalledWith(
@@ -221,7 +233,9 @@ describe('command-sync', () => {
 					c[0] === 'sync.pollingProvider.maxClientsPerRoom'
 			)![2] as (limit: number, room: string) => number;
 
-			expect(filterFn(3, 'root/wpce_commands')).toBe(100);
+			// Per-user room with user ID should match.
+			expect(filterFn(3, 'root/wpce_commands_1')).toBe(100);
+			expect(filterFn(3, 'root/wpce_commands_99')).toBe(100);
 		});
 
 		it('passes through the default limit for other rooms', () => {
@@ -233,30 +247,32 @@ describe('command-sync', () => {
 			)![2] as (limit: number, room: string) => number;
 
 			expect(filterFn(3, 'postType/post:123')).toBe(3);
+			// Room name without colon suffix should not match the prefix.
+			expect(filterFn(3, 'root/wpce_commands')).toBe(3);
 		});
 	});
 
 	describe('syncConfig callbacks', () => {
-		it('applyChangesToCRDTDoc is a no-op', () => {
+		it('applyChangesToCRDTDoc is a no-op', async () => {
 			const mod = loadModule();
-			mod.initCommandSync();
+			await mod.initCommandSync();
 
 			const syncConfig = mockAddEntities.mock.calls[0][0][0].syncConfig;
 			// Should not throw.
 			expect(() => syncConfig.applyChangesToCRDTDoc()).not.toThrow();
 		});
 
-		it('getChangesFromCRDTDoc returns empty object', () => {
+		it('getChangesFromCRDTDoc returns empty object', async () => {
 			const mod = loadModule();
-			mod.initCommandSync();
+			await mod.initCommandSync();
 
 			const syncConfig = mockAddEntities.mock.calls[0][0][0].syncConfig;
 			expect(syncConfig.getChangesFromCRDTDoc()).toEqual({});
 		});
 
-		it('createAwareness captures doc and returns Awareness instance', () => {
+		it('createAwareness captures doc and returns Awareness instance', async () => {
 			const mod = loadModule();
-			mod.initCommandSync();
+			await mod.initCommandSync();
 
 			const syncConfig = mockAddEntities.mock.calls[0][0][0].syncConfig;
 			const doc = new MockYDoc();
@@ -273,9 +289,9 @@ describe('command-sync', () => {
 	});
 
 	describe('writeCommandToSync', () => {
-		it('writes to state map when commandDoc is available', () => {
+		it('writes to state map when commandDoc is available', async () => {
 			const mod = loadModule();
-			mod.initCommandSync();
+			await mod.initCommandSync();
 
 			// Simulate the Y.Doc being captured by invoking the syncConfig.createAwareness callback.
 			const syncConfig = mockAddEntities.mock.calls[0][0][0].syncConfig;
@@ -293,9 +309,9 @@ describe('command-sync', () => {
 			expect(stateMap.get('savedAt')).toEqual(expect.any(Number));
 		});
 
-		it('removes terminal commands instead of writing them', () => {
+		it('removes terminal commands instead of writing them', async () => {
 			const mod = loadModule();
-			mod.initCommandSync();
+			await mod.initCommandSync();
 
 			const syncConfig = mockAddEntities.mock.calls[0][0][0].syncConfig;
 			const doc = new MockYDoc();
@@ -328,7 +344,7 @@ describe('command-sync', () => {
 			expect(() => mod.writeCommandToSync(MOCK_COMMAND)).not.toThrow();
 		});
 
-		it('warns and drops pending writes after max retries when Y.Doc never becomes available', () => {
+		it('warns and drops pending writes after max retries when Y.Doc never becomes available', async () => {
 			jest.useFakeTimers();
 			const warnSpy = jest
 				.spyOn(console, 'warn')
@@ -336,7 +352,7 @@ describe('command-sync', () => {
 
 			try {
 				const mod = loadModule();
-				mod.initCommandSync();
+				await mod.initCommandSync();
 
 				// Call writeCommandToSync BEFORE createAwareness provides the doc.
 				// The Y.Doc never becomes available, so retries will exhaust.
@@ -357,12 +373,12 @@ describe('command-sync', () => {
 			}
 		});
 
-		it('retries writing when commandDoc becomes available after initial call', () => {
+		it('retries writing when commandDoc becomes available after initial call', async () => {
 			jest.useFakeTimers();
 
 			try {
 				const mod = loadModule();
-				mod.initCommandSync();
+				await mod.initCommandSync();
 
 				// Call writeCommandToSync BEFORE createAwareness provides the doc.
 				// The first attempt fails (stateMap is null), starting the retry interval.
@@ -393,9 +409,9 @@ describe('command-sync', () => {
 	});
 
 	describe('getCommandsFromSync', () => {
-		it('reads from state map', () => {
+		it('reads from state map', async () => {
 			const mod = loadModule();
-			mod.initCommandSync();
+			await mod.initCommandSync();
 
 			const syncConfig = mockAddEntities.mock.calls[0][0][0].syncConfig;
 			const doc = new MockYDoc();
@@ -408,9 +424,9 @@ describe('command-sync', () => {
 			expect(commands['42']).toEqual(MOCK_COMMAND);
 		});
 
-		it('returns empty object when state map has no commands', () => {
+		it('returns empty object when state map has no commands', async () => {
 			const mod = loadModule();
-			mod.initCommandSync();
+			await mod.initCommandSync();
 
 			const syncConfig = mockAddEntities.mock.calls[0][0][0].syncConfig;
 			const doc = new MockYDoc();
@@ -449,28 +465,32 @@ describe('command-sync', () => {
 			expect(mod.isMcpConnected()).toBe(false);
 		});
 
-		it('awareness takes precedence over wpceInitialState', () => {
+		it('falls through to wpceInitialState when awareness has no MCP', async () => {
 			// Set the server-side hint to true…
 			(window as any).wpceInitialState = { mcpConnected: true };
 
 			const mod = loadModule();
-			mod.initCommandSync();
+			await mod.initCommandSync();
 
 			const syncConfig = mockAddEntities.mock.calls[0][0][0].syncConfig;
 			const doc = new MockYDoc();
 			syncConfig.createAwareness(doc);
 
-			// …but awareness has no MCP client, so it should return false.
+			// Awareness has a non-MCP client — falls through to the hint.
 			capturedAwareness!._setRemoteState(99, {
 				collaboratorInfo: { browserType: 'Chrome' },
 			});
 
+			expect(mod.isMcpConnected()).toBe(true);
+
+			// Without the server-side hint, returns false.
+			delete (window as any).wpceInitialState;
 			expect(mod.isMcpConnected()).toBe(false);
 		});
 
-		it('returns false when no remote clients have MCP browserType', () => {
+		it('returns false when no remote clients have MCP browserType', async () => {
 			const mod = loadModule();
-			mod.initCommandSync();
+			await mod.initCommandSync();
 
 			const syncConfig = mockAddEntities.mock.calls[0][0][0].syncConfig;
 			const doc = new MockYDoc();
@@ -484,9 +504,9 @@ describe('command-sync', () => {
 			expect(mod.isMcpConnected()).toBe(false);
 		});
 
-		it('returns true when a remote client has MCP browserType', () => {
+		it('returns true when a remote client has MCP browserType', async () => {
 			const mod = loadModule();
-			mod.initCommandSync();
+			await mod.initCommandSync();
 
 			const syncConfig = mockAddEntities.mock.calls[0][0][0].syncConfig;
 			const doc = new MockYDoc();
@@ -501,9 +521,9 @@ describe('command-sync', () => {
 			expect(mod.isMcpConnected()).toBe(true);
 		});
 
-		it('skips states with null or non-object values', () => {
+		it('skips states with null or non-object values', async () => {
 			const mod = loadModule();
-			mod.initCommandSync();
+			await mod.initCommandSync();
 
 			const syncConfig = mockAddEntities.mock.calls[0][0][0].syncConfig;
 			const doc = new MockYDoc();
@@ -516,9 +536,9 @@ describe('command-sync', () => {
 			expect(mod.isMcpConnected()).toBe(false);
 		});
 
-		it('ignores own client ID', () => {
+		it('ignores own client ID', async () => {
 			const mod = loadModule();
-			mod.initCommandSync();
+			await mod.initCommandSync();
 
 			const syncConfig = mockAddEntities.mock.calls[0][0][0].syncConfig;
 			const doc = new MockYDoc();
@@ -537,9 +557,9 @@ describe('command-sync', () => {
 	});
 
 	describe('subscribeToMcpConnection', () => {
-		it('returns unsubscribe function', () => {
+		it('returns unsubscribe function', async () => {
 			const mod = loadModule();
-			mod.initCommandSync();
+			await mod.initCommandSync();
 
 			const syncConfig = mockAddEntities.mock.calls[0][0][0].syncConfig;
 			const doc = new MockYDoc();
@@ -555,9 +575,9 @@ describe('command-sync', () => {
 			expect(callback).toHaveBeenCalledWith(false);
 		});
 
-		it('calls callback when awareness changes', () => {
+		it('calls callback when awareness changes', async () => {
 			const mod = loadModule();
-			mod.initCommandSync();
+			await mod.initCommandSync();
 
 			const syncConfig = mockAddEntities.mock.calls[0][0][0].syncConfig;
 			const doc = new MockYDoc();
@@ -580,9 +600,9 @@ describe('command-sync', () => {
 			expect(callback).toHaveBeenCalledWith(true);
 		});
 
-		it('stops calling callback after unsubscribe', () => {
+		it('stops calling callback after unsubscribe', async () => {
 			const mod = loadModule();
-			mod.initCommandSync();
+			await mod.initCommandSync();
 
 			const syncConfig = mockAddEntities.mock.calls[0][0][0].syncConfig;
 			const doc = new MockYDoc();
@@ -644,10 +664,10 @@ describe('command-sync', () => {
 			jest.useRealTimers();
 		});
 
-		it('attaches to awareness once it becomes available', () => {
+		it('attaches to awareness once it becomes available', async () => {
 			jest.useFakeTimers();
 			const mod = loadModule();
-			mod.initCommandSync();
+			await mod.initCommandSync();
 
 			// Subscribe before awareness is created.
 			const callback = jest.fn();
@@ -661,7 +681,8 @@ describe('command-sync', () => {
 			// Advance timers to trigger the polling interval.
 			jest.advanceTimersByTime(200);
 
-			// The callback should have been called with the initial state.
+			// The callback should have been called with the initial state
+			// (falls through to wpceInitialState which defaults to false).
 			expect(callback).toHaveBeenCalledWith(false);
 
 			jest.useRealTimers();
@@ -669,9 +690,9 @@ describe('command-sync', () => {
 	});
 
 	describe('removeCommandFromSync', () => {
-		it('removes a specific command from the state map', () => {
+		it('removes a specific command from the state map', async () => {
 			const mod = loadModule();
-			mod.initCommandSync();
+			await mod.initCommandSync();
 
 			const syncConfig = mockAddEntities.mock.calls[0][0][0].syncConfig;
 			const doc = new MockYDoc();
@@ -719,7 +740,7 @@ describe('command-sync', () => {
 			window.fetch = fetchSpy;
 
 			const mod = loadModule();
-			mod.initCommandSync();
+			await mod.initCommandSync();
 
 			const syncConfig = mockAddEntities.mock.calls[0][0][0].syncConfig;
 			const doc = new MockYDoc();
@@ -730,14 +751,14 @@ describe('command-sync', () => {
 			// Put some data in the doc so it has state to encode.
 			doc.getMap('state').set('commands', { '42': MOCK_COMMAND });
 
-			// Build a wp-sync request body with the command room having empty updates.
+			// Build a wp-sync request body with the per-user command room having empty updates.
 			const body = JSON.stringify({
 				rooms: [
 					{
 						room: 'postType/post:123',
 						updates: [{ type: 'update', data: 'abc' }],
 					},
-					{ room: 'root/wpce_commands', updates: [] },
+					{ room: 'root/wpce_commands_1', updates: [] },
 				],
 			});
 
@@ -759,7 +780,7 @@ describe('command-sync', () => {
 				}>;
 			};
 			const cmdRoom = passedBody.rooms.find(
-				(r) => r.room === 'root/wpce_commands'
+				(r) => r.room === 'root/wpce_commands_1'
 			);
 			expect(cmdRoom).toBeDefined();
 			expect(cmdRoom!.updates).toHaveLength(1);
@@ -775,7 +796,7 @@ describe('command-sync', () => {
 			window.fetch = fetchSpy;
 
 			const mod = loadModule();
-			mod.initCommandSync();
+			await mod.initCommandSync();
 
 			const syncConfig = mockAddEntities.mock.calls[0][0][0].syncConfig;
 			const doc = new MockYDoc();
@@ -784,7 +805,7 @@ describe('command-sync', () => {
 			const body = JSON.stringify({
 				rooms: [
 					{
-						room: 'root/wpce_commands',
+						room: 'root/wpce_commands_1',
 						updates: [{ type: 'update', data: 'existing' }],
 					},
 				],
@@ -808,7 +829,7 @@ describe('command-sync', () => {
 				}>;
 			};
 			const cmdRoom = passedBody.rooms.find(
-				(r) => r.room === 'root/wpce_commands'
+				(r) => r.room === 'root/wpce_commands_1'
 			);
 			expect(cmdRoom!.updates).toHaveLength(1);
 			expect(cmdRoom!.updates[0].type).toBe('update');
@@ -823,7 +844,7 @@ describe('command-sync', () => {
 			window.fetch = fetchSpy;
 
 			const mod = loadModule();
-			mod.initCommandSync();
+			await mod.initCommandSync();
 
 			const syncConfig = mockAddEntities.mock.calls[0][0][0].syncConfig;
 			const doc1 = new MockYDoc();
@@ -848,7 +869,7 @@ describe('command-sync', () => {
 			window.fetch = fetchSpy;
 
 			const mod = loadModule();
-			mod.initCommandSync();
+			await mod.initCommandSync();
 
 			const syncConfig = mockAddEntities.mock.calls[0][0][0].syncConfig;
 			const doc = new MockYDoc();
@@ -896,7 +917,7 @@ describe('command-sync', () => {
 			]);
 
 			const mod = loadModule();
-			mod.initCommandSync();
+			await mod.initCommandSync();
 
 			const syncConfig = mockAddEntities.mock.calls[0][0][0].syncConfig;
 			const doc = new MockYDoc();
@@ -912,7 +933,7 @@ describe('command-sync', () => {
 			// The cleanup polls for the doc every 200ms. Advance to trigger it.
 			jest.advanceTimersByTime(200);
 
-			// Flush the getCurrentUser and apiFetch promises.
+			// Flush the apiFetch promise.
 			await Promise.resolve();
 			await Promise.resolve();
 			await Promise.resolve();
@@ -930,7 +951,7 @@ describe('command-sync', () => {
 			jest.useRealTimers();
 		});
 
-		it('preserves commands belonging to other users', async () => {
+		it('removes all stale commands regardless of user_id in per-user room', async () => {
 			jest.useFakeTimers();
 
 			window.fetch = jest.fn().mockResolvedValue({
@@ -942,17 +963,18 @@ describe('command-sync', () => {
 			const apiFetchMock = require('@wordpress/api-fetch') as {
 				default: jest.Mock;
 			};
-			// The API returns no active commands for the current user.
+			// The API returns no active commands.
 			apiFetchMock.default.mockResolvedValue([]);
 
 			const mod = loadModule();
-			mod.initCommandSync();
+			await mod.initCommandSync();
 
 			const syncConfig = mockAddEntities.mock.calls[0][0][0].syncConfig;
 			const doc = new MockYDoc();
 			syncConfig.createAwareness(doc);
 
-			// Add commands from two users — 42 (current user) and 43 (other user).
+			// Add commands with different user_id values — in per-user rooms,
+			// all commands belong to the room owner, so all should be cleaned.
 			const stateMap = doc.getMap('state');
 			stateMap.set('commands', {
 				'42': { ...MOCK_COMMAND, id: 42, user_id: 1 },
@@ -961,20 +983,19 @@ describe('command-sync', () => {
 
 			jest.advanceTimersByTime(200);
 
-			// Flush the getCurrentUser and apiFetch promises.
+			// Flush the apiFetch promise.
 			await Promise.resolve();
 			await Promise.resolve();
 			await Promise.resolve();
 			await Promise.resolve();
 
-			// Command 42 should be removed (current user, not active).
-			// Command 43 should be preserved (belongs to another user).
+			// Both commands should be removed (neither is active in the API).
 			const commands = stateMap.get('commands') as Record<
 				string,
 				unknown
 			>;
 			expect(commands['42']).toBeUndefined();
-			expect(commands['43']).toBeDefined();
+			expect(commands['43']).toBeUndefined();
 
 			jest.useRealTimers();
 		});
@@ -1007,7 +1028,7 @@ describe('command-sync', () => {
 			apiFetchMock.default.mockResolvedValue([]);
 
 			const mod = loadModule();
-			mod.initCommandSync();
+			await mod.initCommandSync();
 
 			const syncConfig = mockAddEntities.mock.calls[0][0][0].syncConfig;
 			const doc = new MockYDoc();
@@ -1044,7 +1065,7 @@ describe('command-sync', () => {
 			apiFetchMock.default.mockResolvedValue([]);
 
 			const mod = loadModule();
-			mod.initCommandSync();
+			await mod.initCommandSync();
 
 			// Do NOT call createAwareness — the doc never becomes available.
 
@@ -1071,7 +1092,7 @@ describe('command-sync', () => {
 			window.fetch = originalFetch;
 		});
 
-		it('removes awareness change handler on unsubscribe after polling attaches', () => {
+		it('removes awareness change handler on unsubscribe after polling attaches', async () => {
 			jest.useFakeTimers();
 
 			window.fetch = jest.fn().mockResolvedValue({
@@ -1080,7 +1101,7 @@ describe('command-sync', () => {
 			});
 
 			const mod = loadModule();
-			mod.initCommandSync();
+			await mod.initCommandSync();
 
 			// Subscribe BEFORE awareness is created — enters the polling fallback.
 			const callback = jest.fn();
@@ -1094,13 +1115,13 @@ describe('command-sync', () => {
 			// Advance timers so the polling interval finds awareness.
 			jest.advanceTimersByTime(200);
 
-			// The callback should have been called with initial state.
+			// The callback should have been called with the initial state.
 			expect(callback).toHaveBeenCalledWith(false);
 
 			// Unsubscribe — this should call off('change', handler).
 			unsubscribe();
 
-			// Trigger a change — callback should NOT be called again.
+			// Trigger a change — callback should NOT be called (unsubscribed).
 			callback.mockClear();
 			capturedAwareness!._triggerChange();
 			expect(callback).not.toHaveBeenCalled();
@@ -1110,9 +1131,9 @@ describe('command-sync', () => {
 	});
 
 	describe('subscribeToCommandSync', () => {
-		it('returns unsubscribe function', () => {
+		it('returns unsubscribe function', async () => {
 			const mod = loadModule();
-			mod.initCommandSync();
+			await mod.initCommandSync();
 
 			const syncConfig = mockAddEntities.mock.calls[0][0][0].syncConfig;
 			const doc = new MockYDoc();
@@ -1126,10 +1147,10 @@ describe('command-sync', () => {
 			unsubscribe();
 		});
 
-		it('calls callback when state map commands change', () => {
+		it('calls callback when state map commands change', async () => {
 			jest.useFakeTimers();
 			const mod = loadModule();
-			mod.initCommandSync();
+			await mod.initCommandSync();
 
 			const syncConfig = mockAddEntities.mock.calls[0][0][0].syncConfig;
 			const doc = new MockYDoc();
@@ -1150,10 +1171,10 @@ describe('command-sync', () => {
 			jest.useRealTimers();
 		});
 
-		it('does not call callback when commands have not changed', () => {
+		it('does not call callback when commands have not changed', async () => {
 			jest.useFakeTimers();
 			const mod = loadModule();
-			mod.initCommandSync();
+			await mod.initCommandSync();
 
 			const syncConfig = mockAddEntities.mock.calls[0][0][0].syncConfig;
 			const doc = new MockYDoc();
@@ -1198,10 +1219,10 @@ describe('command-sync', () => {
 			jest.useRealTimers();
 		});
 
-		it('stops observing after unsubscribe', () => {
+		it('stops observing after unsubscribe', async () => {
 			jest.useFakeTimers();
 			const mod = loadModule();
-			mod.initCommandSync();
+			await mod.initCommandSync();
 
 			const syncConfig = mockAddEntities.mock.calls[0][0][0].syncConfig;
 			const doc = new MockYDoc();

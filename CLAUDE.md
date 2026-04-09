@@ -26,7 +26,7 @@ Claude Code  <--stdio-->  MCP Server (Node.js)  <--HTTP polling-->  WordPress
                            ├─ Sync client (polling loop)
                            ├─ Block converter (Y.Doc ↔ Block model)
                            ├─ Awareness (presence as "Claude")
-                           └─ Command listener (Yjs room)              root/wpce_commands
+                           └─ Command listener (Yjs room)              root/wpce_commands_{userId}
 ```
 
 ### Source Layout
