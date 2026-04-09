@@ -184,9 +184,7 @@ describe('CommandClient', () => {
 			);
 		});
 
-		it('schedules removal from Y.Map for terminal statuses', async () => {
-			vi.useFakeTimers();
-
+		it('keeps terminal commands in Y.Map for browser-side cleanup', async () => {
 			const { localDoc } = createSyncedDocs();
 			const documentMap = localDoc.getMap('document');
 			client.startObserving(documentMap);
@@ -196,20 +194,16 @@ describe('CommandClient', () => {
 
 			await client.updateCommandStatus(7, 'completed');
 
-			// Command should be written to the Y.Map immediately
-			let commands = documentMap.get('commands') as Record<
+			// Terminal command should persist in the Y.Map (browser-side
+			// stale cleanup handles removal after processing).
+			const commands = documentMap.get('commands') as Record<
 				string,
 				unknown
 			>;
 			expect(commands['7']).toBeDefined();
-
-			// After 5s, the command should be removed
-			vi.advanceTimersByTime(5000);
-
-			commands = documentMap.get('commands') as Record<string, unknown>;
-			expect(commands['7']).toBeUndefined();
-
-			vi.useRealTimers();
+			expect((commands['7'] as { status: string }).status).toBe(
+				'completed'
+			);
 		});
 
 		it('does not schedule removal for non-terminal statuses', async () => {
@@ -240,9 +234,7 @@ describe('CommandClient', () => {
 			vi.useRealTimers();
 		});
 
-		it('schedules removal for failed terminal status', async () => {
-			vi.useFakeTimers();
-
+		it('keeps failed commands in Y.Map for browser-side cleanup', async () => {
 			const { localDoc } = createSyncedDocs();
 			const documentMap = localDoc.getMap('document');
 			client.startObserving(documentMap);
@@ -252,18 +244,12 @@ describe('CommandClient', () => {
 
 			await client.updateCommandStatus(9, 'failed', 'Something broke');
 
-			let commands = documentMap.get('commands') as Record<
+			const commands = documentMap.get('commands') as Record<
 				string,
 				unknown
 			>;
 			expect(commands['9']).toBeDefined();
-
-			vi.advanceTimersByTime(5000);
-
-			commands = documentMap.get('commands') as Record<string, unknown>;
-			expect(commands['9']).toBeUndefined();
-
-			vi.useRealTimers();
+			expect((commands['9'] as { status: string }).status).toBe('failed');
 		});
 
 		it('writes the updated command to the Y.Map', async () => {

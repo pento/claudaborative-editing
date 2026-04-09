@@ -158,12 +158,18 @@ function reducer(
 			};
 
 		case 'CLEAR_ACTIVE_COMMAND': {
-			const history = action.command
-				? [action.command, ...state.commands.history].slice(
-						0,
-						MAX_HISTORY
-					)
-				: state.commands.history;
+			let history = state.commands.history;
+			if (action.command) {
+				// Deduplicate: replace existing entry for this command ID,
+				// or prepend if new. Prevents repeated sync updates from
+				// piling up duplicate history entries.
+				const exists = history.some((c) => c.id === action.command!.id);
+				history = exists
+					? history.map((c) =>
+							c.id === action.command!.id ? action.command! : c
+						)
+					: [action.command, ...history].slice(0, MAX_HISTORY);
+			}
 
 			return {
 				...state,
@@ -401,11 +407,9 @@ const actions = {
 
 				const active = commands.find(
 					(command) =>
-						!(
-							command.prompt in COMMANDS &&
-							COMMANDS[command.prompt as CommandSlug].signal ===
-								true
-						) &&
+						command.prompt in COMMANDS &&
+						COMMANDS[command.prompt as CommandSlug].signal !==
+							true &&
 						['pending', 'running', 'awaiting_input'].includes(
 							command.status
 						)
@@ -499,10 +503,8 @@ const actions = {
 				(cmd) =>
 					cmd.post_id === postId &&
 					cmd.user_id === userId &&
-					!(
-						cmd.prompt in COMMANDS &&
-						COMMANDS[cmd.prompt as CommandSlug].signal === true
-					) &&
+					cmd.prompt in COMMANDS &&
+					COMMANDS[cmd.prompt as CommandSlug].signal !== true &&
 					!TERMINAL_STATUSES.includes(cmd.status)
 			);
 
@@ -514,15 +516,18 @@ const actions = {
 				return;
 			}
 
-			// Check if a command just reached terminal status.
-			const terminal = Object.values(commands).find(
+			// Dispatch all terminal non-signal commands so none are missed
+			// when the Y.Doc contains multiple completed commands.
+			const terminals = Object.values(commands).filter(
 				(cmd) =>
 					cmd.post_id === postId &&
 					cmd.user_id === userId &&
+					cmd.prompt in COMMANDS &&
+					COMMANDS[cmd.prompt as CommandSlug].signal !== true &&
 					TERMINAL_STATUSES.includes(cmd.status)
 			);
 
-			if (terminal) {
+			for (const terminal of terminals) {
 				dispatch({
 					type: 'CLEAR_ACTIVE_COMMAND',
 					command: terminal,

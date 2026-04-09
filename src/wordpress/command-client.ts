@@ -10,11 +10,7 @@
 import * as Y from 'yjs';
 import { debugLog, isDebugEnabled } from '../debug-log.js';
 import type { WordPressApiClient } from './api-client.js';
-import {
-	TERMINAL_STATUSES,
-	type CommandSlug,
-	type CommandStatus,
-} from '../../shared/commands.js';
+import { type CommandSlug, type CommandStatus } from '../../shared/commands.js';
 
 /**
  * Transaction origin used for local writes. Must match the origin
@@ -230,15 +226,11 @@ export class CommandClient {
 		);
 
 		// Mirror the updated state to the Y.Doc so the browser sees it.
+		// Terminal commands are NOT removed here — the browser-side stale
+		// cleanup handles removal after processing. Removing on a timer
+		// risks the browser never seeing the terminal state if its polling
+		// batches the write and removal into a single update.
 		this.writeCommandToDoc(command);
-
-		// Clean up terminal commands after a delay so the browser can
-		// see the terminal status (for toast notifications) before removal.
-		if (TERMINAL_STATUSES.includes(command.status)) {
-			setTimeout(() => {
-				this.removeCommandFromDoc(command.id);
-			}, 5000);
-		}
 
 		return command;
 	}
