@@ -790,6 +790,20 @@ class REST_Controller extends \WP_REST_Controller {
 	}
 
 	/**
+	 * Check whether the MCP server was recently seen for a given user.
+	 *
+	 * @param int $user_id The user ID.
+	 * @return bool True if MCP was seen within the timeout window.
+	 */
+	public static function is_mcp_connected_for_user( $user_id ) {
+		$last_seen = get_transient( 'wpce_mcp_last_seen_' . $user_id );
+		if ( ! $last_seen ) {
+			return false;
+		}
+		return ( time() - strtotime( $last_seen ) ) < self::MCP_TIMEOUT_SECONDS;
+	}
+
+	/**
 	 * Append a message to the conversation history in result_data.
 	 *
 	 * Reads the current result_data, ensures a messages array exists,

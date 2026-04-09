@@ -88,6 +88,20 @@ class Claudaborative_Editing {
 			true
 		);
 
+		// Detect MCP connection at page load and reduce Gutenberg's solo
+		// polling interval from 4s to 1s. This filter MUST run before
+		// @wordpress/sync evaluates its config, so we inline it after
+		// wp-hooks (which loads before wp-sync in the dependency graph).
+		$mcp_connected = REST_Controller::is_mcp_connected_for_user( get_current_user_id() );
+		wp_add_inline_script(
+			'wp-hooks',
+			'window.wpceInitialState = ' . wp_json_encode( array( 'mcpConnected' => $mcp_connected ) ) . ';' .
+			( $mcp_connected
+				? "wp.hooks.addFilter('sync.pollingManager.pollingInterval','claudaborative-editing/polling-interval',function(){return 1000;});"
+				: ''
+			)
+		);
+
 		$style_path = __DIR__ . '/build/style-index.css';
 
 		if ( file_exists( $style_path ) ) {
@@ -103,6 +117,42 @@ class Claudaborative_Editing {
 			'claudaborative-editing-ai-actions',
 			'claudaborative-editing'
 		);
+	}
+
+	/**
+	 * Track MCP presence on sync endpoint requests.
+	 *
+	 * When the MCP server polls /wp-sync/v1/updates, it sends an
+	 * X-WPCE-Client: mcp header. We detect this and update the
+	 * last-seen transient so the editor can detect MCP on page load.
+	 *
+	 * @param mixed            $result  Response to replace the requested version with.
+	 * @param \WP_REST_Server  $server  Server instance.
+	 * @param \WP_REST_Request $request Request used to generate the response.
+	 * @return mixed Unmodified $result.
+	 */
+	public static function track_mcp_sync( $result, $server, $request ) {
+		if ( '/wp-sync/v1/updates' !== $request->get_route() ) {
+			return $result;
+		}
+		if ( 'mcp' !== $request->get_header( 'x_wpce_client' ) ) {
+			return $result;
+		}
+		$user_id = get_current_user_id();
+		if ( ! $user_id ) {
+			return $result;
+		}
+
+		// Throttle transient writes — only update if stale or missing.
+		if ( ! REST_Controller::is_mcp_connected_for_user( $user_id ) ) {
+			set_transient(
+				'wpce_mcp_last_seen_' . $user_id,
+				gmdate( 'Y-m-d\TH:i:s\Z' ),
+				REST_Controller::MCP_TIMEOUT_SECONDS * 2
+			);
+		}
+
+		return $result;
 	}
 
 	/**
@@ -155,6 +205,7 @@ add_action( 'init', [ 'Claudaborative_Editing', 'register' ] );
 add_action( 'rest_api_init', [ 'Claudaborative_Editing', 'register_rest_routes' ] );
 add_action( 'enqueue_block_editor_assets', [ 'Claudaborative_Editing', 'enqueue_editor_assets' ] );
 add_filter( 'rest_prepare_comment', [ 'Claudaborative_Editing', 'label_mcp_notes' ], 10, 3 );
+add_filter( 'rest_pre_dispatch', [ 'Claudaborative_Editing', 'track_mcp_sync' ], 10, 3 );
 
 register_activation_hook( __FILE__, [ 'Claudaborative_Editing', 'activate' ] );
 register_deactivation_hook( __FILE__, 'flush_rewrite_rules' );

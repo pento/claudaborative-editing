@@ -356,6 +356,7 @@ export class WordPressApiClient {
 		return this.apiFetch<SyncResponse>('/wp-sync/v1/updates', {
 			method: 'POST',
 			body: JSON.stringify(payload),
+			headers: { 'X-WPCE-Client': 'mcp' },
 		});
 	}
 
