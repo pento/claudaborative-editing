@@ -216,6 +216,20 @@ describe('command-sync', () => {
 			await mod.initCommandSync();
 			expect(mockAddEntities).toHaveBeenCalledTimes(1);
 		});
+
+		it('bails out and resets when getCurrentUser rejects', async () => {
+			mockGetCurrentUser.mockRejectedValueOnce(
+				new Error('network error')
+			);
+			const mod = loadModule();
+
+			await mod.initCommandSync();
+			expect(mockAddEntities).not.toHaveBeenCalled();
+
+			// Should allow retry after reset.
+			await mod.initCommandSync();
+			expect(mockAddEntities).toHaveBeenCalledTimes(1);
+		});
 	});
 
 	describe('connection limit filter', () => {
