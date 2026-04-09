@@ -82,11 +82,11 @@ const test = base.extend<{
 
 				await use(user);
 			} finally {
-				// Navigate away from the editor so Gutenberg's sync polling
-				// stops before we delete the user (and draftPost deletes
-				// the post). Without this, a final poll can 403 on a
-				// just-deleted post room.
+				// Clear localStorage while still on the WordPress origin,
+				// then navigate away so Gutenberg's sync polling stops
+				// before we delete the user.
 				try {
+					await page.evaluate('window.localStorage.clear()');
 					await page.goto('about:blank');
 				} catch {
 					// Page may already be closed.
@@ -177,11 +177,8 @@ const test = base.extend<{
 			// eslint-disable-next-line no-console
 			console.error = origError;
 
-			try {
-				await page.evaluate('window.localStorage.clear()');
-			} catch {
-				// noop — page may already be closed (e.g., skipped tests).
-			}
+			// localStorage is cleared in testUser's teardown (before
+			// about:blank navigation) while still on the WP origin.
 		}
 	},
 });
