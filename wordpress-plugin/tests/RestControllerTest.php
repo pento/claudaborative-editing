@@ -1517,10 +1517,43 @@ class RestControllerTest extends \WP_UnitTestCase {
 	// -------------------------------------------------------------------------
 
 	/**
+	 * Path to the build asset file used by enqueue_editor_assets().
+	 *
+	 * @return string
+	 */
+	private static function asset_file_path() {
+		return dirname( __DIR__ ) . '/build/index.asset.php';
+	}
+
+	/**
+	 * Create a minimal build asset file so enqueue_editor_assets() doesn't
+	 * bail early. The file is gitignored and may not exist in CI.
+	 *
+	 * @return void
+	 */
+	private function ensure_asset_file(): void {
+		$path = self::asset_file_path();
+		if ( ! file_exists( $path ) ) {
+			// Ensure directory exists.
+			wp_mkdir_p( dirname( $path ) );
+			global $wp_filesystem;
+			if ( ! $wp_filesystem ) {
+				require_once ABSPATH . 'wp-admin/includes/file.php';
+				WP_Filesystem();
+			}
+			$wp_filesystem->put_contents(
+				$path,
+				"<?php return array('dependencies' => array('wp-hooks'), 'version' => 'test');\n"
+			);
+		}
+	}
+
+	/**
 	 * enqueue_editor_assets sets mcpConnected: false and does NOT add the
 	 * polling interval filter when MCP is not connected.
 	 */
 	public function test_enqueue_editor_assets_mcp_disconnected() {
+		$this->ensure_asset_file();
 		delete_transient( 'wpce_mcp_last_seen_' . self::$editor_id );
 
 		// Reset WP_Scripts and re-register defaults so wp-hooks is available
@@ -1546,6 +1579,7 @@ class RestControllerTest extends \WP_UnitTestCase {
 	 * interval filter when MCP IS connected.
 	 */
 	public function test_enqueue_editor_assets_mcp_connected() {
+		$this->ensure_asset_file();
 		set_transient(
 			'wpce_mcp_last_seen_' . self::$editor_id,
 			gmdate( 'Y-m-d\TH:i:s\Z' ),
