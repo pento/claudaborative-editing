@@ -1,11 +1,12 @@
-import type {
-	SyncUpdate,
-	SyncClientConfig,
+import {
+	type SyncUpdate,
+	type SyncClientConfig,
 	SyncUpdateType,
-	AwarenessState,
-	LocalAwarenessState,
+	type AwarenessState,
+	type LocalAwarenessState,
 } from './types.js';
-import type { WordPressApiClient } from './api-client.js';
+import { WordPressApiError, type WordPressApiClient } from './api-client.js';
+import { debugLog } from '../debug-log.js';
 
 export type SyncStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
 
@@ -277,25 +278,45 @@ export class SyncClient {
 				this.firstPollResolve = null;
 			}
 		} catch (error) {
-			// Restore un-sent updates for ALL rooms (excluding stale compaction updates)
-			for (const [name, updates] of drainedQueues) {
-				const state = this.rooms.get(name);
-				if (state) {
-					const restorable = updates.filter(
-						(u) => u.type !== ('compaction' as SyncUpdateType)
-					);
-					state.updateQueue.unshift(...restorable);
+			// If the sync server rejected a specific room (e.g. post was
+			// deleted/trashed mid-session), remove that room and continue
+			// polling the remaining rooms at the normal interval.
+			const invalidRoom = this.extractInvalidRoom(error);
+			if (invalidRoom && this.rooms.has(invalidRoom)) {
+				debugLog(
+					'sync',
+					'Removing invalid room from sync:',
+					invalidRoom
+				);
+				this.removeRoom(invalidRoom);
+				if (this.rooms.size === 0) {
+					this.pollInProgress = false;
+					return;
 				}
+				// Restore un-sent updates for the REMAINING rooms only
+				this.restoreQueues(drainedQueues, invalidRoom);
+				// Reset backoff so the next poll runs at the normal interval
+				this.currentBackoff = this.anyCollaborators()
+					? this.config.pollingIntervalWithCollaborators
+					: this.config.pollingInterval;
+				// Notify with a descriptive error (not the raw API error,
+				// which would be misleading for a recovered room rejection)
+				this.onStatusChange?.(
+					'error',
+					new Error(`Sync room removed: ${invalidRoom}`)
+				);
+			} else {
+				// Generic error — restore all rooms' updates and back off
+				this.restoreQueues(drainedQueues);
+				this.onStatusChange?.(
+					'error',
+					error instanceof Error ? error : undefined
+				);
+				this.currentBackoff = Math.min(
+					this.currentBackoff * 2,
+					this.config.maxErrorBackoff
+				);
 			}
-
-			this.onStatusChange?.(
-				'error',
-				error instanceof Error ? error : undefined
-			);
-			this.currentBackoff = Math.min(
-				this.currentBackoff * 2,
-				this.config.maxErrorBackoff
-			);
 		}
 
 		this.pollInProgress = false;
@@ -310,6 +331,47 @@ export class SyncClient {
 			this.pollTimer = setTimeout(() => void this.poll(), 0);
 		} else {
 			this.scheduleNextPoll();
+		}
+	}
+
+	/**
+	 * Extract the room name from a sync permission error.
+	 * Gutenberg's sync server returns errors like:
+	 *   "You do not have permission to sync this entity: postType/post:123."
+	 * Returns the room name, or null if the error isn't a room rejection.
+	 */
+	private extractInvalidRoom(error: unknown): string | null {
+		if (!(error instanceof WordPressApiError) || error.status !== 403) {
+			return null;
+		}
+		try {
+			const body = JSON.parse(error.body) as {
+				message?: string;
+			};
+			const match = body.message?.match(/sync this entity:\s*(.+?)\.?$/);
+			return match?.[1].trim() ?? null;
+		} catch {
+			return null;
+		}
+	}
+
+	/**
+	 * Restore drained updates back to their room queues after a failed poll.
+	 * Compaction updates are excluded since they may be stale.
+	 */
+	private restoreQueues(
+		drainedQueues: Map<string, SyncUpdate[]>,
+		excludeRoom?: string
+	): void {
+		for (const [name, updates] of drainedQueues) {
+			if (name === excludeRoom) continue;
+			const state = this.rooms.get(name);
+			if (state) {
+				const restorable = updates.filter(
+					(u) => u.type !== SyncUpdateType.COMPACTION
+				);
+				state.updateQueue.unshift(...restorable);
+			}
 		}
 	}
 

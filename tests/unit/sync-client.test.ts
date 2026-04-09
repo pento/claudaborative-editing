@@ -4,7 +4,10 @@ import type {
 	SyncCallbacks,
 	RoomCallbacks,
 } from '../../src/wordpress/sync-client.js';
-import type { WordPressApiClient } from '../../src/wordpress/api-client.js';
+import {
+	WordPressApiError,
+	type WordPressApiClient,
+} from '../../src/wordpress/api-client.js';
 import {
 	SyncUpdateType,
 	DEFAULT_SYNC_CONFIG,
@@ -1107,6 +1110,227 @@ describe('SyncClient', () => {
 
 			expect(retryRoomA?.updates).toContainEqual(updateA);
 			expect(retryRoomB?.updates).toContainEqual(updateB);
+		});
+	});
+
+	describe('invalid room removal on 403', () => {
+		const ROOM_A = 'postType/post:123';
+		const ROOM_B = 'postType/post:456';
+
+		function make403Error(room: string): WordPressApiError {
+			return new WordPressApiError(
+				'Forbidden',
+				403,
+				JSON.stringify({
+					code: 'rest_cannot_edit',
+					message: `You do not have permission to sync this entity: ${room}.`,
+				})
+			);
+		}
+
+		it('removes the invalid room and continues polling', async () => {
+			// First poll succeeds to establish both rooms
+			apiClient.sendSyncUpdate
+				.mockResolvedValueOnce(
+					multiRoomResponse([
+						{ room: ROOM_A, end_cursor: 1 },
+						{ room: ROOM_B, end_cursor: 1 },
+					])
+				)
+				// Second poll: 403 targeting ROOM_A
+				.mockRejectedValueOnce(make403Error(ROOM_A))
+				// Third poll: only ROOM_B remains
+				.mockResolvedValue(emptyRoomResponse(ROOM_B, 2));
+
+			const callbacks = createMockCallbacks();
+			syncClient.start(ROOM_A, 100, [], callbacks);
+
+			const roomBCallbacks = createMockRoomCallbacks();
+			syncClient.addRoom(ROOM_B, 200, [], roomBCallbacks);
+
+			// First poll — both rooms established
+			await vi.advanceTimersByTimeAsync(0);
+
+			// Second poll — 403 removes ROOM_A
+			await vi.advanceTimersByTimeAsync(config.pollingInterval);
+
+			// Client should still be polling
+			expect(syncClient.getStatus().isPolling).toBe(true);
+
+			// Third poll should only contain ROOM_B
+			apiClient.sendSyncUpdate.mockClear();
+			await vi.advanceTimersByTimeAsync(config.pollingInterval);
+			expect(apiClient.sendSyncUpdate).toHaveBeenCalledTimes(1);
+
+			const payload = apiClient.sendSyncUpdate.mock
+				.calls[0][0] as SyncPayload;
+			expect(payload.rooms).toHaveLength(1);
+			expect(payload.rooms[0].room).toBe(ROOM_B);
+		});
+
+		it('does not apply backoff after room removal', async () => {
+			// First poll succeeds
+			apiClient.sendSyncUpdate
+				.mockResolvedValueOnce(
+					multiRoomResponse([
+						{ room: ROOM_A, end_cursor: 1 },
+						{ room: ROOM_B, end_cursor: 1 },
+					])
+				)
+				// Second poll: 403 targeting ROOM_A
+				.mockRejectedValueOnce(make403Error(ROOM_A))
+				// Third poll: succeeds with ROOM_B only
+				.mockResolvedValue(emptyRoomResponse(ROOM_B, 2));
+
+			const callbacks = createMockCallbacks();
+			syncClient.start(ROOM_A, 100, [], callbacks);
+
+			const roomBCallbacks = createMockRoomCallbacks();
+			syncClient.addRoom(ROOM_B, 200, [], roomBCallbacks);
+
+			// First poll
+			await vi.advanceTimersByTimeAsync(0);
+
+			// Second poll — 403 removes ROOM_A
+			await vi.advanceTimersByTimeAsync(config.pollingInterval);
+
+			// Next poll should happen at the normal interval, NOT doubled backoff
+			apiClient.sendSyncUpdate.mockClear();
+			await vi.advanceTimersByTimeAsync(config.pollingInterval - 1);
+			expect(apiClient.sendSyncUpdate).not.toHaveBeenCalled();
+			await vi.advanceTimersByTimeAsync(1);
+			expect(apiClient.sendSyncUpdate).toHaveBeenCalledTimes(1);
+		});
+
+		it('falls through to generic backoff for unrecognized 403', async () => {
+			const unrecognized403 = new WordPressApiError(
+				'Forbidden',
+				403,
+				JSON.stringify({
+					code: 'rest_forbidden',
+					message: 'Sorry, you are not allowed to do that.',
+				})
+			);
+
+			apiClient.sendSyncUpdate
+				.mockRejectedValueOnce(unrecognized403)
+				.mockResolvedValue(emptyRoomResponse(ROOM_A, 1));
+
+			const callbacks = createMockCallbacks();
+			syncClient.start(ROOM_A, 100, [], callbacks);
+
+			// First poll fails with unrecognized 403
+			await vi.advanceTimersByTimeAsync(0);
+			expect(callbacks.onStatusChange).toHaveBeenCalledWith(
+				'error',
+				unrecognized403
+			);
+
+			// Should use exponential backoff (interval * 2), not the normal interval
+			apiClient.sendSyncUpdate.mockClear();
+			await vi.advanceTimersByTimeAsync(config.pollingInterval);
+			expect(apiClient.sendSyncUpdate).not.toHaveBeenCalled();
+			await vi.advanceTimersByTimeAsync(config.pollingInterval);
+			expect(apiClient.sendSyncUpdate).toHaveBeenCalledTimes(1);
+
+			// Queues should have been restored (generic path)
+			// Verified implicitly: the client is still polling with its rooms intact
+			const payload = apiClient.sendSyncUpdate.mock
+				.calls[0][0] as SyncPayload;
+			expect(payload.rooms).toHaveLength(1);
+			expect(payload.rooms[0].room).toBe(ROOM_A);
+		});
+
+		it('falls through to generic backoff when 403 body is not valid JSON', async () => {
+			const malformed403 = new WordPressApiError(
+				'Forbidden',
+				403,
+				'not valid json'
+			);
+
+			apiClient.sendSyncUpdate
+				.mockRejectedValueOnce(malformed403)
+				.mockResolvedValue(emptyRoomResponse(ROOM_A, 1));
+
+			const callbacks = createMockCallbacks();
+			syncClient.start(ROOM_A, 100, [], callbacks);
+
+			// First poll fails with unparseable body
+			await vi.advanceTimersByTimeAsync(0);
+			expect(callbacks.onStatusChange).toHaveBeenCalledWith(
+				'error',
+				malformed403
+			);
+
+			// Should use exponential backoff, not normal interval
+			apiClient.sendSyncUpdate.mockClear();
+			await vi.advanceTimersByTimeAsync(config.pollingInterval);
+			expect(apiClient.sendSyncUpdate).not.toHaveBeenCalled();
+			await vi.advanceTimersByTimeAsync(config.pollingInterval);
+			expect(apiClient.sendSyncUpdate).toHaveBeenCalledTimes(1);
+
+			// Room should still be intact
+			const payload = apiClient.sendSyncUpdate.mock
+				.calls[0][0] as SyncPayload;
+			expect(payload.rooms).toHaveLength(1);
+			expect(payload.rooms[0].room).toBe(ROOM_A);
+		});
+
+		it('stops polling when last room is removed', async () => {
+			apiClient.sendSyncUpdate.mockRejectedValueOnce(
+				make403Error(ROOM_A)
+			);
+
+			const callbacks = createMockCallbacks();
+			syncClient.start(ROOM_A, 100, [], callbacks);
+
+			// First poll: 403 removes the only room
+			await vi.advanceTimersByTimeAsync(0);
+
+			expect(syncClient.getStatus().isPolling).toBe(false);
+			expect(callbacks.onStatusChange).toHaveBeenCalledWith(
+				'disconnected'
+			);
+
+			// No further polls should happen
+			apiClient.sendSyncUpdate.mockClear();
+			await vi.advanceTimersByTimeAsync(config.pollingInterval * 10);
+			expect(apiClient.sendSyncUpdate).not.toHaveBeenCalled();
+		});
+
+		it('non-403 errors get generic backoff', async () => {
+			const serverError = new WordPressApiError(
+				'Internal Server Error',
+				500,
+				'Server error'
+			);
+
+			apiClient.sendSyncUpdate
+				.mockRejectedValueOnce(serverError)
+				.mockResolvedValue(emptyRoomResponse(ROOM_A, 1));
+
+			const callbacks = createMockCallbacks();
+			syncClient.start(ROOM_A, 100, [], callbacks);
+
+			// First poll fails with 500
+			await vi.advanceTimersByTimeAsync(0);
+			expect(callbacks.onStatusChange).toHaveBeenCalledWith(
+				'error',
+				serverError
+			);
+
+			// Should use exponential backoff (interval * 2)
+			apiClient.sendSyncUpdate.mockClear();
+			await vi.advanceTimersByTimeAsync(config.pollingInterval);
+			expect(apiClient.sendSyncUpdate).not.toHaveBeenCalled();
+			await vi.advanceTimersByTimeAsync(config.pollingInterval);
+			expect(apiClient.sendSyncUpdate).toHaveBeenCalledTimes(1);
+
+			// Room should still be present (generic path restores queues)
+			const payload = apiClient.sendSyncUpdate.mock
+				.calls[0][0] as SyncPayload;
+			expect(payload.rooms).toHaveLength(1);
+			expect(payload.rooms[0].room).toBe(ROOM_A);
 		});
 	});
 });
