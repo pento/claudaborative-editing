@@ -62,6 +62,14 @@ let commandRoomName: string | null = null;
 let fetchInterceptorInstalled = false;
 
 /**
+ * Set once awareness has received at least one remote state. After that,
+ * isMcpConnected() trusts awareness as authoritative and stops falling
+ * through to the wpceInitialState page-load hint (which can go stale
+ * after an MCP disconnect).
+ */
+let awarenessWarmedUp = false;
+
+/**
  * Dirty flag: set when writeCommandToSync() modifies the Y.Doc after the
  * fetch interceptor has already sent a compaction. Forces the interceptor
  * to re-inject the full state on the next poll, bypassing the
@@ -500,12 +508,16 @@ export function subscribeToCommandSync(
  * browserType: 'Claudaborative Editing MCP'.
  */
 export function isMcpConnected(): boolean {
-	// Real-time check via Yjs awareness (authoritative when available).
+	// Real-time check via Yjs awareness (authoritative once warmed up).
 	if (commandAwareness) {
 		const states = commandAwareness.getStates();
 		for (const [clientId, state] of states) {
 			if (clientId === commandAwareness.clientID) continue;
 			if (!state || typeof state !== 'object') continue;
+
+			// Any remote state means awareness has completed at least one
+			// sync round-trip — it's warm and can be trusted.
+			awarenessWarmedUp = true;
 
 			const info = (
 				state as { collaboratorInfo?: { browserType?: string } }
@@ -514,15 +526,17 @@ export function isMcpConnected(): boolean {
 				return true;
 			}
 		}
-		// Awareness has no MCP client — but this may be transient
-		// (awareness just initialized and hasn't received sync data).
-		// Fall through to the server-side hint rather than returning
-		// false immediately, so we don't flash a disconnected state.
+
+		// If awareness has ever seen remote data, trust it — the MCP
+		// is genuinely not connected. Only fall through to the page-load
+		// hint when awareness is freshly initialized with no remote data.
+		if (awarenessWarmedUp) {
+			return false;
+		}
 	}
 
 	// Server-side hint injected via wp_add_inline_script on page load.
-	// Covers both: awareness not yet initialized, and awareness fresh
-	// with no remote data yet.
+	// Used only until awareness warms up (receives its first remote state).
 	const initialState = (
 		window as Window & {
 			wpceInitialState?: { mcpConnected?: boolean };

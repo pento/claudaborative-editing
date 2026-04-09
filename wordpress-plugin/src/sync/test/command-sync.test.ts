@@ -465,8 +465,8 @@ describe('command-sync', () => {
 			expect(mod.isMcpConnected()).toBe(false);
 		});
 
-		it('falls through to wpceInitialState when awareness has no MCP', async () => {
-			// Set the server-side hint to true…
+		it('uses hint before awareness warms up, then trusts awareness', async () => {
+			// Server-side hint says MCP is connected.
 			(window as any).wpceInitialState = { mcpConnected: true };
 
 			const mod = loadModule();
@@ -476,15 +476,18 @@ describe('command-sync', () => {
 			const doc = new MockYDoc();
 			syncConfig.createAwareness(doc);
 
-			// Awareness has a non-MCP client — falls through to the hint.
+			// No remote states yet — falls through to hint.
+			expect(mod.isMcpConnected()).toBe(true);
+
+			// Once a non-MCP remote state arrives, awareness is warm.
+			// It trusts awareness (no MCP) over the stale hint.
 			capturedAwareness!._setRemoteState(99, {
 				collaboratorInfo: { browserType: 'Chrome' },
 			});
+			expect(mod.isMcpConnected()).toBe(false);
 
-			expect(mod.isMcpConnected()).toBe(true);
-
-			// Without the server-side hint, returns false.
-			delete (window as any).wpceInitialState;
+			// Hint no longer matters — awareness is authoritative.
+			(window as any).wpceInitialState = { mcpConnected: true };
 			expect(mod.isMcpConnected()).toBe(false);
 		});
 
