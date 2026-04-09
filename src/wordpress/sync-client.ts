@@ -1,9 +1,9 @@
-import type {
-	SyncUpdate,
-	SyncClientConfig,
+import {
+	type SyncUpdate,
+	type SyncClientConfig,
 	SyncUpdateType,
-	AwarenessState,
-	LocalAwarenessState,
+	type AwarenessState,
+	type LocalAwarenessState,
 } from './types.js';
 import { WordPressApiError, type WordPressApiClient } from './api-client.js';
 import { debugLog } from '../debug-log.js';
@@ -349,7 +349,7 @@ export class SyncClient {
 				message?: string;
 			};
 			const match = body.message?.match(/sync this entity:\s*(.+?)\.?$/);
-			return match?.[1] ?? null;
+			return match?.[1].trim() ?? null;
 		} catch {
 			return null;
 		}
@@ -368,7 +368,7 @@ export class SyncClient {
 			const state = this.rooms.get(name);
 			if (state) {
 				const restorable = updates.filter(
-					(u) => u.type !== ('compaction' as SyncUpdateType)
+					(u) => u.type !== SyncUpdateType.COMPACTION
 				);
 				state.updateQueue.unshift(...restorable);
 			}
