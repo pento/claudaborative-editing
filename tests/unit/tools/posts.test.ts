@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { registerPostTools } from '../../../src/tools/posts.js';
+import { postTools } from '../../../src/tools/posts.js';
+import { registerToolDefinitions } from '../../../src/tools/registry.js';
 import {
 	createMockServer,
 	createMockSession,
@@ -21,7 +22,11 @@ describe('post tools', () => {
 			user: fakeUser,
 			post: fakePost,
 		});
-		registerPostTools(server as unknown as McpServer, session);
+		registerToolDefinitions(
+			server as unknown as McpServer,
+			session,
+			postTools
+		);
 	});
 
 	it('registers wp_list_posts, wp_open_post, wp_close_post, and wp_create_post', () => {
@@ -77,7 +82,7 @@ describe('post tools', () => {
 			const result = await tool.handler({});
 
 			expect(result.isError).toBe(true);
-			expect(result.content[0].text).toContain('Failed to list posts');
+			expect(result.content[0].text).toContain('wp_list_posts failed');
 		});
 	});
 
@@ -104,7 +109,7 @@ describe('post tools', () => {
 			const result = await tool.handler({ postId: 999 });
 
 			expect(result.isError).toBe(true);
-			expect(result.content[0].text).toContain('Failed to open post');
+			expect(result.content[0].text).toContain('wp_open_post failed');
 		});
 	});
 
@@ -116,7 +121,11 @@ describe('post tools', () => {
 				user: fakeUser,
 				post: fakePost,
 			});
-			registerPostTools(server as unknown as McpServer, session);
+			registerToolDefinitions(
+				server as unknown as McpServer,
+				session,
+				postTools
+			);
 		});
 
 		it('calls session.closePost() and returns success message', async () => {
@@ -143,7 +152,7 @@ describe('post tools', () => {
 			const result = await tool.handler({});
 
 			expect(result.isError).toBe(true);
-			expect(result.content[0].text).toContain('Failed to close post');
+			expect(result.content[0].text).toContain('wp_close_post failed');
 		});
 	});
 
@@ -172,7 +181,7 @@ describe('post tools', () => {
 			const result = await tool.handler({});
 
 			expect(result.isError).toBe(true);
-			expect(result.content[0].text).toContain('Failed to create post');
+			expect(result.content[0].text).toContain('wp_create_post failed');
 		});
 	});
 });

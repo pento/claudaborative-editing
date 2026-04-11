@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createMockServer, createMockSession, fakePost } from './helpers.js';
-import { registerAuthoringPrompts } from '../../../src/prompts/authoring.js';
+import { authoringPrompts } from '../../../src/prompts/authoring.js';
+import { registerPromptDefinitions } from '../../../src/prompts/registry.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { assertDefined } from '../../test-utils.js';
 
@@ -9,7 +10,11 @@ describe('translate', () => {
 		it('instructs to connect first', async () => {
 			const server = createMockServer();
 			const session = createMockSession({ state: 'disconnected' });
-			registerAuthoringPrompts(server as unknown as McpServer, session);
+			registerPromptDefinitions(
+				server as unknown as McpServer,
+				session,
+				authoringPrompts
+			);
 
 			const prompt = server.registeredPrompts.get('translate');
 			assertDefined(prompt);
@@ -23,7 +28,11 @@ describe('translate', () => {
 		it('instructs to open a post first', async () => {
 			const server = createMockServer();
 			const session = createMockSession({ state: 'connected' });
-			registerAuthoringPrompts(server as unknown as McpServer, session);
+			registerPromptDefinitions(
+				server as unknown as McpServer,
+				session,
+				authoringPrompts
+			);
 
 			const prompt = server.registeredPrompts.get('translate');
 			assertDefined(prompt);
@@ -44,7 +53,11 @@ describe('translate', () => {
 				post: fakePost,
 				postContent,
 			});
-			registerAuthoringPrompts(server as unknown as McpServer, session);
+			registerPromptDefinitions(
+				server as unknown as McpServer,
+				session,
+				authoringPrompts
+			);
 
 			const prompt = server.registeredPrompts.get('translate');
 			assertDefined(prompt);
@@ -64,7 +77,11 @@ describe('translate', () => {
 				post: fakePost,
 				postContent,
 			});
-			registerAuthoringPrompts(server as unknown as McpServer, session);
+			registerPromptDefinitions(
+				server as unknown as McpServer,
+				session,
+				authoringPrompts
+			);
 
 			const prompt = server.registeredPrompts.get('translate');
 			assertDefined(prompt);
@@ -80,7 +97,11 @@ describe('translate', () => {
 				post: fakePost,
 				postContent,
 			});
-			registerAuthoringPrompts(server as unknown as McpServer, session);
+			registerPromptDefinitions(
+				server as unknown as McpServer,
+				session,
+				authoringPrompts
+			);
 
 			const prompt = server.registeredPrompts.get('translate');
 			assertDefined(prompt);

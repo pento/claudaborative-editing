@@ -5,7 +5,15 @@
 	"type": "module",
 	"main": "dist/index.js",
 	"exports": {
-		".": "./dist/index.js"
+		".": "./dist/index.js",
+		"./prompts/definitions": "./dist/prompts/definitions.js",
+		"./prompts/prompt-content": "./dist/prompts/prompt-content.js",
+		"./prompts/registry": "./dist/prompts/registry.js",
+		"./server-instructions": "./dist/server-instructions.js",
+		"./session/session-manager": "./dist/session/session-manager.js",
+		"./shared/commands": "./dist/shared/commands.js",
+		"./tools/definitions": "./dist/tools/definitions.js",
+		"./tools/registry": "./dist/tools/registry.js"
 	},
 	"sideEffects": false,
 	"author": "Gary Pendergast",

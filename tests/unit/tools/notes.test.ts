@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { registerNoteTools } from '../../../src/tools/notes.js';
+import { noteTools } from '../../../src/tools/notes.js';
+import { registerToolDefinitions } from '../../../src/tools/registry.js';
 import {
 	createMockServer,
 	createMockSession,
@@ -21,7 +22,11 @@ describe('note tools', () => {
 			user: fakeUser,
 			post: fakePost,
 		});
-		registerNoteTools(server as unknown as McpServer, session);
+		registerToolDefinitions(
+			server as unknown as McpServer,
+			session,
+			noteTools
+		);
 	});
 
 	it('registers all note tools', () => {
@@ -170,7 +175,7 @@ describe('note tools', () => {
 			const result = await tool.handler({});
 
 			expect(result.isError).toBe(true);
-			expect(result.content[0].text).toContain('Failed to list notes');
+			expect(result.content[0].text).toContain('wp_list_notes failed');
 		});
 	});
 
@@ -200,7 +205,7 @@ describe('note tools', () => {
 			});
 
 			expect(result.isError).toBe(true);
-			expect(result.content[0].text).toContain('Failed to add note');
+			expect(result.content[0].text).toContain('wp_add_note failed');
 		});
 	});
 
@@ -227,7 +232,7 @@ describe('note tools', () => {
 			const result = await tool.handler({ noteId: 999, content: 'test' });
 
 			expect(result.isError).toBe(true);
-			expect(result.content[0].text).toContain('Failed to reply to note');
+			expect(result.content[0].text).toContain('wp_reply_to_note failed');
 		});
 	});
 
@@ -251,7 +256,7 @@ describe('note tools', () => {
 			const result = await tool.handler({ noteId: 999 });
 
 			expect(result.isError).toBe(true);
-			expect(result.content[0].text).toContain('Failed to resolve note');
+			expect(result.content[0].text).toContain('wp_resolve_note failed');
 		});
 	});
 
@@ -281,7 +286,7 @@ describe('note tools', () => {
 			const result = await tool.handler({ noteId: 999, content: 'test' });
 
 			expect(result.isError).toBe(true);
-			expect(result.content[0].text).toContain('Failed to update note');
+			expect(result.content[0].text).toContain('wp_update_note failed');
 		});
 	});
 });

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { registerReadTools } from '../../../src/tools/read.js';
+import { readTools } from '../../../src/tools/read.js';
+import { registerToolDefinitions } from '../../../src/tools/registry.js';
 import {
 	createMockServer,
 	createMockSession,
@@ -24,7 +25,11 @@ describe('read tools', () => {
 				'Title: "My Great Post"\n\n[0] core/paragraph\n  "Hello world"',
 			blockContent: '[0] core/paragraph\n  "Hello world"',
 		});
-		registerReadTools(server as unknown as McpServer, session);
+		registerToolDefinitions(
+			server as unknown as McpServer,
+			session,
+			readTools
+		);
 	});
 
 	it('registers wp_read_post and wp_read_block', () => {
@@ -56,7 +61,7 @@ describe('read tools', () => {
 			const result = await tool.handler({});
 
 			expect(result.isError).toBe(true);
-			expect(result.content[0].text).toContain('Failed to read post');
+			expect(result.content[0].text).toContain('wp_read_post failed');
 		});
 	});
 

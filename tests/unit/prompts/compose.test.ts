@@ -1,6 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createMockServer, createMockSession, fakePost } from './helpers.js';
-import { registerComposePrompts } from '../../../src/prompts/compose.js';
+import { composePrompts } from '../../../src/prompts/compose.js';
+import { registerPromptDefinitions } from '../../../src/prompts/registry.js';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { assertDefined } from '../../test-utils.js';
 
 describe('compose', () => {
@@ -8,7 +10,11 @@ describe('compose', () => {
 		it('instructs to connect first', async () => {
 			const server = createMockServer();
 			const session = createMockSession({ state: 'disconnected' });
-			registerComposePrompts(server, session);
+			registerPromptDefinitions(
+				server as unknown as McpServer,
+				session,
+				composePrompts
+			);
 
 			const prompt = server.registeredPrompts.get('compose');
 			assertDefined(prompt);
@@ -22,7 +28,11 @@ describe('compose', () => {
 		it('instructs to open a post first', async () => {
 			const server = createMockServer();
 			const session = createMockSession({ state: 'connected' });
-			registerComposePrompts(server, session);
+			registerPromptDefinitions(
+				server as unknown as McpServer,
+				session,
+				composePrompts
+			);
 
 			const prompt = server.registeredPrompts.get('compose');
 			assertDefined(prompt);
@@ -42,7 +52,11 @@ describe('compose', () => {
 				post: fakePost,
 				postContent,
 			});
-			registerComposePrompts(server, session);
+			registerPromptDefinitions(
+				server as unknown as McpServer,
+				session,
+				composePrompts
+			);
 
 			const prompt = server.registeredPrompts.get('compose');
 			assertDefined(prompt);
@@ -61,7 +75,11 @@ describe('compose', () => {
 				state: 'editing',
 				post: fakePost,
 			});
-			registerComposePrompts(server, session);
+			registerPromptDefinitions(
+				server as unknown as McpServer,
+				session,
+				composePrompts
+			);
 
 			const prompt = server.registeredPrompts.get('compose');
 			assertDefined(prompt);
@@ -79,7 +97,11 @@ describe('compose', () => {
 				post: fakePost,
 			});
 			vi.mocked(session.getNotesSupported).mockReturnValue(false);
-			registerComposePrompts(server, session);
+			registerPromptDefinitions(
+				server as unknown as McpServer,
+				session,
+				composePrompts
+			);
 
 			const prompt = server.registeredPrompts.get('compose');
 			assertDefined(prompt);
@@ -98,7 +120,11 @@ describe('compose', () => {
 				post: fakePost,
 				postContent: '',
 			});
-			registerComposePrompts(server, session);
+			registerPromptDefinitions(
+				server as unknown as McpServer,
+				session,
+				composePrompts
+			);
 
 			const prompt = server.registeredPrompts.get('compose');
 			assertDefined(prompt);
@@ -114,7 +140,11 @@ describe('compose', () => {
 				state: 'editing',
 				post: fakePost,
 			});
-			registerComposePrompts(server, session);
+			registerPromptDefinitions(
+				server as unknown as McpServer,
+				session,
+				composePrompts
+			);
 
 			const prompt = server.registeredPrompts.get('compose');
 			assertDefined(prompt);
@@ -130,7 +160,11 @@ describe('compose', () => {
 	it('has the correct description', () => {
 		const server = createMockServer();
 		const session = createMockSession({ state: 'disconnected' });
-		registerComposePrompts(server, session);
+		registerPromptDefinitions(
+			server as unknown as McpServer,
+			session,
+			composePrompts
+		);
 
 		const prompt = server.registeredPrompts.get('compose');
 		assertDefined(prompt);
