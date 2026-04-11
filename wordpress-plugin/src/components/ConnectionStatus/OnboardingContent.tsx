@@ -10,12 +10,12 @@
  */
 import { __ } from '@wordpress/i18n';
 import { Button, ExternalLink, Icon } from '@wordpress/components';
-import { useState, useCallback } from '@wordpress/element';
 import { cloud, code } from '@wordpress/icons';
 
 /**
  * Internal dependencies
  */
+import { useCopyToClipboard } from '../../hooks/use-copy-to-clipboard';
 // Styles are imported via ConnectionStatus/style.scss to ensure
 // they land in the extracted style-index.css stylesheet.
 
@@ -29,21 +29,7 @@ const SETUP_COMMAND = 'npx claudaborative-editing start';
  * @return Rendered onboarding content.
  */
 export default function OnboardingContent() {
-	const [copied, setCopied] = useState(false);
-
-	const handleCopy = useCallback(() => {
-		navigator.clipboard.writeText(SETUP_COMMAND).then(
-			() => {
-				setCopied(true);
-				setTimeout(() => setCopied(false), 2000);
-			},
-			() => {
-				// Clipboard API unavailable (e.g., HTTP-only local dev).
-				// The <code> element has user-select: all, so users can
-				// still select and copy manually.
-			}
-		);
-	}, []);
+	const { copied, handleCopy } = useCopyToClipboard(SETUP_COMMAND);
 
 	return (
 		<div className="wpce-onboarding">

@@ -1,3 +1,11 @@
+const mockHandleCopy = jest.fn();
+jest.mock('../../../hooks/use-copy-to-clipboard', () => ({
+	useCopyToClipboard: jest.fn(() => ({
+		copied: false,
+		handleCopy: mockHandleCopy,
+	})),
+}));
+
 jest.mock('@wordpress/i18n', () => ({
 	__: (str: string) => str,
 	sprintf: (fmt: string, ...args: string[]) => {
@@ -41,22 +49,19 @@ jest.mock('@wordpress/icons', () => ({
 	code: { name: 'code' },
 }));
 
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
+import { useCopyToClipboard } from '../../../hooks/use-copy-to-clipboard';
 import OnboardingContent from '../OnboardingContent';
 
+const mockedUseCopyToClipboard = useCopyToClipboard as jest.Mock;
+
 describe('OnboardingContent', () => {
-	let clipboardSpy: jest.SpyInstance;
-
 	beforeEach(() => {
-		jest.useFakeTimers();
-		clipboardSpy = jest.fn().mockResolvedValue(undefined);
-		Object.assign(navigator, {
-			clipboard: { writeText: clipboardSpy },
+		jest.clearAllMocks();
+		mockedUseCopyToClipboard.mockReturnValue({
+			copied: false,
+			handleCopy: mockHandleCopy,
 		});
-	});
-
-	afterEach(() => {
-		jest.useRealTimers();
 	});
 
 	it('renders the heading text', () => {
@@ -92,42 +97,24 @@ describe('OnboardingContent', () => {
 		).toBeTruthy();
 	});
 
-	it('copy button copies the setup command to clipboard', async () => {
+	it('copy button calls handleCopy from useCopyToClipboard', () => {
 		render(<OnboardingContent />);
 
 		const copyButton = screen.getByText('Copy');
-		await act(async () => fireEvent.click(copyButton));
+		fireEvent.click(copyButton);
 
-		expect(clipboardSpy).toHaveBeenCalledWith(
-			'npx claudaborative-editing start'
-		);
+		expect(mockHandleCopy).toHaveBeenCalled();
 	});
 
-	it('does not throw when clipboard write fails', async () => {
-		clipboardSpy.mockRejectedValueOnce(new Error('Not allowed'));
+	it('copy button shows "Copied!" feedback when copied is true', () => {
+		mockedUseCopyToClipboard.mockReturnValue({
+			copied: true,
+			handleCopy: mockHandleCopy,
+		});
 
 		render(<OnboardingContent />);
-
-		const copyButton = screen.getByText('Copy');
-		await act(async () => fireEvent.click(copyButton));
-
-		// Button should still show "Copy" (not "Copied!") since write failed.
-		expect(screen.getByText('Copy')).toBeTruthy();
-	});
-
-	it('copy button shows "Copied!" feedback after click', async () => {
-		render(<OnboardingContent />);
-
-		const copyButton = screen.getByText('Copy');
-		await act(async () => fireEvent.click(copyButton));
 
 		expect(screen.getByText('Copied!')).toBeTruthy();
 		expect(screen.queryByText('Copy')).toBeNull();
-
-		// After 2 seconds, reverts to "Copy"
-		act(() => jest.advanceTimersByTime(2000));
-
-		expect(screen.getByText('Copy')).toBeTruthy();
-		expect(screen.queryByText('Copied!')).toBeNull();
 	});
 });

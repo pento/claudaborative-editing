@@ -629,6 +629,42 @@ describe('ConnectionStatus', () => {
 		expect(screen.queryByText('Reconnecting\u2026')).toBeNull();
 	});
 
+	it('closes popover when footer element is removed', async () => {
+		// Replace stub with an observer that captures its callback so we
+		// can invoke it synchronously inside act().
+		let observerCallback: MutationCallback | null = null;
+		const savedMO = window.MutationObserver;
+		window.MutationObserver = class {
+			constructor(cb: MutationCallback) {
+				observerCallback = cb;
+			}
+			observe() {}
+			disconnect() {}
+			takeRecords() {
+				return [];
+			}
+		} as any;
+
+		await act(async () => render(<ConnectionStatus />));
+
+		const toggle = footerEl.querySelector('.wpce-footer-status-toggle')!;
+		await act(async () => fireEvent.click(toggle));
+		expect(screen.getByTestId('popover')).toBeTruthy();
+
+		// Remove footer, then fire the observer callback inside act()
+		// so React processes the resulting state updates synchronously.
+		document.body.removeChild(footerEl);
+		await act(async () => {
+			observerCallback!([], null as any);
+		});
+
+		expect(screen.queryByTestId('popover')).toBeNull();
+
+		// Restore and re-add footer for cleanup
+		window.MutationObserver = savedMO;
+		document.body.appendChild(footerEl);
+	});
+
 	it('popover has onboarding modifier class when disconnected', async () => {
 		await act(async () => render(<ConnectionStatus />));
 

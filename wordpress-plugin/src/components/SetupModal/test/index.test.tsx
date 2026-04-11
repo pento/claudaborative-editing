@@ -1,3 +1,11 @@
+const mockHandleCopy = jest.fn();
+jest.mock('../../../hooks/use-copy-to-clipboard', () => ({
+	useCopyToClipboard: jest.fn(() => ({
+		copied: false,
+		handleCopy: mockHandleCopy,
+	})),
+}));
+
 jest.mock('@wordpress/i18n', () => ({
 	__: (str: string) => str,
 }));
@@ -67,22 +75,19 @@ jest.mock('../../SparkleIcon', () => {
 	};
 });
 
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
+import { useCopyToClipboard } from '../../../hooks/use-copy-to-clipboard';
 import SetupModal from '..';
 
+const mockedUseCopyToClipboard = useCopyToClipboard as jest.Mock;
+
 describe('SetupModal', () => {
-	let clipboardSpy: jest.SpyInstance;
-
 	beforeEach(() => {
-		jest.useFakeTimers();
-		clipboardSpy = jest.fn().mockResolvedValue(undefined);
-		Object.assign(navigator, {
-			clipboard: { writeText: clipboardSpy },
+		jest.clearAllMocks();
+		mockedUseCopyToClipboard.mockReturnValue({
+			copied: false,
+			handleCopy: mockHandleCopy,
 		});
-	});
-
-	afterEach(() => {
-		jest.useRealTimers();
 	});
 
 	it('renders modal with title', () => {
@@ -130,25 +135,23 @@ describe('SetupModal', () => {
 		expect(screen.getByText('Requires Claude Code')).toBeTruthy();
 	});
 
-	it('copy button copies command to clipboard', async () => {
+	it('copy button calls handleCopy from useCopyToClipboard', () => {
 		render(<SetupModal onRequestClose={jest.fn()} />);
 
-		await act(async () => fireEvent.click(screen.getByText('Copy')));
+		fireEvent.click(screen.getByText('Copy'));
 
-		expect(clipboardSpy).toHaveBeenCalledWith(
-			'npx claudaborative-editing start'
-		);
+		expect(mockHandleCopy).toHaveBeenCalled();
 	});
 
-	it('copy button shows "Copied!" feedback', async () => {
+	it('copy button shows "Copied!" feedback when copied is true', () => {
+		mockedUseCopyToClipboard.mockReturnValue({
+			copied: true,
+			handleCopy: mockHandleCopy,
+		});
+
 		render(<SetupModal onRequestClose={jest.fn()} />);
 
-		await act(async () => fireEvent.click(screen.getByText('Copy')));
-
 		expect(screen.getByText('Copied!')).toBeTruthy();
-
-		act(() => jest.advanceTimersByTime(2000));
-		expect(screen.getByText('Copy')).toBeTruthy();
 	});
 
 	it('calls onRequestClose when modal close is clicked', () => {

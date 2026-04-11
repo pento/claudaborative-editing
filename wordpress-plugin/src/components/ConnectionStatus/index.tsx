@@ -138,13 +138,7 @@ export default function ConnectionStatus() {
 
 		const check = (): void => {
 			const el = document.querySelector(selector);
-			setFooterEl((prev) => {
-				if (!el && prev) {
-					// Footer disappeared — dismiss any open popover.
-					setShowPopover(false);
-				}
-				return el || null;
-			});
+			setFooterEl(el || null);
 		};
 
 		check();
@@ -154,6 +148,15 @@ export default function ConnectionStatus() {
 
 		return () => observer.disconnect();
 	}, []);
+
+	// Close popover when footer element disappears (e.g., distraction-free mode).
+	const prevFooterRef = useRef<Element | null>(null);
+	useEffect(() => {
+		if (!footerEl && prevFooterRef.current) {
+			setShowPopover(false);
+		}
+		prevFooterRef.current = footerEl;
+	}, [footerEl]);
 
 	// Build tooltip content (computed every render, no early return above).
 	const statusLines: string[] = [];
