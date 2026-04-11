@@ -563,6 +563,25 @@ describe('DocumentManager', () => {
 				'<!-- wp:paragraph --><p>Hello</p><!-- /wp:paragraph -->'
 			);
 		});
+
+		it('Updates, and gets Y.text content', () => {
+			const { manager, doc } = createManager();
+			manager
+				.getDocumentMap(doc)
+				.set('content', new Y.Text('Initial content'));
+			const ytext = manager.getContent(doc);
+			expect(ytext).toBe('Initial content');
+
+			manager.setContent(doc, 'Updated content');
+			const updatedYText = manager.getContent(doc);
+			expect(updatedYText).toBe('Updated content');
+			expect(manager.getDocumentMap(doc).get('content')).toBeInstanceOf(
+				Y.Text
+			);
+			expect(
+				(manager.getDocumentMap(doc).get('content') as Y.Text).toJSON()
+			).toBe('Updated content');
+		});
 	});
 
 	describe('getBlockAttributeYText', () => {
