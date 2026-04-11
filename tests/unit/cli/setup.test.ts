@@ -188,9 +188,10 @@ describe('setup wizard', () => {
 			expect(output).toContain(
 				'Collaborative editing endpoint available'
 			);
-			expect(output).toContain(
-				'Done! Restart Claude Code to start editing.'
-			);
+			expect(output).toContain("Done! Here's what to do next:");
+			expect(output).toContain('Restart Claude Code');
+			expect(output).toContain('sparkle icon will turn orange');
+			expect(output).toContain('claudaborative.cloud');
 			expect(writeConfig).toHaveBeenCalledTimes(1);
 		});
 

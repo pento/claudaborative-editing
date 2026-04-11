@@ -8,16 +8,26 @@ jest.mock('@wordpress/data', () => ({
 
 jest.mock('@wordpress/notices', () => ({ store: { name: 'core/notices' } }));
 
+const mockOnClose = jest.fn();
+
 jest.mock('@wordpress/components', () => {
 	const { createElement } = require('react');
 	return {
+		Button: ({
+			children,
+			onClick,
+			className,
+			variant: _v,
+			...props
+		}: any) =>
+			createElement('button', { onClick, className, ...props }, children),
 		DropdownMenu: ({ children, icon, label }: any) =>
 			createElement(
 				'div',
 				{ 'data-testid': 'dropdown-menu', 'aria-label': label },
 				createElement('span', { 'data-testid': 'menu-icon' }, icon),
 				typeof children === 'function'
-					? children({ onClose: jest.fn() })
+					? children({ onClose: mockOnClose })
 					: children
 			),
 		MenuGroup: ({ children }: any) =>
@@ -118,6 +128,26 @@ jest.mock('../../TranslateModal', () => {
 						onClick: onRequestClose,
 					},
 					'Close Translate'
+				)
+			),
+	};
+});
+
+jest.mock('../../SetupModal', () => {
+	const { createElement } = require('react');
+	return {
+		__esModule: true,
+		default: ({ onRequestClose }: { onRequestClose: () => void }) =>
+			createElement(
+				'div',
+				{ 'data-testid': 'setup-modal' },
+				createElement(
+					'button',
+					{
+						'data-testid': 'setup-modal-close',
+						onClick: onRequestClose,
+					},
+					'Close Setup'
 				)
 			),
 	};
@@ -468,5 +498,57 @@ describe('AiActionsMenu', () => {
 			'Something went wrong',
 			{ type: 'snackbar' }
 		);
+	});
+
+	it('shows disconnected notice when not connected', () => {
+		mockedUseMcpStatus.mockReturnValue({
+			mcpConnected: false,
+			mcpLastSeenAt: null,
+			isLoading: false,
+			error: null,
+		});
+
+		render(<AiActionsMenu />);
+		expect(screen.getByText('Not connected')).toBeTruthy();
+		expect(screen.getByText('Get started')).toBeTruthy();
+	});
+
+	it('does not show disconnected notice when connected', () => {
+		render(<AiActionsMenu />);
+		expect(screen.queryByText('Not connected')).toBeNull();
+		expect(screen.queryByText('Get started')).toBeNull();
+	});
+
+	it('clicking get started opens setup modal', () => {
+		mockedUseMcpStatus.mockReturnValue({
+			mcpConnected: false,
+			mcpLastSeenAt: null,
+			isLoading: false,
+			error: null,
+		});
+
+		render(<AiActionsMenu />);
+		expect(screen.queryByTestId('setup-modal')).toBeNull();
+
+		fireEvent.click(screen.getByText('Get started'));
+
+		expect(mockOnClose).toHaveBeenCalled();
+		expect(screen.getByTestId('setup-modal')).toBeTruthy();
+	});
+
+	it('setup modal close hides the modal', () => {
+		mockedUseMcpStatus.mockReturnValue({
+			mcpConnected: false,
+			mcpLastSeenAt: null,
+			isLoading: false,
+			error: null,
+		});
+
+		render(<AiActionsMenu />);
+		fireEvent.click(screen.getByText('Get started'));
+		expect(screen.getByTestId('setup-modal')).toBeTruthy();
+
+		fireEvent.click(screen.getByTestId('setup-modal-close'));
+		expect(screen.queryByTestId('setup-modal')).toBeNull();
 	});
 });

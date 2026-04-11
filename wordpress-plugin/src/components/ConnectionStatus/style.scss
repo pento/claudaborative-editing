@@ -49,3 +49,95 @@
 	height: auto;
 	vertical-align: baseline;
 }
+
+.wpce-footer-status-tooltip-onboarding {
+	white-space: normal;
+	min-width: 300px;
+	max-width: 350px;
+}
+
+.wpce-footer-status-reconnecting {
+	color: #d97706;
+	font-style: italic;
+}
+
+// Onboarding content shown in the popover when disconnected.
+
+.wpce-onboarding {
+	padding: 4px 0 0;
+}
+
+.wpce-onboarding-heading {
+	font-size: 12px;
+	color: #757575;
+	margin-bottom: 8px;
+}
+
+.wpce-onboarding-option {
+	padding: 8px;
+	border-radius: 4px;
+
+	& + & {
+		margin-top: 6px;
+	}
+}
+
+.wpce-onboarding-option-cloud {
+	background: #fffbf0;
+	border: 1px solid #d97706;
+}
+
+.wpce-onboarding-option-header {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-bottom: 4px;
+}
+
+// The Icon component renders an SVG inside a wrapper span;
+// fix the wrapper so it doesn't add extra height.
+// stylelint-disable-next-line no-descending-specificity
+.wpce-onboarding-option-header svg {
+	fill: #1e1e1e;
+	display: block;
+}
+
+.wpce-onboarding-option-title {
+	font-weight: 600;
+	font-size: 12px;
+}
+
+.wpce-onboarding-option-description {
+	font-size: 12px;
+	color: #757575;
+	margin: 0 0 6px;
+	line-height: 1.4;
+}
+
+.wpce-onboarding-cloud-link {
+	font-size: 12px;
+}
+
+.wpce-onboarding-command-row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.wpce-onboarding-command {
+	font-size: 11px;
+	background: #f0f0f0;
+	padding: 3px 6px;
+	border-radius: 2px;
+	user-select: all;
+	flex: 1;
+	min-width: 0;
+}
+
+.wpce-onboarding-copy-button.components-button {
+	font-size: 11px;
+	padding: 2px 8px;
+	min-height: 0;
+	height: auto;
+	flex-shrink: 0;
+}

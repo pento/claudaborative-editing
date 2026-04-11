@@ -30,6 +30,7 @@ import { useCommands } from '../../hooks/use-commands';
 import { getCommandProgressLabel } from '../../utils/command-i18n';
 import aiActionsStore from '../../store';
 import SparkleIcon from '../SparkleIcon';
+import OnboardingContent from './OnboardingContent';
 
 import './style.scss';
 
@@ -117,6 +118,15 @@ export default function ConnectionStatus() {
 		[isEditingOtherPost, activeCommand?.post_id]
 	);
 
+	// Track whether MCP was ever connected during this editor session.
+	// Used to distinguish first-time setup from temporary disconnections.
+	const wasConnectedRef = useRef<boolean>(false);
+	useEffect(() => {
+		if (mcpConnected) {
+			wasConnectedRef.current = true;
+		}
+	}, [mcpConnected]);
+
 	const [footerEl, setFooterEl] = useState<Element | null>(null);
 	const [showPopover, setShowPopover] = useState<boolean>(false);
 
@@ -128,7 +138,13 @@ export default function ConnectionStatus() {
 
 		const check = (): void => {
 			const el = document.querySelector(selector);
-			setFooterEl(el || null);
+			setFooterEl((prev) => {
+				if (!el && prev) {
+					// Footer disappeared — dismiss any open popover.
+					setShowPopover(false);
+				}
+				return el || null;
+			});
 		};
 
 		check();
@@ -211,13 +227,28 @@ export default function ConnectionStatus() {
 					constrainTabbing={false}
 					className="wpce-footer-status-popover"
 				>
-					<div className="wpce-footer-status-tooltip">
+					<div
+						className={
+							'wpce-footer-status-tooltip' +
+							(!mcpConnected
+								? ' wpce-footer-status-tooltip-onboarding'
+								: '')
+						}
+					>
 						<div className="wpce-footer-status-title">
 							{__(
 								'Claudaborative Editing',
 								'claudaborative-editing'
 							)}
 						</div>
+						{!mcpConnected && wasConnectedRef.current && (
+							<div className="wpce-footer-status-line wpce-footer-status-reconnecting">
+								{__(
+									'Reconnecting\u2026',
+									'claudaborative-editing'
+								)}
+							</div>
+						)}
 						{statusLines.map((line, i) => (
 							<div key={i} className="wpce-footer-status-line">
 								{line}
@@ -242,6 +273,9 @@ export default function ConnectionStatus() {
 									)}
 							</div>
 						))}
+						{!mcpConnected && !wasConnectedRef.current && (
+							<OnboardingContent />
+						)}
 					</div>
 				</Popover>
 			)}

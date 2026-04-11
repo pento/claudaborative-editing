@@ -1,0 +1,107 @@
+.wpce-setup-modal {
+	max-width: 770px;
+}
+
+.wpce-setup-modal-intro {
+	color: #757575;
+	margin-bottom: 20px;
+}
+
+.wpce-setup-modal-options {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 16px;
+}
+
+.wpce-setup-modal-card {
+	border: 1px solid #e0e0e0;
+	border-radius: 8px;
+	padding: 20px;
+	position: relative;
+
+	p {
+		font-size: 13px;
+		color: #555;
+		line-height: 1.5;
+	}
+
+	ul {
+		list-style: none;
+		padding: 0;
+		margin: 12px 0 16px;
+	}
+
+	li {
+		font-size: 13px;
+		color: #555;
+		padding: 2px 0 2px 20px;
+		position: relative;
+
+		&::before {
+			content: "\2713";
+			position: absolute;
+			left: 0;
+			color: #1e8a3c;
+			font-weight: 600;
+		}
+	}
+}
+
+.wpce-setup-modal-card-cloud {
+	border-color: #d97706;
+	background: #fffbf0;
+}
+
+.wpce-setup-modal-card-header {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 4px;
+
+	svg {
+		fill: #1e1e1e;
+	}
+
+	h3 {
+		margin: 0;
+		font-size: 15px;
+		font-weight: 600;
+	}
+}
+
+.wpce-setup-modal-badge {
+	display: inline-block;
+	font-size: 11px;
+	font-weight: 600;
+	color: #92400e;
+	background: #fde68a;
+	padding: 2px 8px;
+	border-radius: 10px;
+	margin-bottom: 2px;
+	margin-left: auto;
+}
+
+.wpce-setup-modal-card-action {
+	margin-top: auto;
+}
+
+.wpce-setup-modal-command-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.wpce-setup-modal-command {
+	font-size: 12px;
+	background: #f0f0f0;
+	padding: 6px 10px;
+	border-radius: 4px;
+	user-select: all;
+	flex: 1;
+	min-width: 0;
+}
+
+.wpce-setup-modal-copy-button.components-button {
+	font-size: 12px;
+	flex-shrink: 0;
+}
