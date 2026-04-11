@@ -5,7 +5,9 @@ export function useCopyToClipboard(text: string): {
 	handleCopy: () => void;
 } {
 	const [copied, setCopied] = useState(false);
-	const timeoutRef = useRef<ReturnType<typeof setTimeout>>();
+	const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(
+		undefined
+	);
 
 	useEffect(() => {
 		return () => {
@@ -22,7 +24,13 @@ export function useCopyToClipboard(text: string): {
 		navigator.clipboard.writeText(text).then(
 			() => {
 				setCopied(true);
-				timeoutRef.current = setTimeout(() => setCopied(false), 2000);
+				if (timeoutRef.current) {
+					clearTimeout(timeoutRef.current);
+				}
+				timeoutRef.current = setTimeout(() => {
+					setCopied(false);
+					timeoutRef.current = undefined;
+				}, 2000);
 			},
 			() => {
 				// Clipboard write rejected (e.g., permission denied).

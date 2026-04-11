@@ -233,7 +233,7 @@ export default function ConnectionStatus() {
 					<div
 						className={
 							'wpce-footer-status-tooltip' +
-							(!mcpConnected
+							(!mcpConnected && !wasConnectedRef.current
 								? ' wpce-footer-status-tooltip-onboarding'
 								: '')
 						}
