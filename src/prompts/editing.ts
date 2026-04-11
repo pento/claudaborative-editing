@@ -15,7 +15,10 @@ export const editingPrompts: PromptDefinition[] = [
 					'A brief description of the editing focus or intent (e.g., "Make it more formal", "Improve the flow", "Condense the intro")'
 				),
 		},
-		buildMessages: (session, { editingFocus }) => {
+		buildMessages: (
+			session,
+			{ editingFocus }: { editingFocus: string }
+		) => {
 			const state = session.getState();
 
 			if (state === 'disconnected') {

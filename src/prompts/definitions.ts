@@ -23,7 +23,8 @@ export interface PromptResult {
  * Portable prompt definition that can be consumed by both the MCP server
  * (via registerPromptDefinitions) and a hosted orchestrator.
  */
-export interface PromptDefinition {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- intentional: args validated by Zod at runtime
+export interface PromptDefinition<TArgs = any> {
 	/** Prompt name (e.g., "review", "proofread") */
 	name: string;
 
@@ -43,6 +44,6 @@ export interface PromptDefinition {
 	 */
 	buildMessages: (
 		session: SessionManager,
-		args: Record<string, string>
+		args: TArgs
 	) => Promise<PromptResult> | PromptResult;
 }

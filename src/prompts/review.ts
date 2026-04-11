@@ -151,7 +151,7 @@ export const reviewPrompts: PromptDefinition[] = [
 				.positive()
 				.describe('The ID of the note to address.'),
 		},
-		buildMessages: async (session, { noteId }) => {
+		buildMessages: async (session, { noteId }: { noteId: number }) => {
 			const state = session.getState();
 
 			if (state === 'disconnected') {
@@ -200,7 +200,7 @@ export const reviewPrompts: PromptDefinition[] = [
 			const { notes, noteBlockMap } = await session.listNotes();
 
 			// Find the target note and its replies
-			const targetNote = notes.find((n) => n.id === Number(noteId));
+			const targetNote = notes.find((n) => n.id === noteId);
 
 			if (!targetNote) {
 				return {
@@ -216,7 +216,7 @@ export const reviewPrompts: PromptDefinition[] = [
 
 			// Collect the target note and all descendants (not just
 			// direct children) so formatNotes can render the full thread.
-			const relevantIds = new Set<number>([Number(noteId)]);
+			const relevantIds = new Set<number>([noteId]);
 			let changed = true;
 			while (changed) {
 				changed = false;
@@ -229,9 +229,9 @@ export const reviewPrompts: PromptDefinition[] = [
 			}
 			const relevantNotes = notes.filter((n) => relevantIds.has(n.id));
 			const relevantMap: Partial<Record<number, string>> = {};
-			const blockIdx = noteBlockMap[Number(noteId)];
+			const blockIdx = noteBlockMap[noteId];
 			if (blockIdx !== undefined) {
-				relevantMap[Number(noteId)] = blockIdx;
+				relevantMap[noteId] = blockIdx;
 			}
 
 			const formattedNote = formatNotes(relevantNotes, relevantMap);

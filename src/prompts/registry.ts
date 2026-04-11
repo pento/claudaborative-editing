@@ -38,12 +38,8 @@ export function registerPromptDefinitions(
 				description: prompt.description,
 				...(prompt.argsSchema ? { argsSchema: prompt.argsSchema } : {}),
 			},
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic dispatch, validated by Zod
-			async (args: any) => {
-				const result = await prompt.buildMessages(
-					session,
-					args as Record<string, string>
-				);
+			async (args: Record<string, unknown>) => {
+				const result = await prompt.buildMessages(session, args);
 				return {
 					description: result.description,
 					messages: result.messages.map((m) => ({

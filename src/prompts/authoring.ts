@@ -15,7 +15,7 @@ export const authoringPrompts: PromptDefinition[] = [
 					'Target language (e.g., "Spanish", "French", "Japanese", "zh-CN")'
 				),
 		},
-		buildMessages: (session, { language }) => {
+		buildMessages: (session, { language }: { language: string }) => {
 			const state = session.getState();
 
 			if (state === 'disconnected') {

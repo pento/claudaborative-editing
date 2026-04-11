@@ -56,7 +56,7 @@ interface EditBlockTextInput {
 const blockTypeDescription =
 	'Block type name (e.g., "core/paragraph", "core/heading", "core/separator")';
 
-const blockInputSchema: z.ZodType<BlockInput> = z.object({
+export const blockInputSchema: z.ZodType<BlockInput> = z.object({
 	name: z.string().describe(blockTypeDescription),
 	content: z.string().optional().describe('Text content for the block'),
 	attributes: z
