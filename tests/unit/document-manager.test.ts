@@ -778,6 +778,18 @@ describe('DocumentManager', () => {
 			expect(manager.getProperty(doc, 'excerpt')).toBe('A summary');
 		});
 
+		it('sets, updates, and gets Y.text properties', () => {
+			const { manager, doc } = createManager();
+
+			const ytext = new Y.Text('Rich text content');
+			manager.setProperty(doc, 'content', ytext);
+
+			manager.setProperty(doc, 'content', 'Updated content');
+
+			const result = manager.getProperty(doc, 'content');
+			expect(result).toBe('Updated content');
+		});
+
 		it('returns undefined for unset properties', () => {
 			const { manager, doc } = createManager();
 			expect(manager.getProperty(doc, 'nonexistent')).toBeUndefined();
