@@ -1,7 +1,6 @@
 import { z } from 'zod';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { SessionManager } from '../session/session-manager.js';
 import type { BlockTypeInfo } from '../yjs/block-type-registry.js';
+import type { ToolDefinition, ToolResult } from './definitions.js';
 
 /**
  * Format a single block type's info for display.
@@ -39,121 +38,69 @@ function formatBlockTypeInfo(info: BlockTypeInfo): string {
 	return lines.join('\n');
 }
 
-export function registerBlockTypeTools(
-	server: McpServer,
-	session: SessionManager
-): void {
-	server.registerTool(
-		'wp_block_types',
-		{
-			description:
-				'Look up block type schemas — attributes, defaults, nesting constraints. Use before inserting unfamiliar block types.',
-			inputSchema: {
-				name: z
-					.string()
-					.optional()
-					.describe(
-						'Exact block type name (e.g., "core/pullquote") for full details'
-					),
-				search: z
-					.string()
-					.optional()
-					.describe(
-						'Search block types by name (e.g., "quote", "media")'
-					),
-			},
+export const blockTypeTools: ToolDefinition[] = [
+	{
+		name: 'wp_block_types',
+		description:
+			'Look up block type schemas — attributes, defaults, nesting constraints. Use before inserting unfamiliar block types.',
+		inputSchema: {
+			name: z
+				.string()
+				.optional()
+				.describe(
+					'Exact block type name (e.g., "core/pullquote") for full details'
+				),
+			search: z
+				.string()
+				.optional()
+				.describe(
+					'Search block types by name (e.g., "quote", "media")'
+				),
 		},
-		({ name, search }) => {
-			try {
-				const registry = session.getRegistry();
+		execute: (
+			session,
+			{ name, search }: { name?: string; search?: string }
+		): string | ToolResult => {
+			const registry = session.getRegistry();
 
-				if (registry.isUsingFallback()) {
-					const state = session.getState();
-					const hint =
-						state === 'disconnected'
-							? 'Connect to a WordPress site to load full block schemas.'
-							: 'Full block schemas could not be loaded. Try disconnecting and reconnecting.';
-					return {
-						content: [
-							{
-								type: 'text' as const,
-								text: `Block type registry is using fallback data. Only basic block type information is available. ${hint}`,
-							},
-						],
-					};
-				}
-
-				// Exact lookup by name
-				if (name) {
-					const info = registry.getBlockTypeInfo(name);
-					if (!info) {
-						return {
-							content: [
-								{
-									type: 'text' as const,
-									text: `Block type "${name}" not found. Use search to find block types.`,
-								},
-							],
-							isError: true,
-						};
-					}
-					return {
-						content: [
-							{
-								type: 'text' as const,
-								text: formatBlockTypeInfo(info),
-							},
-						],
-					};
-				}
-
-				// Search by substring
-				if (search) {
-					const results = registry.searchBlockTypes(search);
-					if (results.length === 0) {
-						return {
-							content: [
-								{
-									type: 'text' as const,
-									text: `No block types matching "${search}".`,
-								},
-							],
-						};
-					}
-					const text = results
-						.map((r) => `${r.name} — ${r.title}`)
-						.join('\n');
-					return {
-						content: [
-							{
-								type: 'text' as const,
-								text: `Found ${results.length} block type${results.length !== 1 ? 's' : ''}:\n${text}`,
-							},
-						],
-					};
-				}
-
-				// No arguments: list all block type names
-				const allNames = registry.getKnownBlockTypeNames();
-				return {
-					content: [
-						{
-							type: 'text' as const,
-							text: `${allNames.length} registered block types:\n${allNames.join('\n')}`,
-						},
-					],
-				};
-			} catch (error) {
-				return {
-					content: [
-						{
-							type: 'text' as const,
-							text: `Failed to look up block types: ${error instanceof Error ? error.message : String(error)}`,
-						},
-					],
-					isError: true,
-				};
+			if (registry.isUsingFallback()) {
+				const state = session.getState();
+				const hint =
+					state === 'disconnected'
+						? 'Connect to a WordPress site to load full block schemas.'
+						: 'Full block schemas could not be loaded. Try disconnecting and reconnecting.';
+				return `Block type registry is using fallback data. Only basic block type information is available. ${hint}`;
 			}
-		}
-	);
-}
+
+			// Exact lookup by name
+			if (name) {
+				const info = registry.getBlockTypeInfo(name);
+				if (!info) {
+					return {
+						text: `Block type "${name}" not found. Use search to find block types.`,
+						isError: true,
+					};
+				}
+				return formatBlockTypeInfo(info);
+			}
+
+			// Search by substring
+			if (search) {
+				const results = registry.searchBlockTypes(search);
+				if (results.length === 0) {
+					return `No block types matching "${search}".`;
+				}
+				const text = results
+					.map((r) => `${r.name} — ${r.title}`)
+					.join('\n');
+				return `Found ${results.length} block type${results.length !== 1 ? 's' : ''}:\n${text}`;
+			}
+
+			// No arguments: list all block type names
+			const allNames = registry.getKnownBlockTypeNames();
+			return `${allNames.length} registered block types:\n${allNames.join('\n')}`;
+		},
+		tags: ['block-types'],
+		availableIn: ['connected', 'editing'],
+	},
+];

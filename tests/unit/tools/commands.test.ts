@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import type { ZodType } from 'zod';
-import { registerCommandTools } from '../../../src/tools/commands.js';
+import { commandTools } from '../../../src/tools/commands.js';
+import { registerToolDefinitions } from '../../../src/tools/registry.js';
 import { createMockServer, createMockSession } from './helpers.js';
 import { assertDefined } from '../../test-utils.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -14,7 +15,11 @@ describe('command tools', () => {
 
 	it('registers wp_update_command_status', () => {
 		const session = createMockSession();
-		registerCommandTools(server as unknown as McpServer, session);
+		registerToolDefinitions(
+			server as unknown as McpServer,
+			session,
+			commandTools
+		);
 
 		expect(server.registeredTools.has('wp_update_command_status')).toBe(
 			true
@@ -24,7 +29,11 @@ describe('command tools', () => {
 	describe('wp_update_command_status', () => {
 		it('updates command status and returns confirmation', async () => {
 			const session = createMockSession();
-			registerCommandTools(server as unknown as McpServer, session);
+			registerToolDefinitions(
+				server as unknown as McpServer,
+				session,
+				commandTools
+			);
 
 			const tool = server.registeredTools.get('wp_update_command_status');
 			assertDefined(tool);
@@ -48,7 +57,11 @@ describe('command tools', () => {
 
 		it('passes resultData parameter when provided', async () => {
 			const session = createMockSession();
-			registerCommandTools(server as unknown as McpServer, session);
+			registerToolDefinitions(
+				server as unknown as McpServer,
+				session,
+				commandTools
+			);
 
 			const tool = server.registeredTools.get('wp_update_command_status');
 			assertDefined(tool);
@@ -85,7 +98,11 @@ describe('command tools', () => {
 					typeof import('vitest').vi.fn
 				>
 			).mockRejectedValue(new Error('Network timeout'));
-			registerCommandTools(server as unknown as McpServer, session);
+			registerToolDefinitions(
+				server as unknown as McpServer,
+				session,
+				commandTools
+			);
 
 			const tool = server.registeredTools.get('wp_update_command_status');
 			assertDefined(tool);
@@ -97,7 +114,7 @@ describe('command tools', () => {
 
 			expect(result.isError).toBe(true);
 			expect(result.content[0].text).toContain(
-				'Failed to update command status: Network timeout'
+				'wp_update_command_status failed: Network timeout'
 			);
 		});
 
@@ -108,7 +125,11 @@ describe('command tools', () => {
 					typeof import('vitest').vi.fn
 				>
 			).mockRejectedValue('What a weird error');
-			registerCommandTools(server as unknown as McpServer, session);
+			registerToolDefinitions(
+				server as unknown as McpServer,
+				session,
+				commandTools
+			);
 
 			const tool = server.registeredTools.get('wp_update_command_status');
 			assertDefined(tool);
@@ -120,14 +141,18 @@ describe('command tools', () => {
 
 			expect(result.isError).toBe(true);
 			expect(result.content[0].text).toContain(
-				'Failed to update command status: What a weird error'
+				'wp_update_command_status failed: What a weird error'
 			);
 		});
 
 		describe('resultData schema validation', () => {
 			function getResultDataSchema(): ZodType {
 				const session = createMockSession();
-				registerCommandTools(server as unknown as McpServer, session);
+				registerToolDefinitions(
+					server as unknown as McpServer,
+					session,
+					commandTools
+				);
 				const tool = server.registeredTools.get(
 					'wp_update_command_status'
 				);
@@ -175,7 +200,11 @@ describe('command tools', () => {
 			).mockRejectedValue(
 				new Error('WordPress editor plugin is not connected')
 			);
-			registerCommandTools(server as unknown as McpServer, session);
+			registerToolDefinitions(
+				server as unknown as McpServer,
+				session,
+				commandTools
+			);
 
 			const tool = server.registeredTools.get('wp_update_command_status');
 			assertDefined(tool);

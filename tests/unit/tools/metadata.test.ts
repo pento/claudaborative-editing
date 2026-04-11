@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { registerMetadataTools } from '../../../src/tools/metadata.js';
+import { metadataTools } from '../../../src/tools/metadata.js';
+import { registerToolDefinitions } from '../../../src/tools/registry.js';
 import {
 	createMockServer,
 	createMockSession,
@@ -37,7 +38,11 @@ describe('metadata tools', () => {
 			},
 		]);
 
-		registerMetadataTools(server as unknown as McpServer, session);
+		registerToolDefinitions(
+			server as unknown as McpServer,
+			session,
+			metadataTools
+		);
 	});
 
 	it('registers all 11 metadata tools', () => {
@@ -92,7 +97,7 @@ describe('metadata tools', () => {
 
 			expect(result.isError).toBe(true);
 			expect(result.content[0].text).toContain(
-				'Failed to list categories'
+				'wp_list_categories failed'
 			);
 		});
 	});
@@ -133,7 +138,7 @@ describe('metadata tools', () => {
 			const result = await tool.handler({});
 
 			expect(result.isError).toBe(true);
-			expect(result.content[0].text).toContain('Failed to list tags');
+			expect(result.content[0].text).toContain('wp_list_tags failed');
 		});
 	});
 
@@ -169,7 +174,7 @@ describe('metadata tools', () => {
 			const result = await tool.handler({ status: 'publish' });
 
 			expect(result.isError).toBe(true);
-			expect(result.content[0].text).toContain('Failed to set status');
+			expect(result.content[0].text).toContain('wp_set_status failed');
 			expect(result.content[0].text).toContain(
 				'Insufficient permissions'
 			);
@@ -241,7 +246,7 @@ describe('metadata tools', () => {
 
 			expect(result.isError).toBe(true);
 			expect(result.content[0].text).toContain(
-				'Failed to set categories'
+				'wp_set_categories failed'
 			);
 			expect(result.content[0].text).toContain('Not editing');
 		});
@@ -291,7 +296,7 @@ describe('metadata tools', () => {
 			const result = await tool.handler({ tags: ['fail'] });
 
 			expect(result.isError).toBe(true);
-			expect(result.content[0].text).toContain('Failed to set tags');
+			expect(result.content[0].text).toContain('wp_set_tags failed');
 			expect(result.content[0].text).toContain('API error');
 		});
 	});
@@ -329,7 +334,7 @@ describe('metadata tools', () => {
 			const result = await tool.handler({ excerpt: 'test' });
 
 			expect(result.isError).toBe(true);
-			expect(result.content[0].text).toContain('Failed to set excerpt');
+			expect(result.content[0].text).toContain('wp_set_excerpt failed');
 			expect(result.content[0].text).toContain('Not editing');
 		});
 	});
@@ -366,7 +371,7 @@ describe('metadata tools', () => {
 
 			expect(result.isError).toBe(true);
 			expect(result.content[0].text).toContain(
-				'Failed to set featured image'
+				'wp_set_featured_image failed'
 			);
 			expect(result.content[0].text).toContain('Invalid attachment ID');
 		});
@@ -410,7 +415,7 @@ describe('metadata tools', () => {
 			const result = await tool.handler({ date: 'not-a-date' });
 
 			expect(result.isError).toBe(true);
-			expect(result.content[0].text).toContain('Failed to set date');
+			expect(result.content[0].text).toContain('wp_set_date failed');
 			expect(result.content[0].text).toContain('Invalid date format');
 		});
 	});
@@ -456,7 +461,7 @@ describe('metadata tools', () => {
 			const result = await tool.handler({ slug: '' });
 
 			expect(result.isError).toBe(true);
-			expect(result.content[0].text).toContain('Failed to set slug');
+			expect(result.content[0].text).toContain('wp_set_slug failed');
 			expect(result.content[0].text).toContain('Invalid slug');
 		});
 	});
@@ -490,7 +495,7 @@ describe('metadata tools', () => {
 			const result = await tool.handler({ sticky: true });
 
 			expect(result.isError).toBe(true);
-			expect(result.content[0].text).toContain('Failed to set sticky');
+			expect(result.content[0].text).toContain('wp_set_sticky failed');
 			expect(result.content[0].text).toContain('Not editing');
 		});
 	});
@@ -525,7 +530,7 @@ describe('metadata tools', () => {
 
 			expect(result.isError).toBe(true);
 			expect(result.content[0].text).toContain(
-				'Failed to set comment status'
+				'wp_set_comment_status failed'
 			);
 			expect(result.content[0].text).toContain('Permission denied');
 		});

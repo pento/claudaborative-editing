@@ -58,35 +58,12 @@ vi.mock('../../src/session/session-manager.js', () => {
 	};
 });
 
-// --- Mock tool registration functions (no-ops) ---
-vi.mock('../../src/tools/connect.js', () => ({
-	registerConnectTools: vi.fn(),
+// --- Mock tool and prompt registration (no-ops) ---
+vi.mock('../../src/tools/registry.js', () => ({
+	registerAllTools: vi.fn(),
 }));
-vi.mock('../../src/tools/posts.js', () => ({ registerPostTools: vi.fn() }));
-vi.mock('../../src/tools/read.js', () => ({ registerReadTools: vi.fn() }));
-vi.mock('../../src/tools/edit.js', () => ({ registerEditTools: vi.fn() }));
-vi.mock('../../src/tools/status.js', () => ({ registerStatusTools: vi.fn() }));
-vi.mock('../../src/tools/block-types.js', () => ({
-	registerBlockTypeTools: vi.fn(),
-}));
-vi.mock('../../src/tools/media.js', () => ({ registerMediaTools: vi.fn() }));
-vi.mock('../../src/tools/notes.js', () => ({ registerNoteTools: vi.fn() }));
-vi.mock('../../src/tools/metadata.js', () => ({
-	registerMetadataTools: vi.fn(),
-}));
-vi.mock('../../src/tools/commands.js', () => ({
-	registerCommandTools: vi.fn(),
-}));
-
-// --- Mock prompt registration functions (no-ops) ---
-vi.mock('../../src/prompts/editing.js', () => ({
-	registerEditingPrompts: vi.fn(),
-}));
-vi.mock('../../src/prompts/review.js', () => ({
-	registerReviewPrompts: vi.fn(),
-}));
-vi.mock('../../src/prompts/authoring.js', () => ({
-	registerAuthoringPrompts: vi.fn(),
+vi.mock('../../src/prompts/registry.js', () => ({
+	registerAllPrompts: vi.fn(),
 }));
 
 describe('startServer()', () => {

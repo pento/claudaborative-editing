@@ -563,6 +563,25 @@ describe('DocumentManager', () => {
 				'<!-- wp:paragraph --><p>Hello</p><!-- /wp:paragraph -->'
 			);
 		});
+
+		it('updates, and gets Y.Text content', () => {
+			const { manager, doc } = createManager();
+			manager
+				.getDocumentMap(doc)
+				.set('content', new Y.Text('Initial content'));
+			const ytext = manager.getContent(doc);
+			expect(ytext).toBe('Initial content');
+
+			manager.setContent(doc, 'Updated content');
+			const updatedYText = manager.getContent(doc);
+			expect(updatedYText).toBe('Updated content');
+			expect(manager.getDocumentMap(doc).get('content')).toBeInstanceOf(
+				Y.Text
+			);
+			expect(
+				(manager.getDocumentMap(doc).get('content') as Y.Text).toJSON()
+			).toBe('Updated content');
+		});
 	});
 
 	describe('getBlockAttributeYText', () => {
@@ -776,6 +795,18 @@ describe('DocumentManager', () => {
 			// excerpt too
 			manager.setProperty(doc, 'excerpt', 'A summary');
 			expect(manager.getProperty(doc, 'excerpt')).toBe('A summary');
+		});
+
+		it('sets, updates, and gets Y.Text properties', () => {
+			const { manager, doc } = createManager();
+
+			const ytext = new Y.Text('Rich text content');
+			manager.setProperty(doc, 'content', ytext);
+
+			manager.setProperty(doc, 'content', 'Updated content');
+
+			const result = manager.getProperty(doc, 'content');
+			expect(result).toBe('Updated content');
 		});
 
 		it('returns undefined for unset properties', () => {

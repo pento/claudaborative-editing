@@ -36,8 +36,8 @@ Claude Code  <--stdio-->  MCP Server (Node.js)  <--HTTP polling-->  WordPress
 - `src/wordpress/` — REST API client, HTTP polling sync client, command client, MIME types
 - `src/yjs/` — Y.Doc management, block ↔ Yjs conversion, sync protocol encoding
 - `src/session/` — Connection lifecycle, awareness/presence, command handler
-- `src/tools/` — MCP tool handlers
-- `src/prompts/` — MCP prompt handlers and content builders
+- `src/tools/` — Portable tool definitions (`ToolDefinition[]` arrays), registry, and MCP wiring
+- `src/prompts/` — Portable prompt definitions (`PromptDefinition[]` arrays), registry, content builders, and MCP wiring
 - `src/blocks/` — Gutenberg HTML parser, Claude-friendly renderer
 - `tests/` — Unit and integration tests
 
@@ -66,6 +66,23 @@ disconnected ──connect──→ connected ──openPost/createPost──→
 ### Sync Protocol
 
 Endpoint: `POST /wp-sync/v1/updates`. Each request sends local updates + awareness, receives remote updates + awareness + end_cursor. Update types: `sync_step1`, `sync_step2`, `update`, `compaction`.
+
+### Portable Tool & Prompt Definitions
+
+Tool and prompt definitions are decoupled from the MCP SDK so they can be consumed by both the MCP server and an external hosted orchestrator.
+
+- **`src/tools/definitions.ts`** — `ToolDefinition` interface. Each tool file exports a `ToolDefinition[]` array. `execute(session, input)` returns `string` (success), `ToolResult` (expected error with `isError`), or throws (unexpected error).
+- **`src/prompts/definitions.ts`** — `PromptDefinition` interface. Each prompt file exports a `PromptDefinition[]` array. `buildMessages(session, args)` returns simplified `{ role, content: string }` messages.
+- **`src/tools/registry.ts`** — Aggregates all tools into `allTools`, provides `registerAllTools(server, session)` for MCP wiring and lookup helpers (`getToolByName`, `getToolsForState`, `getToolsByTag`).
+- **`src/prompts/registry.ts`** — Same pattern for prompts. The MCP wrapper converts `PromptMessage.content` to `{ type: 'text', text }`.
+- **`src/server-instructions.ts`** — Extracted channel/base instructions as pure functions.
+- **Subpath exports** — `package.json` exports `./tools/definitions`, `./tools/registry`, `./prompts/definitions`, `./prompts/registry`, `./prompts/prompt-content`, `./session/session-manager`, `./server-instructions`, `./shared/commands`.
+
+### Adding a New Tool
+
+1. Add a `ToolDefinition` to the appropriate file in `src/tools/` (or create a new file)
+2. If new file: import and spread into `allTools` in `src/tools/registry.ts`
+3. Set `availableIn` (session states) and `tags` for hosted-server filtering
 
 ## Adding a New Command
 

@@ -1,18 +1,12 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { SessionManager } from '../session/session-manager.js';
+import type { PromptDefinition } from './definitions.js';
 import { buildComposeContent } from './prompt-content.js';
 
-export function registerComposePrompts(
-	server: McpServer,
-	session: SessionManager
-): void {
-	server.registerPrompt(
-		'compose',
-		{
-			description:
-				'Plan and outline a WordPress post through guided conversation.',
-		},
-		() => {
+export const composePrompts: PromptDefinition[] = [
+	{
+		name: 'compose',
+		description:
+			'Plan and outline a WordPress post through guided conversation.',
+		buildMessages: (session) => {
 			const state = session.getState();
 
 			if (state === 'disconnected') {
@@ -20,11 +14,9 @@ export function registerComposePrompts(
 					description: 'Compose a WordPress post',
 					messages: [
 						{
-							role: 'user' as const,
-							content: {
-								type: 'text' as const,
-								text: 'I want to plan and outline a WordPress post. Please connect to WordPress first using wp_connect, then open or create a post with wp_open_post or wp_create_post.',
-							},
+							role: 'user',
+							content:
+								'I want to plan and outline a WordPress post. Please connect to WordPress first using wp_connect, then open or create a post with wp_open_post or wp_create_post.',
 						},
 					],
 				};
@@ -35,11 +27,9 @@ export function registerComposePrompts(
 					description: 'Compose a WordPress post',
 					messages: [
 						{
-							role: 'user' as const,
-							content: {
-								type: 'text' as const,
-								text: 'I want to plan and outline a WordPress post. Please open an existing post with wp_open_post or create a new one with wp_create_post first.',
-							},
+							role: 'user',
+							content:
+								'I want to plan and outline a WordPress post. Please open an existing post with wp_open_post or create a new one with wp_create_post first.',
 						},
 					],
 				};
@@ -53,17 +43,14 @@ export function registerComposePrompts(
 				description: `Compose outline for "${session.getTitle()}"`,
 				messages: [
 					{
-						role: 'user' as const,
-						content: {
-							type: 'text' as const,
-							text: buildComposeContent(
-								postContent,
-								notesSupported
-							),
-						},
+						role: 'user',
+						content: buildComposeContent(
+							postContent,
+							notesSupported
+						),
 					},
 				],
 			};
-		}
-	);
-}
+		},
+	},
+];

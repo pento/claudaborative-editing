@@ -1,6 +1,5 @@
 import { z } from 'zod';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { SessionManager } from '../session/session-manager.js';
+import type { PromptDefinition } from './definitions.js';
 import {
 	formatNotes,
 	buildReviewContent,
@@ -8,17 +7,12 @@ import {
 	buildRespondToNoteContent,
 } from './prompt-content.js';
 
-export function registerReviewPrompts(
-	server: McpServer,
-	session: SessionManager
-): void {
-	server.registerPrompt(
-		'review',
-		{
-			description:
-				'Review a WordPress post and leave editorial feedback as notes on individual blocks.',
-		},
-		() => {
+export const reviewPrompts: PromptDefinition[] = [
+	{
+		name: 'review',
+		description:
+			'Review a WordPress post and leave editorial feedback as notes on individual blocks.',
+		buildMessages: (session) => {
 			const state = session.getState();
 
 			if (state === 'disconnected') {
@@ -26,11 +20,9 @@ export function registerReviewPrompts(
 					description: 'Review a WordPress post',
 					messages: [
 						{
-							role: 'user' as const,
-							content: {
-								type: 'text' as const,
-								text: 'I want to review a WordPress post. Please connect to WordPress first using wp_connect, then open a post with wp_open_post.',
-							},
+							role: 'user',
+							content:
+								'I want to review a WordPress post. Please connect to WordPress first using wp_connect, then open a post with wp_open_post.',
 						},
 					],
 				};
@@ -41,11 +33,9 @@ export function registerReviewPrompts(
 					description: 'Review a WordPress post',
 					messages: [
 						{
-							role: 'user' as const,
-							content: {
-								type: 'text' as const,
-								text: 'I want to review a WordPress post. Please open a post with wp_open_post first.',
-							},
+							role: 'user',
+							content:
+								'I want to review a WordPress post. Please open a post with wp_open_post first.',
 						},
 					],
 				};
@@ -59,27 +49,21 @@ export function registerReviewPrompts(
 				description: `Review "${session.getTitle()}"`,
 				messages: [
 					{
-						role: 'user' as const,
-						content: {
-							type: 'text' as const,
-							text: buildReviewContent(
-								postContent,
-								notesSupported
-							),
-						},
+						role: 'user',
+						content: buildReviewContent(
+							postContent,
+							notesSupported
+						),
 					},
 				],
 			};
-		}
-	);
-
-	server.registerPrompt(
-		'respond-to-notes',
-		{
-			description:
-				'Address editorial notes on a WordPress post — read each note, make the requested changes, and resolve notes when done.',
 		},
-		async () => {
+	},
+	{
+		name: 'respond-to-notes',
+		description:
+			'Address editorial notes on a WordPress post — read each note, make the requested changes, and resolve notes when done.',
+		buildMessages: async (session) => {
 			const state = session.getState();
 
 			if (state === 'disconnected') {
@@ -87,11 +71,9 @@ export function registerReviewPrompts(
 					description: 'Respond to editorial notes',
 					messages: [
 						{
-							role: 'user' as const,
-							content: {
-								type: 'text' as const,
-								text: 'I want to respond to editorial notes on a WordPress post. Please connect to WordPress first using wp_connect, then open a post with wp_open_post.',
-							},
+							role: 'user',
+							content:
+								'I want to respond to editorial notes on a WordPress post. Please connect to WordPress first using wp_connect, then open a post with wp_open_post.',
 						},
 					],
 				};
@@ -102,11 +84,9 @@ export function registerReviewPrompts(
 					description: 'Respond to editorial notes',
 					messages: [
 						{
-							role: 'user' as const,
-							content: {
-								type: 'text' as const,
-								text: 'I want to respond to editorial notes on a WordPress post. Please open a post with wp_open_post first.',
-							},
+							role: 'user',
+							content:
+								'I want to respond to editorial notes on a WordPress post. Please open a post with wp_open_post first.',
 						},
 					],
 				};
@@ -120,11 +100,9 @@ export function registerReviewPrompts(
 					description: 'Respond to editorial notes',
 					messages: [
 						{
-							role: 'user' as const,
-							content: {
-								type: 'text' as const,
-								text: 'This WordPress site does not support notes (requires WordPress 6.9+). There are no notes to respond to.',
-							},
+							role: 'user',
+							content:
+								'This WordPress site does not support notes (requires WordPress 6.9+). There are no notes to respond to.',
 						},
 					],
 				};
@@ -138,11 +116,9 @@ export function registerReviewPrompts(
 					description: 'Respond to editorial notes',
 					messages: [
 						{
-							role: 'user' as const,
-							content: {
-								type: 'text' as const,
-								text: 'There are no notes on this post. No action needed.',
-							},
+							role: 'user',
+							content:
+								'There are no notes on this post. No action needed.',
 						},
 					],
 				};
@@ -154,34 +130,28 @@ export function registerReviewPrompts(
 				description: `Respond to notes on "${session.getTitle()}"`,
 				messages: [
 					{
-						role: 'user' as const,
-						content: {
-							type: 'text' as const,
-							text: buildRespondToNotesContent(
-								postContent,
-								formattedNotes
-							),
-						},
+						role: 'user',
+						content: buildRespondToNotesContent(
+							postContent,
+							formattedNotes
+						),
 					},
 				],
 			};
-		}
-	);
-
-	server.registerPrompt(
-		'respond-to-note',
-		{
-			description:
-				'Address a single editorial note on a WordPress post — read it, make the requested changes, and resolve when done.',
-			argsSchema: {
-				noteId: z.coerce
-					.number()
-					.int()
-					.positive()
-					.describe('The ID of the note to address.'),
-			},
 		},
-		async ({ noteId }) => {
+	},
+	{
+		name: 'respond-to-note',
+		description:
+			'Address a single editorial note on a WordPress post — read it, make the requested changes, and resolve when done.',
+		argsSchema: {
+			noteId: z.coerce
+				.number()
+				.int()
+				.positive()
+				.describe('The ID of the note to address.'),
+		},
+		buildMessages: async (session, { noteId }: { noteId: number }) => {
 			const state = session.getState();
 
 			if (state === 'disconnected') {
@@ -189,11 +159,9 @@ export function registerReviewPrompts(
 					description: 'Respond to a note',
 					messages: [
 						{
-							role: 'user' as const,
-							content: {
-								type: 'text' as const,
-								text: 'I want to respond to an editorial note on a WordPress post. Please connect to WordPress first using wp_connect, then open a post with wp_open_post.',
-							},
+							role: 'user',
+							content:
+								'I want to respond to an editorial note on a WordPress post. Please connect to WordPress first using wp_connect, then open a post with wp_open_post.',
 						},
 					],
 				};
@@ -204,11 +172,9 @@ export function registerReviewPrompts(
 					description: 'Respond to a note',
 					messages: [
 						{
-							role: 'user' as const,
-							content: {
-								type: 'text' as const,
-								text: 'I want to respond to an editorial note on a WordPress post. Please open a post with wp_open_post first.',
-							},
+							role: 'user',
+							content:
+								'I want to respond to an editorial note on a WordPress post. Please open a post with wp_open_post first.',
 						},
 					],
 				};
@@ -222,11 +188,9 @@ export function registerReviewPrompts(
 					description: 'Respond to a note',
 					messages: [
 						{
-							role: 'user' as const,
-							content: {
-								type: 'text' as const,
-								text: 'This WordPress site does not support notes (requires WordPress 6.9+). There are no notes to respond to.',
-							},
+							role: 'user',
+							content:
+								'This WordPress site does not support notes (requires WordPress 6.9+). There are no notes to respond to.',
 						},
 					],
 				};
@@ -243,11 +207,8 @@ export function registerReviewPrompts(
 					description: 'Respond to a note',
 					messages: [
 						{
-							role: 'user' as const,
-							content: {
-								type: 'text' as const,
-								text: `Note #${noteId} was not found on this post. It may have already been resolved. Use wp_list_notes to see current notes.`,
-							},
+							role: 'user',
+							content: `Note #${noteId} was not found on this post. It may have already been resolved. Use wp_list_notes to see current notes.`,
 						},
 					],
 				};
@@ -279,17 +240,14 @@ export function registerReviewPrompts(
 				description: `Respond to note #${noteId} on "${session.getTitle()}"`,
 				messages: [
 					{
-						role: 'user' as const,
-						content: {
-							type: 'text' as const,
-							text: buildRespondToNoteContent(
-								postContent,
-								formattedNote
-							),
-						},
+						role: 'user',
+						content: buildRespondToNoteContent(
+							postContent,
+							formattedNote
+						),
 					},
 				],
 			};
-		}
-	);
-}
+		},
+	},
+];

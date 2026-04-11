@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { registerEditTools } from '../../../src/tools/edit.js';
+import { editTools, blockInputSchema } from '../../../src/tools/edit.js';
+import { registerToolDefinitions } from '../../../src/tools/registry.js';
 import {
 	createMockServer,
 	createMockSession,
@@ -22,7 +23,11 @@ describe('edit tools', () => {
 			post: fakePost,
 			blockContent: '[0] core/paragraph\n  "Updated content"',
 		});
-		registerEditTools(server as unknown as McpServer, session);
+		registerToolDefinitions(
+			server as unknown as McpServer,
+			session,
+			editTools
+		);
 	});
 
 	it('registers all edit tools', () => {
@@ -81,7 +86,7 @@ describe('edit tools', () => {
 			const result = await tool.handler({ index: '0', content: 'test' });
 
 			expect(result.isError).toBe(true);
-			expect(result.content[0].text).toContain('Failed to update block');
+			expect(result.content[0].text).toContain('wp_update_block failed');
 		});
 	});
 
@@ -155,9 +160,10 @@ describe('edit tools', () => {
 				},
 			});
 			const partialServer = createMockServer();
-			registerEditTools(
+			registerToolDefinitions(
 				partialServer as unknown as McpServer,
-				partialSession
+				partialSession,
+				editTools
 			);
 
 			const tool =
@@ -197,7 +203,11 @@ describe('edit tools', () => {
 				},
 			});
 			const failServer = createMockServer();
-			registerEditTools(failServer as unknown as McpServer, failSession);
+			registerToolDefinitions(
+				failServer as unknown as McpServer,
+				failSession,
+				editTools
+			);
 
 			const tool = failServer.registeredTools.get('wp_edit_block_text');
 			assertDefined(tool);
@@ -228,7 +238,7 @@ describe('edit tools', () => {
 
 			expect(result.isError).toBe(true);
 			expect(result.content[0].text).toContain(
-				'Failed to edit block text'
+				'wp_edit_block_text failed'
 			);
 			expect(result.content[0].text).toContain('Block 999 not found');
 		});
@@ -262,9 +272,10 @@ describe('edit tools', () => {
 				},
 			});
 			const multiServer = createMockServer();
-			registerEditTools(
+			registerToolDefinitions(
 				multiServer as unknown as McpServer,
-				multiSession
+				multiSession,
+				editTools
 			);
 
 			const tool = multiServer.registeredTools.get('wp_edit_block_text');
@@ -356,7 +367,7 @@ describe('edit tools', () => {
 			const result = await tool.handler({ startIndex: 99 });
 
 			expect(result.isError).toBe(true);
-			expect(result.content[0].text).toContain('Failed to remove blocks');
+			expect(result.content[0].text).toContain('wp_remove_blocks failed');
 		});
 	});
 
@@ -384,7 +395,7 @@ describe('edit tools', () => {
 			const result = await tool.handler({ fromIndex: 99, toIndex: 0 });
 
 			expect(result.isError).toBe(true);
-			expect(result.content[0].text).toContain('Failed to move block');
+			expect(result.content[0].text).toContain('wp_move_block failed');
 		});
 	});
 
@@ -437,7 +448,7 @@ describe('edit tools', () => {
 
 			expect(result.isError).toBe(true);
 			expect(result.content[0].text).toContain(
-				'Failed to replace blocks'
+				'wp_replace_blocks failed'
 			);
 		});
 	});
@@ -466,6 +477,64 @@ describe('edit tools', () => {
 			});
 			expect(result.content[0].text).toContain(
 				'Inserted core/list block at position 0'
+			);
+		});
+
+		it('passes deeply nested innerBlocks (recursive schema)', async () => {
+			const tool = server.registeredTools.get('wp_insert_block');
+			assertDefined(tool);
+			const result = await tool.handler({
+				position: 0,
+				name: 'core/columns',
+				innerBlocks: [
+					{
+						name: 'core/column',
+						innerBlocks: [
+							{
+								name: 'core/paragraph',
+								content: 'Nested content',
+							},
+							{
+								name: 'core/list',
+								innerBlocks: [
+									{
+										name: 'core/list-item',
+										content: 'Deeply nested item',
+									},
+								],
+							},
+						],
+					},
+				],
+			});
+
+			expect(session.insertBlock).toHaveBeenCalledWith(0, {
+				name: 'core/columns',
+				content: undefined,
+				attributes: undefined,
+				innerBlocks: [
+					{
+						name: 'core/column',
+						innerBlocks: [
+							{
+								name: 'core/paragraph',
+								content: 'Nested content',
+							},
+							{
+								name: 'core/list',
+								innerBlocks: [
+									{
+										name: 'core/list-item',
+										content: 'Deeply nested item',
+									},
+								],
+							},
+						],
+					},
+				],
+			});
+			expect(result.content[0].text).toContain(
+				'Inserted core/columns block at position 0'
 			);
 		});
 	});
@@ -511,7 +580,7 @@ describe('edit tools', () => {
 
 			expect(result.isError).toBe(true);
 			expect(result.content[0].text).toContain(
-				'Failed to insert inner block'
+				'wp_insert_inner_block failed'
 			);
 		});
 	});
@@ -564,7 +633,7 @@ describe('edit tools', () => {
 
 			expect(result.isError).toBe(true);
 			expect(result.content[0].text).toContain(
-				'Failed to remove inner blocks'
+				'wp_remove_inner_blocks failed'
 			);
 		});
 	});
@@ -629,7 +698,55 @@ describe('edit tools', () => {
 			const result = await tool.handler({ title: 'Test' });
 
 			expect(result.isError).toBe(true);
-			expect(result.content[0].text).toContain('Failed to set title');
+			expect(result.content[0].text).toContain('wp_set_title failed');
+		});
+	});
+
+	describe('blockInputSchema', () => {
+		it('validates deeply nested innerBlocks recursively', () => {
+			const input = {
+				name: 'core/columns',
+				innerBlocks: [
+					{
+						name: 'core/column',
+						innerBlocks: [
+							{
+								name: 'core/list',
+								innerBlocks: [
+									{
+										name: 'core/list-item',
+										content: 'Level 3',
+									},
+								],
+							},
+						],
+					},
+				],
+			};
+
+			const result = blockInputSchema.parse(input);
+			expect(result.name).toBe('core/columns');
+
+			const level1 = result.innerBlocks;
+			assertDefined(level1);
+			expect(level1[0].name).toBe('core/column');
+
+			const level2 = level1[0].innerBlocks;
+			assertDefined(level2);
+			expect(level2[0].name).toBe('core/list');
+
+			const level3 = level2[0].innerBlocks;
+			assertDefined(level3);
+			expect(level3[0].content).toBe('Level 3');
+		});
+
+		it('rejects invalid nested blocks', () => {
+			const input = {
+				name: 'core/columns',
+				innerBlocks: [{ notAName: 'invalid' }],
+			};
+
+			expect(() => blockInputSchema.parse(input)).toThrow();
 		});
 	});
 });

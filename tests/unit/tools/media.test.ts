@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { registerMediaTools } from '../../../src/tools/media.js';
+import { mediaTools } from '../../../src/tools/media.js';
+import { registerToolDefinitions } from '../../../src/tools/registry.js';
 import type { SessionManager } from '../../../src/session/session-manager.js';
 import {
 	createMockServer,
@@ -22,7 +23,11 @@ describe('media tools', () => {
 			user: fakeUser,
 			post: fakePost,
 		});
-		registerMediaTools(server as unknown as McpServer, session);
+		registerToolDefinitions(
+			server as unknown as McpServer,
+			session,
+			mediaTools
+		);
 	});
 
 	it('registers wp_upload_media tool', () => {
@@ -177,7 +182,7 @@ describe('media tools', () => {
 			});
 
 			expect(result.isError).toBe(true);
-			expect(result.content[0].text).toContain('Failed to upload media');
+			expect(result.content[0].text).toContain('wp_upload_media failed');
 			expect(result.content[0].text).toContain('File not found');
 		});
 

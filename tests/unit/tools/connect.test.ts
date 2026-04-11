@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { registerConnectTools } from '../../../src/tools/connect.js';
+import { connectTools } from '../../../src/tools/connect.js';
+import { registerToolDefinitions } from '../../../src/tools/registry.js';
 import { createMockServer, createMockSession, fakeUser } from './helpers.js';
 import { assertDefined } from '../../test-utils.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -12,7 +13,11 @@ describe('connect tools', () => {
 	beforeEach(() => {
 		server = createMockServer();
 		session = createMockSession({ user: fakeUser });
-		registerConnectTools(server as unknown as McpServer, session);
+		registerToolDefinitions(
+			server as unknown as McpServer,
+			session,
+			connectTools
+		);
 	});
 
 	it('registers wp_connect and wp_disconnect', () => {
@@ -51,7 +56,7 @@ describe('connect tools', () => {
 				appPassword: 'bad',
 			});
 
-			expect(result.content[0].text).toContain('Connection failed');
+			expect(result.content[0].text).toContain('wp_connect failed');
 			expect(result.content[0].text).toContain('Invalid credentials');
 			expect(result.isError).toBe(true);
 		});
@@ -62,9 +67,10 @@ describe('connect tools', () => {
 				user: fakeUser,
 			});
 			const connectedServer = createMockServer();
-			registerConnectTools(
+			registerToolDefinitions(
 				connectedServer as unknown as McpServer,
-				connectedSession
+				connectedSession,
+				connectTools
 			);
 
 			const tool = connectedServer.registeredTools.get('wp_connect');
@@ -89,9 +95,10 @@ describe('connect tools', () => {
 				user: fakeUser,
 			});
 			const editingServer = createMockServer();
-			registerConnectTools(
+			registerToolDefinitions(
 				editingServer as unknown as McpServer,
-				editingSession
+				editingSession,
+				connectTools
 			);
 
 			const tool = editingServer.registeredTools.get('wp_connect');

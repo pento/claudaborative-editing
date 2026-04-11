@@ -1,25 +1,20 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { SessionManager } from '../session/session-manager.js';
 import { VERSION } from '../version.js';
 import { WordPressApiError } from '../wordpress/api-client.js';
+import type { ToolDefinition, ToolResult } from './definitions.js';
 
 function getPluginDownloadUrl(): string {
 	return `https://github.com/pento/claudaborative-editing/releases/download/v${VERSION}/claudaborative-editing-plugin.zip`;
 }
 
-export function registerStatusTools(
-	server: McpServer,
-	session: SessionManager
-): void {
-	server.registerTool(
-		'wp_status',
-		{
-			description:
-				'Show current connection state, sync status, and post info. ' +
-				'If the plugin status includes URLs (download or admin links), ' +
-				'always show them to the user as clickable links.',
-		},
-		async () => {
+export const statusTools: ToolDefinition[] = [
+	{
+		name: 'wp_status',
+		description:
+			'Show current connection state, sync status, and post info. ' +
+			'If the plugin status includes URLs (download or admin links), ' +
+			'always show them to the user as clickable links.',
+		execute: async (session) => {
 			const state = session.getState();
 			const lines: string[] = [];
 
@@ -88,100 +83,57 @@ export function registerStatusTools(
 				}
 			}
 
-			return {
-				content: [{ type: 'text' as const, text: lines.join('\n') }],
-			};
-		}
-	);
-
-	server.registerTool(
-		'wp_collaborators',
-		{ description: 'List active collaborators on the current post' },
-		() => {
-			try {
-				const state = session.getState();
-				if (state !== 'editing') {
-					return {
-						content: [
-							{
-								type: 'text' as const,
-								text: 'No post is currently open for editing.',
-							},
-						],
-						isError: true,
-					};
-				}
-
-				const collaborators = session.getCollaborators();
-				const user = session.getUser();
-
-				const lines: string[] = ['Active collaborators:'];
-
-				// Add ourselves first
-				if (user) {
-					lines.push(
-						`- ${user.name} (AI, Claudaborative Editing MCP)`
-					);
-				}
-
-				// Add remote collaborators
-				for (const collab of collaborators) {
-					lines.push(
-						`- ${collab.name} (Human, ${collab.browserType})`
-					);
-				}
-
-				if (collaborators.length === 0 && !user) {
-					lines.push('- No collaborators detected');
-				}
-
+			return lines.join('\n');
+		},
+		tags: ['status'],
+	},
+	{
+		name: 'wp_collaborators',
+		description: 'List active collaborators on the current post',
+		execute: (session): string | ToolResult => {
+			const state = session.getState();
+			if (state !== 'editing') {
 				return {
-					content: [
-						{ type: 'text' as const, text: lines.join('\n') },
-					],
-				};
-			} catch (error) {
-				return {
-					content: [
-						{
-							type: 'text' as const,
-							text: `Failed to get collaborators: ${error instanceof Error ? error.message : String(error)}`,
-						},
-					],
+					text: 'No post is currently open for editing.',
 					isError: true,
 				};
 			}
-		}
-	);
 
-	server.registerTool(
-		'wp_save',
-		{ description: 'Save the current post' },
-		async () => {
-			try {
-				await session.save();
-				return {
-					content: [
-						{
-							type: 'text' as const,
-							text: `Post "${session.getTitle()}" saved.`,
-						},
-					],
-				};
-			} catch (error) {
-				return {
-					content: [
-						{
-							type: 'text' as const,
-							text: `Failed to save: ${error instanceof Error ? error.message : String(error)}`,
-						},
-					],
-					isError: true,
-				};
+			const collaborators = session.getCollaborators();
+			const user = session.getUser();
+
+			const lines: string[] = ['Active collaborators:'];
+
+			// Add ourselves first
+			if (user) {
+				lines.push(`- ${user.name} (AI, Claudaborative Editing MCP)`);
 			}
-		}
-	);
-}
+
+			// Add remote collaborators
+			for (const collab of collaborators) {
+				lines.push(`- ${collab.name} (Human, ${collab.browserType})`);
+			}
+
+			if (collaborators.length === 0 && !user) {
+				lines.push('- No collaborators detected');
+			}
+
+			return lines.join('\n');
+		},
+		tags: ['status'],
+		availableIn: ['editing'],
+	},
+	{
+		name: 'wp_save',
+		description: 'Save the current post',
+		execute: async (session) => {
+			await session.save();
+			return `Post "${session.getTitle()}" saved.`;
+		},
+		tags: ['status'],
+		availableIn: ['editing'],
+	},
+];
 
 /**
  * Try to get the editor plugin running. Attempts, in order:
