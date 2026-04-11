@@ -43,6 +43,20 @@ export function getToolsByTag(tag: string): ToolDefinition[] {
 }
 
 /**
+ * Format a thrown value into a readable error message.
+ * Handles Error instances, strings, and arbitrary objects safely.
+ */
+function formatThrown(error: unknown): string {
+	if (error instanceof Error) return error.message;
+	if (typeof error === 'string') return error;
+	try {
+		return JSON.stringify(error);
+	} catch {
+		return String(error);
+	}
+}
+
+/**
  * Register a set of tool definitions on an MCP server instance.
  * Wraps each tool's execute function with uniform error handling.
  */
@@ -76,7 +90,7 @@ export function registerToolDefinitions(
 						content: [
 							{
 								type: 'text' as const,
-								text: `${tool.name} failed: ${error instanceof Error ? error.message : String(error)}`,
+								text: `${tool.name} failed: ${formatThrown(error)}`,
 							},
 						],
 						isError: true,

@@ -182,7 +182,7 @@ describe('tools/registry', () => {
 			expect(result.isError).toBe(true);
 		});
 
-		it('catches non-Error throws and stringifies', async () => {
+		it('catches thrown strings and passes them through', async () => {
 			const server = createMockServer();
 			const session = createMockSession();
 
@@ -208,6 +208,36 @@ describe('tools/registry', () => {
 			const result = await registered.handler({});
 			expect(result.content[0].text).toBe(
 				'test_tool failed: raw string error'
+			);
+			expect(result.isError).toBe(true);
+		});
+
+		it('catches thrown objects and JSON-serializes them', async () => {
+			const server = createMockServer();
+			const session = createMockSession();
+
+			const tools: ToolDefinition[] = [
+				{
+					name: 'test_tool',
+					description: 'A test tool',
+					execute: () => {
+						// eslint-disable-next-line @typescript-eslint/only-throw-error
+						throw { code: 'ENOENT', path: '/tmp/missing' };
+					},
+				},
+			];
+
+			registerToolDefinitions(
+				server as unknown as McpServer,
+				session,
+				tools
+			);
+
+			const registered = server.registeredTools.get('test_tool');
+			assertDefined(registered);
+			const result = await registered.handler({});
+			expect(result.content[0].text).toBe(
+				'test_tool failed: {"code":"ENOENT","path":"/tmp/missing"}'
 			);
 			expect(result.isError).toBe(true);
 		});
