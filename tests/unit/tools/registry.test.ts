@@ -14,7 +14,7 @@ import type { ToolDefinition } from '../../../src/tools/definitions.js';
 
 describe('tools/registry', () => {
 	describe('allTools', () => {
-		it('aggregates all 33 tool definitions', () => {
+		it('aggregates all 39 tool definitions', () => {
 			expect(allTools.length).toBe(39);
 		});
 
