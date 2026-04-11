@@ -1,10 +1,16 @@
 import { z } from 'zod';
 import type { ToolDefinition } from './definitions.js';
-import type { CommandStatus } from '../../shared/commands.js';
+
+/** Statuses that can be set via the tool (subset of CommandStatus). */
+type SettableCommandStatus =
+	| 'running'
+	| 'completed'
+	| 'failed'
+	| 'awaiting_input';
 
 interface UpdateCommandStatusInput {
 	commandId: number;
-	status: CommandStatus;
+	status: SettableCommandStatus;
 	message?: string;
 	resultData?: string;
 }
