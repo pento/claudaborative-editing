@@ -90,6 +90,42 @@ describe('useCopyToClipboard', () => {
 		expect(result.current.copied).toBe(false);
 	});
 
+	it('clears previous timeout when copy is triggered again quickly', async () => {
+		const { result } = renderHook(() => useCopyToClipboard('test'));
+
+		// First copy
+		await act(async () => {
+			result.current.handleCopy();
+		});
+		expect(result.current.copied).toBe(true);
+
+		// Advance partway through the 2s timeout
+		act(() => {
+			jest.advanceTimersByTime(1000);
+		});
+		expect(result.current.copied).toBe(true);
+
+		// Second copy — should clear the first timeout and start a fresh 2s
+		await act(async () => {
+			result.current.handleCopy();
+		});
+		expect(result.current.copied).toBe(true);
+
+		// Advance another 1s (total 2s from first copy, but only 1s from second)
+		act(() => {
+			jest.advanceTimersByTime(1000);
+		});
+
+		// Should still be true — the first timeout was cleared, second has 1s left
+		expect(result.current.copied).toBe(true);
+
+		// Advance the remaining 1s for the second timeout
+		act(() => {
+			jest.advanceTimersByTime(1000);
+		});
+		expect(result.current.copied).toBe(false);
+	});
+
 	it('cleans up timeout on unmount', async () => {
 		const { result, unmount } = renderHook(() =>
 			useCopyToClipboard('test')
