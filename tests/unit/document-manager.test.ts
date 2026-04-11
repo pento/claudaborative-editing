@@ -564,7 +564,7 @@ describe('DocumentManager', () => {
 			);
 		});
 
-		it('Updates, and gets Y.text content', () => {
+		it('updates, and gets Y.Text content', () => {
 			const { manager, doc } = createManager();
 			manager
 				.getDocumentMap(doc)
@@ -797,7 +797,7 @@ describe('DocumentManager', () => {
 			expect(manager.getProperty(doc, 'excerpt')).toBe('A summary');
 		});
 
-		it('sets, updates, and gets Y.text properties', () => {
+		it('sets, updates, and gets Y.Text properties', () => {
 			const { manager, doc } = createManager();
 
 			const ytext = new Y.Text('Rich text content');
