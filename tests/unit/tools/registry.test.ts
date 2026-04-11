@@ -241,6 +241,39 @@ describe('tools/registry', () => {
 			);
 			expect(result.isError).toBe(true);
 		});
+
+		it('falls back to String() for circular objects', async () => {
+			const server = createMockServer();
+			const session = createMockSession();
+
+			const circular: Record<string, unknown> = { name: 'loop' };
+			circular.self = circular;
+
+			const tools: ToolDefinition[] = [
+				{
+					name: 'test_tool',
+					description: 'A test tool',
+					execute: () => {
+						// eslint-disable-next-line @typescript-eslint/only-throw-error
+						throw circular;
+					},
+				},
+			];
+
+			registerToolDefinitions(
+				server as unknown as McpServer,
+				session,
+				tools
+			);
+
+			const registered = server.registeredTools.get('test_tool');
+			assertDefined(registered);
+			const result = await registered.handler({});
+			expect(result.content[0].text).toBe(
+				'test_tool failed: [object Object]'
+			);
+			expect(result.isError).toBe(true);
+		});
 	});
 
 	describe('registerAllTools', () => {
