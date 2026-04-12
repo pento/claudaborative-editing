@@ -1902,6 +1902,24 @@ class RestControllerTest extends \WP_UnitTestCase {
 		$this->assertSame( 400, $response->get_status() );
 	}
 
+	/**
+	 * validate_cloud_url rejects a URL without a scheme or host.
+	 *
+	 * Called directly because sanitize_url (which runs before the
+	 * validate_callback in REST dispatch) normalises malformed values
+	 * before the validator sees them.
+	 */
+	public function test_validate_cloud_url_rejects_missing_scheme_and_host() {
+		$controller = new REST_Controller();
+
+		$request = new \WP_REST_Request( 'POST', '/wpce/v1/cloud' );
+
+		$result = $controller->validate_cloud_url( '/just-a-path', $request, 'cloud_url' );
+
+		$this->assertWPError( $result );
+		$this->assertSame( 'rest_invalid_param', $result->get_error_code() );
+	}
+
 	// -------------------------------------------------------------------------
 	// DELETE /wpce/v1/cloud
 	// -------------------------------------------------------------------------
