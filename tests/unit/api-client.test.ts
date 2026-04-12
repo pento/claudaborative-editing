@@ -264,6 +264,23 @@ describe('WordPressApiClient', () => {
 			});
 		});
 
+		it('falls back to /wp-json when response.text() throws', async () => {
+			const headers = new Headers();
+			fetchMock.mockResolvedValue({
+				ok: true,
+				status: 200,
+				statusText: 'OK',
+				headers,
+				text: () => Promise.reject(new Error('body stream error')),
+			} as unknown as Response);
+			const result = await WordPressApiClient.discover(
+				'https://example.com'
+			);
+			expect(result).toEqual({
+				restUrl: 'https://example.com/wp-json',
+			});
+		});
+
 		it('strips trailing slashes from siteUrl', async () => {
 			fetchMock.mockRejectedValue(new TypeError('fetch failed'));
 			const result = await WordPressApiClient.discover(

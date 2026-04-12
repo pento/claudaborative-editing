@@ -429,12 +429,14 @@ export class SessionManager {
 			await this.disconnect();
 		}
 
-		// Discover REST API URL from the site
-		const discovery = await WordPressApiClient.discover(config.siteUrl);
+		// Discover REST API URL from the site only when the caller did not provide one
+		const restUrl =
+			config.restUrl ??
+			(await WordPressApiClient.discover(config.siteUrl)).restUrl;
 
 		this._apiClient = new WordPressApiClient({
 			...config,
-			restUrl: config.restUrl ?? discovery.restUrl,
+			restUrl,
 		});
 
 		// Check application-passwords support before first authenticated request

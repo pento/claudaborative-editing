@@ -366,11 +366,7 @@ async function validateCredentials(
 	try {
 		await client.checkAuthSupport();
 	} catch (err) {
-		if (err instanceof WordPressApiError) {
-			deps.error(err.message);
-		} else {
-			deps.error('Could not check authentication support.');
-		}
+		deps.error(err instanceof Error ? err.message : String(err));
 		deps.exit(1);
 	}
 
