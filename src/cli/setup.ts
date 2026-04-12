@@ -352,11 +352,27 @@ async function validateCredentials(
 	deps.log('');
 	deps.log('Validating credentials...');
 
+	// Discover REST API URL from the site
+	const discovery = await WordPressApiClient.discover(credentials.siteUrl);
+
 	const client = new WordPressApiClient({
 		siteUrl: credentials.siteUrl,
 		username: credentials.username,
 		appPassword: credentials.appPassword,
+		restUrl: discovery.restUrl,
 	});
+
+	// Check application-passwords support before attempting auth
+	try {
+		await client.checkAuthSupport();
+	} catch (err) {
+		if (err instanceof WordPressApiError) {
+			deps.error(err.message);
+		} else {
+			deps.error('Could not check authentication support.');
+		}
+		deps.exit(1);
+	}
 
 	try {
 		const user = await client.validateConnection();
@@ -373,9 +389,6 @@ async function validateCredentials(
 		deps.exit(1);
 	}
 
-	const wpVersion = await client.getWordPressVersion();
-	deps.log(`  WordPress version: ${wpVersion}`);
-
 	try {
 		await client.validateSyncEndpoint();
 		deps.log('  ✓ Collaborative editing endpoint available');
@@ -385,9 +398,6 @@ async function validateCredentials(
 			deps.error(
 				'Collaborative editing is not available.\n' +
 					'  Requires WordPress 7.0 or later, or the Gutenberg plugin 22.8 or later.\n' +
-					(wpVersion !== 'unknown'
-						? `  Current WordPress version: ${wpVersion}\n`
-						: '') +
 					'  If using WordPress 7.0+, enable collaborative editing in Settings → Writing.'
 			);
 			deps.exit(1);

@@ -100,6 +100,294 @@ describe('WordPressApiClient', () => {
 				(callOptions.headers as Record<string, string>).Authorization
 			).toBe(expectedAuth);
 		});
+
+		it('uses restUrl for API calls when provided', () => {
+			fetchMock.mockResolvedValue(mockResponse(fakeUser));
+			const client = new WordPressApiClient({
+				siteUrl: 'https://example.com',
+				username: 'admin',
+				appPassword: 'xxxx yyyy zzzz',
+				restUrl: 'https://example.com/blog/wp-json',
+			});
+			void client.getCurrentUser();
+			expect(fetchMock).toHaveBeenCalledWith(
+				'https://example.com/blog/wp-json/wp/v2/users/me',
+				expect.anything()
+			);
+		});
+
+		it('enters restRouteMode when restUrl contains ?rest_route=', () => {
+			fetchMock.mockResolvedValue(mockResponse(fakeUser));
+			const client = new WordPressApiClient({
+				siteUrl: 'https://example.com',
+				username: 'admin',
+				appPassword: 'xxxx yyyy zzzz',
+				restUrl: 'https://example.com/?rest_route=/',
+			});
+			void client.getCurrentUser();
+			expect(fetchMock).toHaveBeenCalledWith(
+				'https://example.com?rest_route=/wp/v2/users/me',
+				expect.anything()
+			);
+		});
+
+		it('strips trailing slashes from restUrl', () => {
+			fetchMock.mockResolvedValue(mockResponse(fakeUser));
+			const client = new WordPressApiClient({
+				siteUrl: 'https://example.com',
+				username: 'admin',
+				appPassword: 'xxxx yyyy zzzz',
+				restUrl: 'https://example.com/blog/wp-json/',
+			});
+			void client.getCurrentUser();
+			expect(fetchMock).toHaveBeenCalledWith(
+				'https://example.com/blog/wp-json/wp/v2/users/me',
+				expect.anything()
+			);
+		});
+	});
+
+	describe('discover', () => {
+		function mockDiscoverResponse(options: {
+			ok?: boolean;
+			status?: number;
+			linkHeader?: string | null;
+			body?: string;
+		}): Response {
+			const ok = options.ok ?? true;
+			const status = options.status ?? 200;
+			const headers = new Headers();
+			if (options.linkHeader) {
+				headers.set('Link', options.linkHeader);
+			}
+			return {
+				ok,
+				status,
+				statusText: ok ? 'OK' : 'Error',
+				headers,
+				text: () => Promise.resolve(options.body ?? ''),
+				json: () => Promise.resolve({}),
+			} as unknown as Response;
+		}
+
+		it('extracts REST URL from Link header', async () => {
+			fetchMock.mockResolvedValue(
+				mockDiscoverResponse({
+					linkHeader:
+						'<https://example.com/wp-json/>; rel="https://api.w.org/"',
+				})
+			);
+			const result = await WordPressApiClient.discover(
+				'https://example.com'
+			);
+			expect(result).toEqual({
+				restUrl: 'https://example.com/wp-json/',
+			});
+		});
+
+		it('falls back to HTML link tag when no Link header', async () => {
+			fetchMock.mockResolvedValue(
+				mockDiscoverResponse({
+					body: '<html><head><link rel="https://api.w.org/" href="https://example.com/wp-json/" /></head></html>',
+				})
+			);
+			const result = await WordPressApiClient.discover(
+				'https://example.com'
+			);
+			expect(result).toEqual({
+				restUrl: 'https://example.com/wp-json/',
+			});
+		});
+
+		it('handles href-before-rel attribute order in HTML link tag', async () => {
+			fetchMock.mockResolvedValue(
+				mockDiscoverResponse({
+					body: '<html><head><link href="https://example.com/wp-json/" rel="https://api.w.org/" /></head></html>',
+				})
+			);
+			const result = await WordPressApiClient.discover(
+				'https://example.com'
+			);
+			expect(result).toEqual({
+				restUrl: 'https://example.com/wp-json/',
+			});
+		});
+
+		it('handles ?rest_route= in Link header', async () => {
+			fetchMock.mockResolvedValue(
+				mockDiscoverResponse({
+					linkHeader:
+						'<https://example.com/?rest_route=/>; rel="https://api.w.org/"',
+				})
+			);
+			const result = await WordPressApiClient.discover(
+				'https://example.com'
+			);
+			expect(result).toEqual({
+				restUrl: 'https://example.com/?rest_route=/',
+			});
+		});
+
+		it('falls back to /wp-json when no discovery info found', async () => {
+			fetchMock.mockResolvedValue(
+				mockDiscoverResponse({
+					body: '<html><head><title>My Site</title></head></html>',
+				})
+			);
+			const result = await WordPressApiClient.discover(
+				'https://example.com'
+			);
+			expect(result).toEqual({
+				restUrl: 'https://example.com/wp-json',
+			});
+		});
+
+		it('falls back to /wp-json on network error', async () => {
+			fetchMock.mockRejectedValue(new TypeError('fetch failed'));
+			const result = await WordPressApiClient.discover(
+				'https://example.com'
+			);
+			expect(result).toEqual({
+				restUrl: 'https://example.com/wp-json',
+			});
+		});
+
+		it('falls back to /wp-json on non-OK response', async () => {
+			fetchMock.mockResolvedValue(
+				mockDiscoverResponse({ ok: false, status: 403 })
+			);
+			const result = await WordPressApiClient.discover(
+				'https://example.com'
+			);
+			expect(result).toEqual({
+				restUrl: 'https://example.com/wp-json',
+			});
+		});
+
+		it('strips trailing slashes from siteUrl', async () => {
+			fetchMock.mockRejectedValue(new TypeError('fetch failed'));
+			const result = await WordPressApiClient.discover(
+				'https://example.com/'
+			);
+			expect(result).toEqual({
+				restUrl: 'https://example.com/wp-json',
+			});
+		});
+	});
+
+	describe('checkAuthSupport', () => {
+		it('does not throw when application-passwords is present', async () => {
+			fetchMock.mockResolvedValue(
+				mockResponse({
+					authentication: {
+						'application-passwords': { endpoints: {} },
+					},
+				})
+			);
+			const client = createClient();
+			await expect(client.checkAuthSupport()).resolves.toBeUndefined();
+		});
+
+		it('throws when auth methods exist but no application-passwords', async () => {
+			fetchMock.mockResolvedValue(
+				mockResponse({
+					authentication: { cookie: {} },
+				})
+			);
+			const client = createClient();
+			await expect(client.checkAuthSupport()).rejects.toThrow(
+				WordPressApiError
+			);
+			await expect(client.checkAuthSupport()).rejects.toThrow(
+				/Application Passwords/
+			);
+		});
+
+		it('does not throw when authentication field is empty', async () => {
+			fetchMock.mockResolvedValue(mockResponse({ authentication: {} }));
+			const client = createClient();
+			await expect(client.checkAuthSupport()).resolves.toBeUndefined();
+		});
+
+		it('does not throw when authentication field is missing', async () => {
+			fetchMock.mockResolvedValue(mockResponse({}));
+			const client = createClient();
+			await expect(client.checkAuthSupport()).resolves.toBeUndefined();
+		});
+
+		it('does not throw on fetch error', async () => {
+			fetchMock.mockRejectedValue(new TypeError('fetch failed'));
+			const client = createClient();
+			await expect(client.checkAuthSupport()).resolves.toBeUndefined();
+		});
+
+		it('does not throw on non-OK response', async () => {
+			fetchMock.mockResolvedValue(
+				mockResponse(
+					{ code: 'internal_error', message: 'Server Error' },
+					{ status: 500, statusText: 'Internal Server Error' }
+				)
+			);
+			const client = createClient();
+			await expect(client.checkAuthSupport()).resolves.toBeUndefined();
+		});
+	});
+
+	describe('URL construction', () => {
+		it('uses default /wp-json base URL', () => {
+			fetchMock.mockResolvedValue(mockResponse(fakeUser));
+			const client = createClient();
+			void client.getCurrentUser();
+			expect(fetchMock).toHaveBeenCalledWith(
+				'https://example.com/wp-json/wp/v2/users/me',
+				expect.anything()
+			);
+		});
+
+		it('uses custom restUrl for API calls', () => {
+			fetchMock.mockResolvedValue(mockResponse(fakeUser));
+			const client = new WordPressApiClient({
+				siteUrl: 'https://example.com',
+				username: 'admin',
+				appPassword: 'xxxx yyyy zzzz',
+				restUrl: 'https://example.com/blog/wp-json',
+			});
+			void client.getCurrentUser();
+			expect(fetchMock).toHaveBeenCalledWith(
+				'https://example.com/blog/wp-json/wp/v2/users/me',
+				expect.anything()
+			);
+		});
+
+		it('builds restRouteMode URL for simple path', () => {
+			fetchMock.mockResolvedValue(mockResponse(fakeUser));
+			const client = new WordPressApiClient({
+				siteUrl: 'https://example.com',
+				username: 'admin',
+				appPassword: 'xxxx yyyy zzzz',
+				restUrl: 'https://example.com/?rest_route=/',
+			});
+			void client.getCurrentUser();
+			expect(fetchMock).toHaveBeenCalledWith(
+				'https://example.com?rest_route=/wp/v2/users/me',
+				expect.anything()
+			);
+		});
+
+		it('builds restRouteMode URL for path with query params', () => {
+			fetchMock.mockResolvedValue(mockResponse(fakePost));
+			const client = new WordPressApiClient({
+				siteUrl: 'https://example.com',
+				username: 'admin',
+				appPassword: 'xxxx yyyy zzzz',
+				restUrl: 'https://example.com/?rest_route=/',
+			});
+			void client.getPost(42);
+			expect(fetchMock).toHaveBeenCalledWith(
+				'https://example.com?rest_route=/wp/v2/posts/42&context=edit',
+				expect.anything()
+			);
+		});
 	});
 
 	describe('createUrl', () => {
@@ -153,32 +441,6 @@ describe('WordPressApiClient', () => {
 					body: JSON.stringify({ rooms: [] }),
 				})
 			);
-		});
-	});
-
-	describe('getWordPressVersion', () => {
-		it('returns version string', async () => {
-			fetchMock.mockResolvedValue(mockResponse({ version: '7.0' }));
-			const client = createClient();
-			expect(await client.getWordPressVersion()).toBe('7.0');
-		});
-
-		it('returns unknown when endpoint is unavailable', async () => {
-			fetchMock.mockRejectedValue(new Error('fetch failed'));
-			const client = createClient();
-			expect(await client.getWordPressVersion()).toBe('unknown');
-		});
-
-		it('returns unknown when version field is missing', async () => {
-			fetchMock.mockResolvedValue(mockResponse({}));
-			const client = createClient();
-			expect(await client.getWordPressVersion()).toBe('unknown');
-		});
-
-		it('returns unknown when version field is empty', async () => {
-			fetchMock.mockResolvedValue(mockResponse({ version: '' }));
-			const client = createClient();
-			expect(await client.getWordPressVersion()).toBe('unknown');
 		});
 	});
 

@@ -429,7 +429,16 @@ export class SessionManager {
 			await this.disconnect();
 		}
 
-		this._apiClient = new WordPressApiClient(config);
+		// Discover REST API URL from the site
+		const discovery = await WordPressApiClient.discover(config.siteUrl);
+
+		this._apiClient = new WordPressApiClient({
+			...config,
+			restUrl: config.restUrl ?? discovery.restUrl,
+		});
+
+		// Check application-passwords support before first authenticated request
+		await this.apiClient.checkAuthSupport();
 
 		// Validate credentials
 		const user = await this.apiClient.validateConnection();
