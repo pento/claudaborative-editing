@@ -16,10 +16,9 @@ import { cloud, code } from '@wordpress/icons';
  * Internal dependencies
  */
 import { useCopyToClipboard } from '../../hooks/use-copy-to-clipboard';
+import { SETUP_COMMAND } from '../../constants';
 // Styles are imported via ConnectionStatus/style.scss to ensure
 // they land in the extracted style-index.css stylesheet.
-
-const SETUP_COMMAND = 'npx claudaborative-editing start';
 
 /**
  * OnboardingContent component.

@@ -17,11 +17,10 @@ import { cloud, code } from '@wordpress/icons';
  * Internal dependencies
  */
 import { useCopyToClipboard } from '../../hooks/use-copy-to-clipboard';
+import { SETUP_COMMAND } from '../../constants';
 import SparkleIcon from '../SparkleIcon';
 
 import './style.scss';
-
-const SETUP_COMMAND = 'npx claudaborative-editing start';
 
 interface SetupModalProps {
 	onRequestClose: () => void;
