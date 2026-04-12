@@ -33,16 +33,16 @@ import { isCloudConfigured } from '../../cloud/connect';
 export default function OnboardingContent() {
 	const { copied, handleCopy } = useCopyToClipboard(SETUP_COMMAND);
 
-	if ( isCloudConfigured() ) {
+	if (isCloudConfigured()) {
 		return (
 			<div className="wpce-onboarding wpce-onboarding-cloud-connecting">
 				<Spinner />
 				<span>
-					{ sprintf(
+					{sprintf(
 						/* translators: %s: Claudaborative Cloud service name */
-						__( 'Connecting to %s\u2026', 'claudaborative-editing' ),
-						__( 'Claudaborative Cloud', 'claudaborative-editing' )
-					) }
+						__('Connecting to %s\u2026', 'claudaborative-editing'),
+						__('Claudaborative Cloud', 'claudaborative-editing')
+					)}
 				</span>
 			</div>
 		);
