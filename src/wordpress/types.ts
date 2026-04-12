@@ -164,6 +164,8 @@ export interface WordPressConfig {
 	siteUrl: string;
 	username: string;
 	appPassword: string;
+	/** REST API base URL discovered from the site (e.g., https://example.com/wp-json). */
+	restUrl?: string;
 }
 
 // --- Sync Client Config ---

@@ -104,9 +104,40 @@ function createTestDeps(
 	};
 }
 
-// Successful fetch responses for validation (user + version check + sync endpoint)
+// Mock response for REST API URL discovery (GET site URL with Link header)
+function mockDiscoveryResponse(
+	restUrl = 'https://example.com/wp-json/'
+): Response {
+	return {
+		ok: true,
+		status: 200,
+		headers: new Headers({
+			Link: `<${restUrl}>; rel="https://api.w.org/"`,
+		}),
+		text: () => Promise.resolve(''),
+	} as unknown as Response;
+}
+
+// Mock response for auth support check (GET REST root, unauthenticated)
+function mockAuthSupportResponse(): Response {
+	return {
+		ok: true,
+		status: 200,
+		headers: new Headers(),
+		json: () =>
+			Promise.resolve({
+				authentication: {
+					'application-passwords': { endpoints: {} },
+				},
+			}),
+	} as unknown as Response;
+}
+
+// Successful fetch responses for validation (discovery + auth check + user + sync endpoint)
 function mockSuccessfulValidation(): void {
 	fetchMock
+		.mockResolvedValueOnce(mockDiscoveryResponse())
+		.mockResolvedValueOnce(mockAuthSupportResponse())
 		.mockResolvedValueOnce(
 			mockResponse({
 				id: 1,
@@ -115,7 +146,6 @@ function mockSuccessfulValidation(): void {
 				avatar_urls: {},
 			})
 		)
-		.mockResolvedValueOnce(mockResponse({ version: '7.0' }))
 		.mockResolvedValueOnce(mockResponse({ rooms: [] }));
 }
 
@@ -196,7 +226,20 @@ describe('setup wizard', () => {
 		});
 
 		it('prepends https:// to bare domain URLs', async () => {
-			mockSuccessfulValidation();
+			fetchMock
+				.mockResolvedValueOnce(
+					mockDiscoveryResponse('https://pento.net/wp-json/')
+				)
+				.mockResolvedValueOnce(mockAuthSupportResponse())
+				.mockResolvedValueOnce(
+					mockResponse({
+						id: 1,
+						name: 'admin',
+						slug: 'admin',
+						avatar_urls: {},
+					})
+				)
+				.mockResolvedValueOnce(mockResponse({ rooms: [] }));
 			const writeConfig = vi.fn().mockResolvedValue(true);
 
 			const { deps } = createTestDeps(
@@ -210,14 +253,25 @@ describe('setup wizard', () => {
 
 			await runSetup(deps, { manual: true });
 
-			expect(fetchMock).toHaveBeenCalledWith(
-				expect.stringContaining('https://pento.net/wp-json/'),
-				expect.anything()
-			);
+			// Discovery call should use the normalised URL with https://
+			expect(fetchMock.mock.calls[0][0]).toBe('https://pento.net');
 		});
 
 		it('preserves explicit http:// scheme', async () => {
-			mockSuccessfulValidation();
+			fetchMock
+				.mockResolvedValueOnce(
+					mockDiscoveryResponse('http://localhost:8080/wp-json/')
+				)
+				.mockResolvedValueOnce(mockAuthSupportResponse())
+				.mockResolvedValueOnce(
+					mockResponse({
+						id: 1,
+						name: 'admin',
+						slug: 'admin',
+						avatar_urls: {},
+					})
+				)
+				.mockResolvedValueOnce(mockResponse({ rooms: [] }));
 			const writeConfig = vi.fn().mockResolvedValue(true);
 
 			const { deps } = createTestDeps(
@@ -231,10 +285,8 @@ describe('setup wizard', () => {
 
 			await runSetup(deps, { manual: true });
 
-			expect(fetchMock).toHaveBeenCalledWith(
-				expect.stringContaining('http://localhost:8080/wp-json/'),
-				expect.anything()
-			);
+			// Discovery call should preserve the http:// scheme
+			expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:8080');
 		});
 
 		it('strips trailing slashes from URLs', async () => {
@@ -252,20 +304,20 @@ describe('setup wizard', () => {
 
 			await runSetup(deps, { manual: true });
 
-			// Should use the URL without trailing slash
-			expect(fetchMock).toHaveBeenCalledWith(
-				expect.stringContaining('https://example.com/wp-json/'),
-				expect.anything()
-			);
+			// Discovery call should strip the trailing slash
+			expect(fetchMock.mock.calls[0][0]).toBe('https://example.com');
 		});
 
 		it('exits with error on auth failure', async () => {
-			fetchMock.mockResolvedValueOnce(
-				mockResponse(
-					{ code: 'rest_forbidden', message: 'Sorry' },
-					{ status: 401, statusText: 'Unauthorized' }
-				)
-			);
+			fetchMock
+				.mockResolvedValueOnce(mockDiscoveryResponse())
+				.mockResolvedValueOnce(mockAuthSupportResponse())
+				.mockResolvedValueOnce(
+					mockResponse(
+						{ code: 'rest_forbidden', message: 'Sorry' },
+						{ status: 401, statusText: 'Unauthorized' }
+					)
+				);
 
 			const { deps, errors } = createTestDeps(
 				['https://example.com', 'admin', 'bad-password'],
@@ -281,8 +333,41 @@ describe('setup wizard', () => {
 			expect(errors.join('\n')).toContain('Authentication failed');
 		});
 
-		it('includes version in error when old WP lacks sync endpoint', async () => {
+		it('exits with error when Application Passwords are not supported', async () => {
 			fetchMock
+				.mockResolvedValueOnce(mockDiscoveryResponse())
+				.mockResolvedValueOnce({
+					ok: true,
+					status: 200,
+					headers: new Headers(),
+					json: () =>
+						Promise.resolve({
+							authentication: {
+								cookie: { endpoints: {} },
+							},
+						}),
+				} as unknown as Response);
+
+			const { deps, errors } = createTestDeps(
+				['https://example.com', 'admin', 'xxxx xxxx xxxx'],
+				{
+					detectClients: () => defaultClientList(),
+					hasConfig: () => false,
+				}
+			);
+
+			await expect(runSetup(deps, { manual: true })).rejects.toThrow(
+				SetupExitError
+			);
+			expect(errors.join('\n')).toContain(
+				'does not support Application Passwords'
+			);
+		});
+
+		it('shows requirements guidance when sync endpoint returns 404', async () => {
+			fetchMock
+				.mockResolvedValueOnce(mockDiscoveryResponse())
+				.mockResolvedValueOnce(mockAuthSupportResponse())
 				.mockResolvedValueOnce(
 					mockResponse({
 						id: 1,
@@ -291,7 +376,6 @@ describe('setup wizard', () => {
 						avatar_urls: {},
 					})
 				)
-				.mockResolvedValueOnce(mockResponse({ version: '6.7' }))
 				.mockResolvedValueOnce(
 					mockResponse(
 						{ code: 'rest_no_route', message: 'No route' },
@@ -314,11 +398,13 @@ describe('setup wizard', () => {
 			expect(errorText).toContain(
 				'Collaborative editing is not available'
 			);
-			expect(errorText).toContain('6.7');
+			expect(errorText).toContain('Requires WordPress 7.0 or later');
 		});
 
 		it('exits with error when sync endpoint returns 404', async () => {
 			fetchMock
+				.mockResolvedValueOnce(mockDiscoveryResponse())
+				.mockResolvedValueOnce(mockAuthSupportResponse())
 				.mockResolvedValueOnce(
 					mockResponse({
 						id: 1,
@@ -327,7 +413,6 @@ describe('setup wizard', () => {
 						avatar_urls: {},
 					})
 				)
-				.mockResolvedValueOnce(mockResponse({ version: '7.0' }))
 				.mockResolvedValueOnce(
 					mockResponse(
 						{ code: 'rest_no_route', message: 'No route' },
@@ -393,7 +478,10 @@ describe('setup wizard', () => {
 		});
 
 		it('exits with generic connection error on non-API auth failure', async () => {
-			fetchMock.mockRejectedValueOnce(new Error('ECONNREFUSED'));
+			fetchMock
+				.mockResolvedValueOnce(mockDiscoveryResponse())
+				.mockResolvedValueOnce(mockAuthSupportResponse())
+				.mockRejectedValueOnce(new Error('ECONNREFUSED'));
 
 			const { deps, errors } = createTestDeps(
 				['https://example.com', 'admin', 'xxxx xxxx xxxx'],
@@ -413,6 +501,8 @@ describe('setup wizard', () => {
 
 		it('exits with API error message on non-404 sync endpoint failure', async () => {
 			fetchMock
+				.mockResolvedValueOnce(mockDiscoveryResponse())
+				.mockResolvedValueOnce(mockAuthSupportResponse())
 				.mockResolvedValueOnce(
 					mockResponse({
 						id: 1,
@@ -421,7 +511,6 @@ describe('setup wizard', () => {
 						avatar_urls: {},
 					})
 				)
-				.mockResolvedValueOnce(mockResponse({ version: '7.0' }))
 				.mockResolvedValueOnce(
 					mockResponse(
 						{
@@ -455,6 +544,8 @@ describe('setup wizard', () => {
 
 		it('exits with generic sync error on non-API sync endpoint failure', async () => {
 			fetchMock
+				.mockResolvedValueOnce(mockDiscoveryResponse())
+				.mockResolvedValueOnce(mockAuthSupportResponse())
 				.mockResolvedValueOnce(
 					mockResponse({
 						id: 1,

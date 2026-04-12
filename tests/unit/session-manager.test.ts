@@ -26,7 +26,9 @@ const mockListTerms = vi.fn<() => Promise<WPTerm[]>>();
 const mockSearchTerms = vi.fn<() => Promise<WPTerm[]>>();
 const mockCreateTerm = vi.fn<() => Promise<WPTerm>>();
 const mockGetTerms = vi.fn<() => Promise<WPTerm[]>>();
-const mockGetWordPressVersion = vi.fn<() => Promise<string>>();
+const mockCheckAuthSupport = vi
+	.fn<() => Promise<void>>()
+	.mockResolvedValue(undefined);
 const mockCheckNotesSupport = vi.fn<() => Promise<boolean>>();
 const mockListNotes = vi.fn<() => Promise<WPNote[]>>();
 const mockCreateNote = vi.fn<() => Promise<WPNote>>();
@@ -48,30 +50,37 @@ vi.mock('../../src/wordpress/api-client.js', () => {
 	}
 
 	return {
-		WordPressApiClient: vi.fn().mockImplementation(function (
-			this: Record<string, unknown>
-		) {
-			this.validateConnection = mockValidateConnection;
-			this.validateSyncEndpoint = mockValidateSyncEndpoint;
-			this.getPost = mockGetPost;
-			this.listPosts = mockListPosts;
-			this.createPost = mockCreatePost;
-			this.updatePost = mockUpdatePost;
-			this.sendSyncUpdate = mockSendSyncUpdate;
-			this.getBlockTypes = mockGetBlockTypes;
-			this.uploadMedia = mockUploadMedia;
-			this.listTerms = mockListTerms;
-			this.searchTerms = mockSearchTerms;
-			this.createTerm = mockCreateTerm;
-			this.getTerms = mockGetTerms;
-			this.getWordPressVersion = mockGetWordPressVersion;
-			this.checkNotesSupport = mockCheckNotesSupport;
-			this.listNotes = mockListNotes;
-			this.createNote = mockCreateNote;
-			this.updateNote = mockUpdateNote;
-			this.deleteNote = mockDeleteNote;
-			this.request = mockRequest;
-		}),
+		WordPressApiClient: Object.assign(
+			vi.fn().mockImplementation(function (
+				this: Record<string, unknown>
+			) {
+				this.validateConnection = mockValidateConnection;
+				this.validateSyncEndpoint = mockValidateSyncEndpoint;
+				this.getPost = mockGetPost;
+				this.listPosts = mockListPosts;
+				this.createPost = mockCreatePost;
+				this.updatePost = mockUpdatePost;
+				this.sendSyncUpdate = mockSendSyncUpdate;
+				this.getBlockTypes = mockGetBlockTypes;
+				this.uploadMedia = mockUploadMedia;
+				this.listTerms = mockListTerms;
+				this.searchTerms = mockSearchTerms;
+				this.createTerm = mockCreateTerm;
+				this.getTerms = mockGetTerms;
+				this.checkAuthSupport = mockCheckAuthSupport;
+				this.checkNotesSupport = mockCheckNotesSupport;
+				this.listNotes = mockListNotes;
+				this.createNote = mockCreateNote;
+				this.updateNote = mockUpdateNote;
+				this.deleteNote = mockDeleteNote;
+				this.request = mockRequest;
+			}),
+			{
+				discover: vi.fn().mockResolvedValue({
+					restUrl: 'https://example.com/wp-json',
+				}),
+			}
+		),
 		WordPressApiError,
 	};
 });
@@ -214,7 +223,6 @@ describe('SessionManager', () => {
 			queueSize: 0,
 		});
 		mockGetBlockTypes.mockRejectedValue(new Error('Not available'));
-		mockGetWordPressVersion.mockResolvedValue('7.0');
 		mockCheckNotesSupport.mockResolvedValue(false);
 		mockGetTerms.mockResolvedValue([]);
 		mockCommandHandlerStart.mockResolvedValue(false);

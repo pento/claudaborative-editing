@@ -10,6 +10,11 @@ import type {
 	SyncResponse,
 } from './types.js';
 
+/** Result of REST API URL discovery from the site's home page. */
+export interface DiscoveryResult {
+	restUrl: string;
+}
+
 /**
  * WordPress REST API client using Application Password (HTTP Basic Auth).
  *
@@ -18,13 +23,84 @@ import type {
 export class WordPressApiClient {
 	private siteUrl: string;
 	private baseUrl: string;
+	private restRouteMode: boolean;
 	private authHeader: string;
 
 	constructor(config: WordPressConfig) {
 		// Normalise URL: strip trailing slash(es)
 		this.siteUrl = config.siteUrl.replace(/\/+$/, '');
-		this.baseUrl = `${this.siteUrl}/wp-json`;
+		const restUrl = config.restUrl ?? `${this.siteUrl}/wp-json`;
+
+		// Detect ?rest_route= style (non-pretty permalinks)
+		const match = restUrl.match(/^(.+?)\?rest_route=\/?$/);
+		if (match) {
+			this.baseUrl = match[1].replace(/\/+$/, '');
+			this.restRouteMode = true;
+		} else {
+			this.baseUrl = restUrl.replace(/\/+$/, '');
+			this.restRouteMode = false;
+		}
+
 		this.authHeader = `Basic ${btoa(config.username + ':' + config.appPassword)}`;
+	}
+
+	/**
+	 * Discover the REST API URL for a WordPress site.
+	 *
+	 * Fetches the site's home page (unauthenticated) and extracts the REST API
+	 * URL from the HTTP `Link` header or HTML `<link>` tag. Falls back to
+	 * `${siteUrl}/wp-json` if discovery fails.
+	 */
+	static async discover(siteUrl: string): Promise<DiscoveryResult> {
+		const normalised = siteUrl.replace(/\/+$/, '');
+		const fallback: DiscoveryResult = {
+			restUrl: `${normalised}/wp-json`,
+		};
+
+		let response: Response;
+		try {
+			response = await fetch(normalised, {
+				signal: AbortSignal.timeout(10_000),
+				headers: { Accept: 'text/html' },
+			});
+		} catch {
+			return fallback;
+		}
+
+		if (!response.ok) {
+			return fallback;
+		}
+
+		// 1. Check the HTTP Link header (most reliable — works regardless of content type)
+		const linkHeader = response.headers.get('Link') ?? '';
+		const linkMatch = linkHeader.match(
+			/<([^>]+)>;\s*rel="https:\/\/api\.w\.org\/"/
+		);
+		if (linkMatch) {
+			return { restUrl: linkMatch[1] };
+		}
+
+		// 2. Fallback: parse HTML <link> tag
+		let body: string;
+		try {
+			body = await response.text();
+		} catch {
+			return fallback;
+		}
+
+		// Handle both attribute orders: rel before href, and href before rel
+		const htmlMatch =
+			body.match(
+				/<link\s[^>]*rel=["']https:\/\/api\.w\.org\/["'][^>]*href=["']([^"']+)["']/i
+			) ??
+			body.match(
+				/<link\s[^>]*href=["']([^"']+)["'][^>]*rel=["']https:\/\/api\.w\.org\/["']/i
+			);
+		if (htmlMatch) {
+			return { restUrl: htmlMatch[1] };
+		}
+
+		return fallback;
 	}
 
 	/**
@@ -52,26 +128,40 @@ export class WordPressApiClient {
 	}
 
 	/**
-	 * Fetch the WordPress version from the REST API root.
+	 * Check whether the site supports Application Password authentication.
 	 *
-	 * Returns the version string, or `'unknown'` if it could not be
-	 * determined (e.g. the endpoint is unavailable or the field is missing).
-	 * Never throws — callers decide how to act on the result.
+	 * Fetches the REST API root (unauthenticated) and inspects the
+	 * `authentication` object. Only throws if it can positively confirm that
+	 * application-passwords are NOT listed among other auth methods. If the
+	 * field is missing, empty, or the request fails, it does nothing.
 	 */
-	async getWordPressVersion(): Promise<string> {
-		let data: { version?: string };
+	async checkAuthSupport(): Promise<void> {
+		let data: { authentication?: Record<string, unknown> };
 		try {
-			data = await this.apiFetch<{ version?: string }>('/');
+			const url = this.buildApiUrl('/');
+			const response = await fetch(url, {
+				headers: { Accept: 'application/json' },
+			});
+			if (!response.ok) return;
+			data = (await response.json()) as typeof data;
 		} catch {
-			return 'unknown';
+			return;
 		}
 
-		const version = data.version;
-		if (typeof version !== 'string' || version.trim() === '') {
-			return 'unknown';
+		const auth = data.authentication;
+		if (
+			auth &&
+			typeof auth === 'object' &&
+			Object.keys(auth).length > 0 &&
+			!('application-passwords' in auth)
+		) {
+			throw new WordPressApiError(
+				'This WordPress site does not support Application Passwords. ' +
+					'Application Passwords require WordPress 5.6+ and must not be disabled by a security plugin.',
+				0,
+				''
+			);
 		}
-
-		return version;
 	}
 
 	/**
@@ -392,10 +482,27 @@ export class WordPressApiClient {
 	}
 
 	/**
+	 * Build a full API URL from a path, handling both pretty-permalink
+	 * (`/wp-json/path`) and non-pretty-permalink (`?rest_route=/path`) styles.
+	 */
+	private buildApiUrl(path: string): string {
+		if (this.restRouteMode) {
+			const qIndex = path.indexOf('?');
+			if (qIndex === -1) {
+				return `${this.baseUrl}?rest_route=${path}`;
+			}
+			const pathPart = path.substring(0, qIndex);
+			const queryPart = path.substring(qIndex + 1);
+			return `${this.baseUrl}?rest_route=${pathPart}&${queryPart}`;
+		}
+		return `${this.baseUrl}${path}`;
+	}
+
+	/**
 	 * Internal fetch helper with auth and error handling.
 	 */
 	private async apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
-		const url = `${this.baseUrl}${path}`;
+		const url = this.buildApiUrl(path);
 
 		const headers: Record<string, string> = {
 			Authorization: this.authHeader,
