@@ -539,7 +539,11 @@ export function isMcpConnected(): boolean {
 	// Used only until awareness warms up (receives its first remote state).
 	const initialState = (
 		window as Window & {
-			wpceInitialState?: { mcpConnected?: boolean };
+			wpceInitialState?: {
+				mcpConnected?: boolean;
+				cloudUrl?: string;
+				cloudApiKey?: string;
+			};
 		}
 	).wpceInitialState;
 	return initialState?.mcpConnected ?? false;

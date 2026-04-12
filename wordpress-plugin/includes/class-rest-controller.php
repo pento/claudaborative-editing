@@ -163,6 +163,41 @@ class REST_Controller extends \WP_REST_Controller {
 			)
 		);
 
+		register_rest_route(
+			self::API_NAMESPACE,
+			'/cloud',
+			array(
+				array(
+					'methods'             => \WP_REST_Server::READABLE,
+					'callback'            => array( $this, 'get_cloud_settings' ),
+					'permission_callback' => array( $this, 'edit_posts_permissions' ),
+				),
+				array(
+					'methods'             => \WP_REST_Server::CREATABLE,
+					'callback'            => array( $this, 'update_cloud_settings' ),
+					'permission_callback' => array( $this, 'manage_options_permissions' ),
+					'args'                => array(
+						'cloud_url' => array(
+							'required'          => true,
+							'type'              => 'string',
+							'format'            => 'uri',
+							'sanitize_callback' => 'sanitize_url',
+						),
+						'api_key'   => array(
+							'required'          => true,
+							'type'              => 'string',
+							'sanitize_callback' => 'sanitize_text_field',
+						),
+					),
+				),
+				array(
+					'methods'             => \WP_REST_Server::DELETABLE,
+					'callback'            => array( $this, 'delete_cloud_settings' ),
+					'permission_callback' => array( $this, 'manage_options_permissions' ),
+				),
+			)
+		);
+
 		// Lightweight endpoints for the core-data entity resolver.
 		// The collection endpoint returns an empty array so getEntityRecords()
 		// succeeds and triggers collection Yjs sync for a per-user command
@@ -224,6 +259,15 @@ class REST_Controller extends \WP_REST_Controller {
 		}
 
 		return true;
+	}
+
+	/**
+	 * Permission check: user can manage options (administrator).
+	 *
+	 * @return bool True if permitted.
+	 */
+	public function manage_options_permissions() {
+		return current_user_can( 'manage_options' );
 	}
 
 	/**
@@ -736,6 +780,54 @@ class REST_Controller extends \WP_REST_Controller {
 	 */
 	public function get_sync_entity_single( $request ) {
 		return rest_ensure_response( array( 'id' => (int) $request['id'] ) );
+	}
+
+	/**
+	 * GET /wpce/v1/cloud — return cloud connection settings.
+	 *
+	 * Returns whether the cloud is configured and the cloud URL.
+	 * The API key is intentionally omitted — it is passed to the editor
+	 * via wpceInitialState (only visible to authenticated users).
+	 *
+	 * @return \WP_REST_Response Response.
+	 */
+	public function get_cloud_settings() {
+		$cloud_url = get_option( 'wpce_cloud_url', '' );
+
+		return rest_ensure_response(
+			array(
+				'configured' => ! empty( $cloud_url ),
+				'cloud_url'  => $cloud_url,
+			)
+		);
+	}
+
+	/**
+	 * POST /wpce/v1/cloud — store cloud service URL and API key.
+	 *
+	 * @param \WP_REST_Request $request The request object.
+	 * @return \WP_REST_Response Response.
+	 */
+	public function update_cloud_settings( $request ) {
+		$cloud_url = $request->get_param( 'cloud_url' );
+		$api_key   = $request->get_param( 'api_key' );
+
+		update_option( 'wpce_cloud_url', $cloud_url, false );
+		update_option( 'wpce_cloud_api_key', $api_key, false );
+
+		return rest_ensure_response( array( 'ok' => true ) );
+	}
+
+	/**
+	 * DELETE /wpce/v1/cloud — remove cloud service settings.
+	 *
+	 * @return \WP_REST_Response Response.
+	 */
+	public function delete_cloud_settings() {
+		delete_option( 'wpce_cloud_url' );
+		delete_option( 'wpce_cloud_api_key' );
+
+		return rest_ensure_response( array( 'ok' => true ) );
 	}
 
 	/**

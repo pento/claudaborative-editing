@@ -35,6 +35,7 @@ import EditFocusModal from '../EditFocusModal';
 import TranslateModal from '../TranslateModal';
 import SetupModal from '../SetupModal';
 import aiActionsStore from '../../store';
+import { isCloudConfigured } from '../../cloud/connect';
 
 import './style.scss';
 
@@ -172,7 +173,7 @@ export default function AiActionsMenu() {
 										)}
 									</MenuItem>
 								</MenuGroup>
-								{!mcpConnected && (
+								{!mcpConnected && !isCloudConfigured() && (
 									<MenuGroup>
 										<div className="wpce-ai-actions-disconnected-notice">
 											<div className="wpce-ai-actions-disconnected-status">

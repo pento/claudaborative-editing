@@ -18,6 +18,7 @@ import { registerPlugin } from '@wordpress/plugins';
 // Register the data store (side-effect import).
 import './store';
 
+import { connectToCloud } from './cloud/connect';
 import { initCommandSync } from './sync/command-sync';
 
 // Defer command sync initialization so the post room registers first and
@@ -26,6 +27,10 @@ import { initCommandSync } from './sync/command-sync';
 // detection. The per-user command room should not be primary because the
 // post room is the natural primary for editor collaboration.
 setTimeout(() => void initCommandSync(), 0);
+
+// Notify the cloud service (if configured) so it creates a SessionManager
+// that will connect back to this site via Yjs sync.
+connectToCloud();
 
 import AiActionsMenu from './components/AiActionsMenu';
 import ConnectionStatus from './components/ConnectionStatus';

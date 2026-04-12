@@ -41,6 +41,7 @@ jest.mock('@wordpress/components', () => {
 				'data-icon': icon?.name ?? 'unknown',
 				'data-size': size,
 			}),
+		Spinner: () => createElement('span', { 'data-testid': 'spinner' }),
 	};
 });
 
@@ -56,12 +57,24 @@ import OnboardingContent from '../OnboardingContent';
 const mockedUseCopyToClipboard = useCopyToClipboard as jest.Mock;
 
 describe('OnboardingContent', () => {
+	const originalState = (window as any).wpceInitialState;
+
 	beforeEach(() => {
 		jest.clearAllMocks();
 		mockedUseCopyToClipboard.mockReturnValue({
 			copied: false,
 			handleCopy: mockHandleCopy,
 		});
+		// Ensure no cloud settings by default.
+		delete (window as any).wpceInitialState;
+	});
+
+	afterEach(() => {
+		if (originalState !== undefined) {
+			(window as any).wpceInitialState = originalState;
+		} else {
+			delete (window as any).wpceInitialState;
+		}
 	});
 
 	it('renders the heading text', () => {
@@ -116,5 +129,35 @@ describe('OnboardingContent', () => {
 
 		expect(screen.getByText('Copied!')).toBeTruthy();
 		expect(screen.queryByText('Copy')).toBeNull();
+	});
+
+	describe('when cloud is configured', () => {
+		beforeEach(() => {
+			(window as any).wpceInitialState = {
+				cloudUrl: 'https://claudaborative.cloud',
+				cloudApiKey: 'key-abc-123',
+			};
+		});
+
+		it('shows a connecting message instead of setup instructions', () => {
+			render(<OnboardingContent />);
+
+			expect(
+				screen.getByText(/Connecting to Claudaborative Cloud/)
+			).toBeTruthy();
+			expect(screen.getByTestId('spinner')).toBeTruthy();
+		});
+
+		it('does not render setup option cards', () => {
+			render(<OnboardingContent />);
+
+			expect(
+				screen.queryByText('Get started with one of these options:')
+			).toBeNull();
+			expect(screen.queryByText('Set up locally')).toBeNull();
+			expect(
+				screen.queryByText('Sign up at claudaborative.cloud')
+			).toBeNull();
+		});
 	});
 });
