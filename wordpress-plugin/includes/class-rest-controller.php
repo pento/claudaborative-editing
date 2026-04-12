@@ -163,6 +163,42 @@ class REST_Controller extends \WP_REST_Controller {
 			)
 		);
 
+		register_rest_route(
+			self::API_NAMESPACE,
+			'/cloud',
+			array(
+				array(
+					'methods'             => \WP_REST_Server::READABLE,
+					'callback'            => array( $this, 'get_cloud_settings' ),
+					'permission_callback' => array( $this, 'edit_posts_permissions' ),
+				),
+				array(
+					'methods'             => \WP_REST_Server::CREATABLE,
+					'callback'            => array( $this, 'update_cloud_settings' ),
+					'permission_callback' => array( $this, 'manage_options_permissions' ),
+					'args'                => array(
+						'cloud_url' => array(
+							'required'          => true,
+							'type'              => 'string',
+							'format'            => 'uri',
+							'sanitize_callback' => 'sanitize_url',
+							'validate_callback' => array( $this, 'validate_cloud_url' ),
+						),
+						'api_key'   => array(
+							'required'          => true,
+							'type'              => 'string',
+							'sanitize_callback' => 'sanitize_text_field',
+						),
+					),
+				),
+				array(
+					'methods'             => \WP_REST_Server::DELETABLE,
+					'callback'            => array( $this, 'delete_cloud_settings' ),
+					'permission_callback' => array( $this, 'manage_options_permissions' ),
+				),
+			)
+		);
+
 		// Lightweight endpoints for the core-data entity resolver.
 		// The collection endpoint returns an empty array so getEntityRecords()
 		// succeeds and triggers collection Yjs sync for a per-user command
@@ -224,6 +260,16 @@ class REST_Controller extends \WP_REST_Controller {
 		}
 
 		return true;
+	}
+
+	/**
+	 * Permission check: user can manage options (administrator).
+	 *
+	 * @param \WP_REST_Request $request The request object.
+	 * @return bool True if permitted.
+	 */
+	public function manage_options_permissions( $request ) {
+		return current_user_can( 'manage_options' );
 	}
 
 	/**
@@ -317,6 +363,46 @@ class REST_Controller extends \WP_REST_Controller {
 				),
 				array( 'status' => 400 )
 			);
+		}
+
+		return true;
+	}
+
+	/**
+	 * Validate that the cloud_url uses HTTPS (or HTTP for localhost dev).
+	 *
+	 * The cloud URL is used as a Bearer token destination, so allowing
+	 * plaintext HTTP would risk leaking the API key.
+	 *
+	 * @param string           $value   The parameter value.
+	 * @param \WP_REST_Request $request The request object.
+	 * @param string           $param   The parameter name.
+	 * @return true|\WP_Error True if valid, \WP_Error otherwise.
+	 */
+	public function validate_cloud_url( $value, $request, $param ) {
+		$parsed = wp_parse_url( $value );
+
+		if ( ! $parsed || empty( $parsed['scheme'] ) || empty( $parsed['host'] ) ) {
+			return new \WP_Error(
+				'rest_invalid_param',
+				__( 'cloud_url must be a valid URL.', 'claudaborative-editing' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$scheme = strtolower( $parsed['scheme'] );
+		$host   = strtolower( $parsed['host'] );
+
+		// Allow http:// only for localhost development.
+		if ( 'https' !== $scheme ) {
+			$localhost_hosts = array( 'localhost', '127.0.0.1', '::1' );
+			if ( 'http' !== $scheme || ! in_array( $host, $localhost_hosts, true ) ) {
+				return new \WP_Error(
+					'rest_invalid_param',
+					__( 'cloud_url must use HTTPS (HTTP is only allowed for localhost).', 'claudaborative-editing' ),
+					array( 'status' => 400 )
+				);
+			}
 		}
 
 		return true;
@@ -736,6 +822,55 @@ class REST_Controller extends \WP_REST_Controller {
 	 */
 	public function get_sync_entity_single( $request ) {
 		return rest_ensure_response( array( 'id' => (int) $request['id'] ) );
+	}
+
+	/**
+	 * GET /wpce/v1/cloud — return cloud connection settings.
+	 *
+	 * Returns whether the cloud is configured and the cloud URL.
+	 * The API key is intentionally omitted — it is passed to the editor
+	 * via wpceInitialState (only visible to authenticated users).
+	 *
+	 * @return \WP_REST_Response Response.
+	 */
+	public function get_cloud_settings() {
+		$cloud_url = get_option( 'wpce_cloud_url', '' );
+		$api_key   = get_option( 'wpce_cloud_api_key', '' );
+
+		return rest_ensure_response(
+			array(
+				'configured' => ! empty( $cloud_url ) && ! empty( $api_key ),
+				'cloud_url'  => $cloud_url,
+			)
+		);
+	}
+
+	/**
+	 * POST /wpce/v1/cloud — store cloud service URL and API key.
+	 *
+	 * @param \WP_REST_Request $request The request object.
+	 * @return \WP_REST_Response Response.
+	 */
+	public function update_cloud_settings( $request ) {
+		$cloud_url = $request->get_param( 'cloud_url' );
+		$api_key   = $request->get_param( 'api_key' );
+
+		update_option( 'wpce_cloud_url', $cloud_url, false );
+		update_option( 'wpce_cloud_api_key', $api_key, false );
+
+		return rest_ensure_response( array( 'ok' => true ) );
+	}
+
+	/**
+	 * DELETE /wpce/v1/cloud — remove cloud service settings.
+	 *
+	 * @return \WP_REST_Response Response.
+	 */
+	public function delete_cloud_settings() {
+		delete_option( 'wpce_cloud_url' );
+		delete_option( 'wpce_cloud_api_key' );
+
+		return rest_ensure_response( array( 'ok' => true ) );
 	}
 
 	/**

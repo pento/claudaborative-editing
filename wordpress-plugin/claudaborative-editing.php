@@ -100,9 +100,18 @@ class Claudaborative_Editing {
 		// @wordpress/sync evaluates its config, so we inline it after
 		// wp-hooks (which loads before wp-sync in the dependency graph).
 		$mcp_connected = REST_Controller::is_mcp_connected_for_user( get_current_user_id() );
+		$cloud_url     = get_option( 'wpce_cloud_url', '' );
+		$cloud_api_key = get_option( 'wpce_cloud_api_key', '' );
+
 		wp_add_inline_script(
 			'wp-hooks',
-			'window.wpceInitialState = ' . wp_json_encode( array( 'mcpConnected' => $mcp_connected ) ) . ';' .
+			'window.wpceInitialState = ' . wp_json_encode(
+				array(
+					'mcpConnected' => $mcp_connected,
+					'cloudUrl'     => $cloud_url,
+					'cloudApiKey'  => $cloud_api_key,
+				)
+			) . ';' .
 			( $mcp_connected
 				? "wp.hooks.addFilter('sync.pollingManager.pollingInterval','claudaborative-editing/polling-interval',function(){return 1000;});"
 				: ''

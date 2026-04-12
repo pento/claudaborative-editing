@@ -8,8 +8,8 @@
 /**
  * WordPress dependencies
  */
-import { __ } from '@wordpress/i18n';
-import { Button, ExternalLink, Icon } from '@wordpress/components';
+import { __, sprintf } from '@wordpress/i18n';
+import { Button, ExternalLink, Icon, Spinner } from '@wordpress/components';
 import { cloud, code } from '@wordpress/icons';
 
 /**
@@ -17,18 +17,36 @@ import { cloud, code } from '@wordpress/icons';
  */
 import { useCopyToClipboard } from '../../hooks/use-copy-to-clipboard';
 import { SETUP_COMMAND } from '../../constants';
+import { isCloudConfigured } from '../../cloud/connect';
 // Styles are imported via ConnectionStatus/style.scss to ensure
 // they land in the extracted style-index.css stylesheet.
 
 /**
  * OnboardingContent component.
  *
- * Renders two setup option cards: hosted cloud service and local CLI setup.
+ * When cloud settings are configured, shows a "Connecting..." message
+ * instead of setup instructions. Otherwise renders two setup option
+ * cards: hosted cloud service and local CLI setup.
  *
  * @return Rendered onboarding content.
  */
 export default function OnboardingContent() {
 	const { copied, handleCopy } = useCopyToClipboard(SETUP_COMMAND);
+
+	if (isCloudConfigured()) {
+		return (
+			<div className="wpce-onboarding wpce-onboarding-cloud-connecting">
+				<Spinner />
+				<span>
+					{sprintf(
+						/* translators: %s: Claudaborative Cloud service name */
+						__('Connecting to %s\u2026', 'claudaborative-editing'),
+						__('Claudaborative Cloud', 'claudaborative-editing')
+					)}
+				</span>
+			</div>
+		);
+	}
 
 	return (
 		<div className="wpce-onboarding">

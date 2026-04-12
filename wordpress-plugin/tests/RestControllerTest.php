@@ -25,6 +25,13 @@ class RestControllerTest extends \WP_UnitTestCase {
 	private static $editor2_id;
 
 	/**
+	 * Administrator user ID (for manage_options tests).
+	 *
+	 * @var int
+	 */
+	private static $admin_id;
+
+	/**
 	 * Subscriber user ID (for permission-denied tests).
 	 *
 	 * @var int
@@ -52,6 +59,10 @@ class RestControllerTest extends \WP_UnitTestCase {
 		/** @var int $editor2_id */
 		$editor2_id       = $factory->user->create( [ 'role' => 'editor' ] );
 		self::$editor2_id = $editor2_id;
+
+		/** @var int $admin_id */
+		$admin_id       = $factory->user->create( [ 'role' => 'administrator' ] );
+		self::$admin_id = $admin_id;
 
 		/** @var int $subscriber_id */
 		$subscriber_id       = $factory->user->create( [ 'role' => 'subscriber' ] );
@@ -1601,6 +1612,58 @@ class RestControllerTest extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * enqueue_editor_assets includes cloudUrl and cloudApiKey in wpceInitialState
+	 * when cloud options are configured.
+	 */
+	public function test_enqueue_editor_assets_includes_cloud_settings() {
+		$this->ensure_asset_file();
+		delete_transient( 'wpce_mcp_last_seen_' . self::$editor_id );
+
+		update_option( 'wpce_cloud_url', 'https://cloud.example.com', false );
+		update_option( 'wpce_cloud_api_key', 'test-key-123', false );
+
+		$GLOBALS['wp_scripts'] = null;
+		wp_default_scripts( wp_scripts() );
+
+		\Claudaborative_Editing::enqueue_editor_assets();
+
+		$scripts = wp_scripts();
+		$inline  = $scripts->get_data( 'wp-hooks', 'after' );
+
+		$this->assertIsArray( $inline );
+
+		$joined = implode( "\n", $inline );
+		$this->assertStringContainsString( '"cloudUrl":"https:\/\/cloud.example.com"', $joined );
+		$this->assertStringContainsString( '"cloudApiKey":"test-key-123"', $joined );
+	}
+
+	/**
+	 * enqueue_editor_assets sets empty cloudUrl and cloudApiKey when cloud
+	 * options are not configured.
+	 */
+	public function test_enqueue_editor_assets_empty_cloud_settings() {
+		$this->ensure_asset_file();
+		delete_transient( 'wpce_mcp_last_seen_' . self::$editor_id );
+
+		delete_option( 'wpce_cloud_url' );
+		delete_option( 'wpce_cloud_api_key' );
+
+		$GLOBALS['wp_scripts'] = null;
+		wp_default_scripts( wp_scripts() );
+
+		\Claudaborative_Editing::enqueue_editor_assets();
+
+		$scripts = wp_scripts();
+		$inline  = $scripts->get_data( 'wp-hooks', 'after' );
+
+		$this->assertIsArray( $inline );
+
+		$joined = implode( "\n", $inline );
+		$this->assertStringContainsString( '"cloudUrl":""', $joined );
+		$this->assertStringContainsString( '"cloudApiKey":""', $joined );
+	}
+
+	/**
 	 * enqueue_editor_assets sets mcpConnected: true and adds the polling
 	 * interval filter when MCP IS connected.
 	 */
@@ -1628,5 +1691,334 @@ class RestControllerTest extends \WP_UnitTestCase {
 		$this->assertStringContainsString( '"mcpConnected":true', $joined );
 		$this->assertStringContainsString( 'pollingInterval', $joined );
 		$this->assertStringContainsString( 'return 1000', $joined );
+	}
+
+	// -------------------------------------------------------------------------
+	// GET /wpce/v1/cloud
+	// -------------------------------------------------------------------------
+
+	/**
+	 * GET /wpce/v1/cloud returns configured:false when no options are set.
+	 */
+	public function test_get_cloud_settings_unconfigured() {
+		delete_option( 'wpce_cloud_url' );
+		delete_option( 'wpce_cloud_api_key' );
+
+		$request  = new \WP_REST_Request( 'GET', '/wpce/v1/cloud' );
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+
+		$data = $response->get_data();
+		$this->assertFalse( $data['configured'] );
+		$this->assertSame( '', $data['cloud_url'] );
+		// API key should NOT be in the GET response.
+		$this->assertArrayNotHasKey( 'api_key', $data );
+	}
+
+	/**
+	 * GET /wpce/v1/cloud returns configured:true and the URL when options are set.
+	 */
+	public function test_get_cloud_settings_configured() {
+		update_option( 'wpce_cloud_url', 'https://cloud.example.com', false );
+		update_option( 'wpce_cloud_api_key', 'secret-key', false );
+
+		$request  = new \WP_REST_Request( 'GET', '/wpce/v1/cloud' );
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+
+		$data = $response->get_data();
+		$this->assertTrue( $data['configured'] );
+		$this->assertSame( 'https://cloud.example.com', $data['cloud_url'] );
+		$this->assertArrayNotHasKey( 'api_key', $data );
+	}
+
+	/**
+	 * GET /wpce/v1/cloud returns configured:false when the URL is set but
+	 * the API key is missing (partial configuration).
+	 */
+	public function test_get_cloud_settings_partial_url_only() {
+		update_option( 'wpce_cloud_url', 'https://cloud.example.com', false );
+		delete_option( 'wpce_cloud_api_key' );
+
+		$request  = new \WP_REST_Request( 'GET', '/wpce/v1/cloud' );
+		$response = rest_get_server()->dispatch( $request );
+
+		$data = $response->get_data();
+		$this->assertFalse( $data['configured'] );
+		$this->assertSame( 'https://cloud.example.com', $data['cloud_url'] );
+	}
+
+	/**
+	 * An editor can read cloud settings (requires edit_posts).
+	 */
+	public function test_get_cloud_settings_editor_allowed() {
+		$request  = new \WP_REST_Request( 'GET', '/wpce/v1/cloud' );
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+	}
+
+	/**
+	 * A subscriber cannot read cloud settings.
+	 */
+	public function test_get_cloud_settings_subscriber_denied() {
+		wp_set_current_user( self::$subscriber_id );
+
+		$request  = new \WP_REST_Request( 'GET', '/wpce/v1/cloud' );
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 403, $response->get_status() );
+	}
+
+	// -------------------------------------------------------------------------
+	// POST /wpce/v1/cloud
+	// -------------------------------------------------------------------------
+
+	/**
+	 * An admin can store cloud settings via POST.
+	 */
+	public function test_update_cloud_settings_admin_allowed() {
+		wp_set_current_user( self::$admin_id );
+
+		$request = new \WP_REST_Request( 'POST', '/wpce/v1/cloud' );
+		$request->set_body_params(
+			[
+				'cloud_url' => 'https://cloud.example.com',
+				'api_key'   => 'my-api-key',
+			]
+		);
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertTrue( $response->get_data()['ok'] );
+
+		// Verify options were persisted.
+		$this->assertSame( 'https://cloud.example.com', get_option( 'wpce_cloud_url' ) );
+		$this->assertSame( 'my-api-key', get_option( 'wpce_cloud_api_key' ) );
+	}
+
+	/**
+	 * An editor (non-admin) cannot store cloud settings.
+	 */
+	public function test_update_cloud_settings_editor_denied() {
+		$request = new \WP_REST_Request( 'POST', '/wpce/v1/cloud' );
+		$request->set_body_params(
+			[
+				'cloud_url' => 'https://cloud.example.com',
+				'api_key'   => 'my-api-key',
+			]
+		);
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 403, $response->get_status() );
+	}
+
+	/**
+	 * A subscriber cannot store cloud settings.
+	 */
+	public function test_update_cloud_settings_subscriber_denied() {
+		wp_set_current_user( self::$subscriber_id );
+
+		$request = new \WP_REST_Request( 'POST', '/wpce/v1/cloud' );
+		$request->set_body_params(
+			[
+				'cloud_url' => 'https://cloud.example.com',
+				'api_key'   => 'my-api-key',
+			]
+		);
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 403, $response->get_status() );
+	}
+
+	/**
+	 * POST /wpce/v1/cloud requires both cloud_url and api_key.
+	 */
+	public function test_update_cloud_settings_missing_params() {
+		wp_set_current_user( self::$admin_id );
+
+		$request = new \WP_REST_Request( 'POST', '/wpce/v1/cloud' );
+		$request->set_body_params( [ 'cloud_url' => 'https://cloud.example.com' ] );
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 400, $response->get_status() );
+	}
+
+	/**
+	 * POST /wpce/v1/cloud rejects plain HTTP cloud_url (non-localhost).
+	 */
+	public function test_update_cloud_settings_rejects_http() {
+		wp_set_current_user( self::$admin_id );
+
+		$request = new \WP_REST_Request( 'POST', '/wpce/v1/cloud' );
+		$request->set_body_params(
+			[
+				'cloud_url' => 'http://cloud.example.com',
+				'api_key'   => 'my-api-key',
+			]
+		);
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 400, $response->get_status() );
+	}
+
+	/**
+	 * POST /wpce/v1/cloud allows http://localhost for development.
+	 */
+	public function test_update_cloud_settings_allows_localhost_http() {
+		wp_set_current_user( self::$admin_id );
+
+		$request = new \WP_REST_Request( 'POST', '/wpce/v1/cloud' );
+		$request->set_body_params(
+			[
+				'cloud_url' => 'http://localhost:8080',
+				'api_key'   => 'dev-key',
+			]
+		);
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+	}
+
+	/**
+	 * POST /wpce/v1/cloud allows http://127.0.0.1 for development.
+	 */
+	public function test_update_cloud_settings_allows_127_http() {
+		wp_set_current_user( self::$admin_id );
+
+		$request = new \WP_REST_Request( 'POST', '/wpce/v1/cloud' );
+		$request->set_body_params(
+			[
+				'cloud_url' => 'http://127.0.0.1:3000',
+				'api_key'   => 'dev-key',
+			]
+		);
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+	}
+
+	/**
+	 * POST /wpce/v1/cloud rejects non-HTTP/HTTPS schemes.
+	 */
+	public function test_update_cloud_settings_rejects_ftp_scheme() {
+		wp_set_current_user( self::$admin_id );
+
+		$request = new \WP_REST_Request( 'POST', '/wpce/v1/cloud' );
+		$request->set_body_params(
+			[
+				'cloud_url' => 'ftp://cloud.example.com',
+				'api_key'   => 'my-api-key',
+			]
+		);
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 400, $response->get_status() );
+	}
+
+	/**
+	 * validate_cloud_url rejects a URL without a scheme or host.
+	 *
+	 * Called directly because sanitize_url (which runs before the
+	 * validate_callback in REST dispatch) normalises malformed values
+	 * before the validator sees them.
+	 */
+	public function test_validate_cloud_url_rejects_missing_scheme_and_host() {
+		$controller = new REST_Controller();
+
+		$request = new \WP_REST_Request( 'POST', '/wpce/v1/cloud' );
+
+		$result = $controller->validate_cloud_url( '/just-a-path', $request, 'cloud_url' );
+
+		$this->assertWPError( $result );
+		$this->assertSame( 'rest_invalid_param', $result->get_error_code() );
+	}
+
+	// -------------------------------------------------------------------------
+	// DELETE /wpce/v1/cloud
+	// -------------------------------------------------------------------------
+
+	/**
+	 * An admin can delete cloud settings via DELETE.
+	 */
+	public function test_delete_cloud_settings_admin_allowed() {
+		update_option( 'wpce_cloud_url', 'https://cloud.example.com', false );
+		update_option( 'wpce_cloud_api_key', 'secret-key', false );
+
+		wp_set_current_user( self::$admin_id );
+
+		$request  = new \WP_REST_Request( 'DELETE', '/wpce/v1/cloud' );
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertTrue( $response->get_data()['ok'] );
+
+		// Verify options were removed.
+		$this->assertFalse( get_option( 'wpce_cloud_url' ) );
+		$this->assertFalse( get_option( 'wpce_cloud_api_key' ) );
+	}
+
+	/**
+	 * An editor (non-admin) cannot delete cloud settings.
+	 */
+	public function test_delete_cloud_settings_editor_denied() {
+		$request  = new \WP_REST_Request( 'DELETE', '/wpce/v1/cloud' );
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 403, $response->get_status() );
+	}
+
+	/**
+	 * A subscriber cannot delete cloud settings.
+	 */
+	public function test_delete_cloud_settings_subscriber_denied() {
+		wp_set_current_user( self::$subscriber_id );
+
+		$request  = new \WP_REST_Request( 'DELETE', '/wpce/v1/cloud' );
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 403, $response->get_status() );
+	}
+
+	/**
+	 * Full round-trip: POST → GET → DELETE → GET verifies the complete
+	 * cloud settings lifecycle.
+	 */
+	public function test_cloud_settings_round_trip() {
+		wp_set_current_user( self::$admin_id );
+
+		// POST — store settings.
+		$post_request = new \WP_REST_Request( 'POST', '/wpce/v1/cloud' );
+		$post_request->set_body_params(
+			[
+				'cloud_url' => 'https://round-trip.example.com',
+				'api_key'   => 'rt-key',
+			]
+		);
+		$post_response = rest_get_server()->dispatch( $post_request );
+		$this->assertSame( 200, $post_response->get_status() );
+
+		// GET — verify settings are returned.
+		$get_request  = new \WP_REST_Request( 'GET', '/wpce/v1/cloud' );
+		$get_response = rest_get_server()->dispatch( $get_request );
+		$get_data     = $get_response->get_data();
+
+		$this->assertTrue( $get_data['configured'] );
+		$this->assertSame( 'https://round-trip.example.com', $get_data['cloud_url'] );
+
+		// DELETE — remove settings.
+		$del_request  = new \WP_REST_Request( 'DELETE', '/wpce/v1/cloud' );
+		$del_response = rest_get_server()->dispatch( $del_request );
+		$this->assertSame( 200, $del_response->get_status() );
+
+		// GET — verify settings are gone.
+		$get_request2  = new \WP_REST_Request( 'GET', '/wpce/v1/cloud' );
+		$get_response2 = rest_get_server()->dispatch( $get_request2 );
+		$get_data2     = $get_response2->get_data();
+
+		$this->assertFalse( $get_data2['configured'] );
+		$this->assertSame( '', $get_data2['cloud_url'] );
 	}
 }
