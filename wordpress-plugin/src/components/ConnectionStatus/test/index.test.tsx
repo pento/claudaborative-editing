@@ -22,6 +22,7 @@ jest.mock('@wordpress/components', () => {
 			label,
 			isDestructive: _,
 			variant: _v,
+			size: _sz,
 			...props
 		}: any) =>
 			createElement(
@@ -35,8 +36,25 @@ jest.mock('@wordpress/components', () => {
 				{ 'data-testid': 'popover', className },
 				children
 			),
+		ExternalLink: ({ children, href, className, ...props }: any) =>
+			createElement(
+				'a',
+				{ href, target: '_blank', className, ...props },
+				children
+			),
+		Icon: ({ icon, size }: any) =>
+			createElement('span', {
+				'data-testid': 'icon',
+				'data-icon': icon?.name ?? 'unknown',
+				'data-size': size,
+			}),
 	};
 });
+
+jest.mock('@wordpress/icons', () => ({
+	cloud: { name: 'cloud' },
+	code: { name: 'code' },
+}));
 
 jest.mock('../../../hooks/use-mcp-status', () => ({
 	useMcpStatus: jest.fn(),
@@ -529,5 +547,133 @@ describe('ConnectionStatus', () => {
 
 		// Re-add so afterEach cleanup doesn't fail
 		document.body.appendChild(footerEl);
+	});
+
+	it('shows onboarding content when disconnected', async () => {
+		await act(async () => render(<ConnectionStatus />));
+
+		const toggle = footerEl.querySelector('.wpce-footer-status-toggle')!;
+		await act(async () => fireEvent.click(toggle));
+
+		// Status line should still be present
+		expect(screen.getByText('Status: disconnected')).toBeTruthy();
+
+		// Onboarding content should be visible
+		expect(
+			screen.getByText('Get started with one of these options:')
+		).toBeTruthy();
+		expect(
+			screen.getByText('Sign up at claudaborative.cloud')
+		).toBeTruthy();
+		expect(
+			screen.getByText('npx claudaborative-editing start')
+		).toBeTruthy();
+	});
+
+	it('does not show onboarding content when connected', async () => {
+		mockedUseMcpStatus.mockReturnValue({
+			mcpConnected: true,
+			mcpLastSeenAt: '2026-03-30T12:00:00Z',
+			isLoading: false,
+			error: null,
+		});
+
+		await act(async () => render(<ConnectionStatus />));
+
+		const toggle = footerEl.querySelector('.wpce-footer-status-toggle')!;
+		await act(async () => fireEvent.click(toggle));
+
+		expect(
+			screen.queryByText('Get started with one of these options:')
+		).toBeNull();
+	});
+
+	it('shows "Reconnecting" when previously connected then disconnected', async () => {
+		// Start connected
+		mockedUseMcpStatus.mockReturnValue({
+			mcpConnected: true,
+			mcpLastSeenAt: '2026-03-30T12:00:00Z',
+			isLoading: false,
+			error: null,
+		});
+
+		const { rerender } = render(<ConnectionStatus />);
+
+		// Transition to disconnected
+		mockedUseMcpStatus.mockReturnValue({
+			mcpConnected: false,
+			mcpLastSeenAt: null,
+			isLoading: false,
+			error: null,
+		});
+
+		await act(async () => rerender(<ConnectionStatus />));
+
+		const toggle = footerEl.querySelector('.wpce-footer-status-toggle')!;
+		await act(async () => fireEvent.click(toggle));
+
+		expect(screen.getByText('Reconnecting\u2026')).toBeTruthy();
+
+		// Onboarding should NOT be shown during reconnection
+		expect(
+			screen.queryByText('Get started with one of these options:')
+		).toBeNull();
+	});
+
+	it('does not show "Reconnecting" on first load when never connected', async () => {
+		await act(async () => render(<ConnectionStatus />));
+
+		const toggle = footerEl.querySelector('.wpce-footer-status-toggle')!;
+		await act(async () => fireEvent.click(toggle));
+
+		expect(screen.queryByText('Reconnecting\u2026')).toBeNull();
+	});
+
+	it('closes popover when footer element is removed', async () => {
+		// Replace stub with an observer that captures its callback so we
+		// can invoke it synchronously inside act().
+		let observerCallback: MutationCallback | null = null;
+		const savedMO = window.MutationObserver;
+		window.MutationObserver = class {
+			constructor(cb: MutationCallback) {
+				observerCallback = cb;
+			}
+			observe() {}
+			disconnect() {}
+			takeRecords() {
+				return [];
+			}
+		} as any;
+
+		await act(async () => render(<ConnectionStatus />));
+
+		const toggle = footerEl.querySelector('.wpce-footer-status-toggle')!;
+		await act(async () => fireEvent.click(toggle));
+		expect(screen.getByTestId('popover')).toBeTruthy();
+
+		// Remove footer, then fire the observer callback inside act()
+		// so React processes the resulting state updates synchronously.
+		document.body.removeChild(footerEl);
+		await act(async () => {
+			observerCallback!([], null as any);
+		});
+
+		expect(screen.queryByTestId('popover')).toBeNull();
+
+		// Restore and re-add footer for cleanup
+		window.MutationObserver = savedMO;
+		document.body.appendChild(footerEl);
+	});
+
+	it('popover has onboarding modifier class when disconnected', async () => {
+		await act(async () => render(<ConnectionStatus />));
+
+		const toggle = footerEl.querySelector('.wpce-footer-status-toggle')!;
+		await act(async () => fireEvent.click(toggle));
+
+		const tooltip = screen
+			.getByTestId('popover')
+			.querySelector('.wpce-footer-status-tooltip-onboarding');
+		expect(tooltip).toBeTruthy();
 	});
 });

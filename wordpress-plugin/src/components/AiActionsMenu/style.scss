@@ -1,3 +1,32 @@
 .claudaborative-editing-ai-actions-menu {
 	width: 300px;
 }
+
+.wpce-ai-actions-disconnected-notice {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 6px 8px;
+}
+
+.wpce-ai-actions-disconnected-status {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 12px;
+	color: #757575;
+}
+
+.wpce-ai-actions-disconnected-dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: #cc1818;
+	flex-shrink: 0;
+}
+
+.wpce-ai-actions-setup-button.components-button {
+	font-size: 12px;
+	flex-shrink: 0;
+}

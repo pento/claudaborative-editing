@@ -197,7 +197,17 @@ export async function runSetup(
 	await configureClients(deps, credentials, selectedClients);
 
 	deps.log('');
-	deps.log('Done! Restart Claude Code to start editing.');
+	deps.log("Done! Here's what to do next:");
+	deps.log('');
+	deps.log('  1. Restart Claude Code to load the new configuration.');
+	deps.log('  2. Open a post in your WordPress editor.');
+	deps.log('     The sparkle icon will turn orange when connected.');
+	deps.log('  3. Use the sparkle menu in the toolbar to start editing!');
+	deps.log('');
+	deps.log(
+		'Tip: You can also try the hosted service at claudaborative.cloud'
+	);
+	deps.log('     \u2014 no local setup needed.');
 
 	deps.cleanup();
 }

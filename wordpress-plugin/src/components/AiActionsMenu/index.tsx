@@ -10,7 +10,12 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { DropdownMenu, MenuGroup, MenuItem } from '@wordpress/components';
+import {
+	Button,
+	DropdownMenu,
+	MenuGroup,
+	MenuItem,
+} from '@wordpress/components';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { useState, useEffect, useRef } from '@wordpress/element';
 import { store as noticesStore } from '@wordpress/notices';
@@ -28,6 +33,7 @@ import type { CommandSlug } from '#shared/commands';
 import SparkleIcon from '../SparkleIcon';
 import EditFocusModal from '../EditFocusModal';
 import TranslateModal from '../TranslateModal';
+import SetupModal from '../SetupModal';
 import aiActionsStore from '../../store';
 
 import './style.scss';
@@ -79,6 +85,7 @@ export default function AiActionsMenu() {
 
 	const [editModalOpen, setEditModalOpen] = useState(false);
 	const [translateModalOpen, setTranslateModalOpen] = useState(false);
+	const [setupModalOpen, setSetupModalOpen] = useState(false);
 
 	return (
 		<>
@@ -165,6 +172,33 @@ export default function AiActionsMenu() {
 										)}
 									</MenuItem>
 								</MenuGroup>
+								{!mcpConnected && (
+									<MenuGroup>
+										<div className="wpce-ai-actions-disconnected-notice">
+											<div className="wpce-ai-actions-disconnected-status">
+												<span className="wpce-ai-actions-disconnected-dot" />
+												{__(
+													'Not connected',
+													'claudaborative-editing'
+												)}
+											</div>
+											<Button
+												className="wpce-ai-actions-setup-button"
+												variant="secondary"
+												size="compact"
+												onClick={() => {
+													onClose();
+													setSetupModalOpen(true);
+												}}
+											>
+												{__(
+													'Get started',
+													'claudaborative-editing'
+												)}
+											</Button>
+										</div>
+									</MenuGroup>
+								)}
 							</>
 						);
 					}}
@@ -189,6 +223,9 @@ export default function AiActionsMenu() {
 					}}
 					onRequestClose={() => setTranslateModalOpen(false)}
 				/>
+			)}
+			{setupModalOpen && (
+				<SetupModal onRequestClose={() => setSetupModalOpen(false)} />
 			)}
 		</>
 	);
