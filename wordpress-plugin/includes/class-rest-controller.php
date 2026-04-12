@@ -835,10 +835,11 @@ class REST_Controller extends \WP_REST_Controller {
 	 */
 	public function get_cloud_settings() {
 		$cloud_url = get_option( 'wpce_cloud_url', '' );
+		$api_key   = get_option( 'wpce_cloud_api_key', '' );
 
 		return rest_ensure_response(
 			array(
-				'configured' => ! empty( $cloud_url ),
+				'configured' => ! empty( $cloud_url ) && ! empty( $api_key ),
 				'cloud_url'  => $cloud_url,
 			)
 		);

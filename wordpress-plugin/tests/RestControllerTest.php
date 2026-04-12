@@ -1735,6 +1735,22 @@ class RestControllerTest extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * GET /wpce/v1/cloud returns configured:false when the URL is set but
+	 * the API key is missing (partial configuration).
+	 */
+	public function test_get_cloud_settings_partial_url_only() {
+		update_option( 'wpce_cloud_url', 'https://cloud.example.com', false );
+		delete_option( 'wpce_cloud_api_key' );
+
+		$request  = new \WP_REST_Request( 'GET', '/wpce/v1/cloud' );
+		$response = rest_get_server()->dispatch( $request );
+
+		$data = $response->get_data();
+		$this->assertFalse( $data['configured'] );
+		$this->assertSame( 'https://cloud.example.com', $data['cloud_url'] );
+	}
+
+	/**
 	 * An editor can read cloud settings (requires edit_posts).
 	 */
 	public function test_get_cloud_settings_editor_allowed() {
