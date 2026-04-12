@@ -43,6 +43,19 @@ export function connectToCloud(): void {
 		return;
 	}
 
+	// Refuse to send the API key over plaintext (allow http://localhost for dev).
+	try {
+		const parsed = new URL(state.cloudUrl);
+		const isLocalhost = ['localhost', '127.0.0.1', '[::1]'].includes(
+			parsed.hostname
+		);
+		if (parsed.protocol !== 'https:' && !isLocalhost) {
+			return;
+		}
+	} catch {
+		return;
+	}
+
 	const url = `${state.cloudUrl.replace(/\/+$/, '')}/api/v1/connect`;
 
 	fetch(url, {

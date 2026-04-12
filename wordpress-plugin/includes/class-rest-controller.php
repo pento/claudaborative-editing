@@ -182,6 +182,7 @@ class REST_Controller extends \WP_REST_Controller {
 							'type'              => 'string',
 							'format'            => 'uri',
 							'sanitize_callback' => 'sanitize_url',
+							'validate_callback' => array( $this, 'validate_cloud_url' ),
 						),
 						'api_key'   => array(
 							'required'          => true,
@@ -264,9 +265,10 @@ class REST_Controller extends \WP_REST_Controller {
 	/**
 	 * Permission check: user can manage options (administrator).
 	 *
+	 * @param \WP_REST_Request $request The request object.
 	 * @return bool True if permitted.
 	 */
-	public function manage_options_permissions() {
+	public function manage_options_permissions( $request ) {
 		return current_user_can( 'manage_options' );
 	}
 
@@ -361,6 +363,46 @@ class REST_Controller extends \WP_REST_Controller {
 				),
 				array( 'status' => 400 )
 			);
+		}
+
+		return true;
+	}
+
+	/**
+	 * Validate that the cloud_url uses HTTPS (or HTTP for localhost dev).
+	 *
+	 * The cloud URL is used as a Bearer token destination, so allowing
+	 * plaintext HTTP would risk leaking the API key.
+	 *
+	 * @param string           $value   The parameter value.
+	 * @param \WP_REST_Request $request The request object.
+	 * @param string           $param   The parameter name.
+	 * @return true|\WP_Error True if valid, \WP_Error otherwise.
+	 */
+	public function validate_cloud_url( $value, $request, $param ) {
+		$parsed = wp_parse_url( $value );
+
+		if ( ! $parsed || empty( $parsed['scheme'] ) || empty( $parsed['host'] ) ) {
+			return new \WP_Error(
+				'rest_invalid_param',
+				__( 'cloud_url must be a valid URL.', 'claudaborative-editing' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$scheme = strtolower( $parsed['scheme'] );
+		$host   = strtolower( $parsed['host'] );
+
+		// Allow http:// only for localhost development.
+		if ( 'https' !== $scheme ) {
+			$localhost_hosts = array( 'localhost', '127.0.0.1', '::1' );
+			if ( 'http' !== $scheme || ! in_array( $host, $localhost_hosts, true ) ) {
+				return new \WP_Error(
+					'rest_invalid_param',
+					__( 'cloud_url must use HTTPS (HTTP is only allowed for localhost).', 'claudaborative-editing' ),
+					array( 'status' => 400 )
+				);
+			}
 		}
 
 		return true;
