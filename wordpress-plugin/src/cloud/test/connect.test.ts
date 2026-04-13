@@ -182,6 +182,20 @@ describe('cloud/connect', () => {
 			expect(mockFetch).toHaveBeenCalledTimes(1);
 		});
 
+		it('allows HTTP for [::1] IPv6 loopback development', () => {
+			(window as any).wpceInitialState = {
+				cloudUrl: 'http://[::1]:3000',
+				cloudApiKey: 'key-dev',
+			};
+			const mockFetch = jest.fn().mockResolvedValue({});
+			window.fetch = mockFetch;
+
+			const { connectToCloud } = require('../connect');
+			connectToCloud();
+
+			expect(mockFetch).toHaveBeenCalledTimes(1);
+		});
+
 		it('does not call fetch when cloudUrl is an invalid URL', () => {
 			(window as any).wpceInitialState = {
 				cloudUrl: 'not-a-url',
@@ -330,6 +344,23 @@ describe('cloud/connect', () => {
 		it('allows HTTP for 127.0.0.1 development', async () => {
 			(window as any).wpceInitialState = {
 				cloudUrl: 'http://127.0.0.1:3000',
+				cloudApiKey: 'key-dev',
+			};
+			const mockFetch = jest
+				.fn()
+				.mockResolvedValue({ ok: true, status: 200 });
+			window.fetch = mockFetch;
+
+			const { reconnectToCloud } = require('../connect');
+			const result = await reconnectToCloud();
+
+			expect(result).toBe(true);
+			expect(mockFetch).toHaveBeenCalledTimes(1);
+		});
+
+		it('allows HTTP for [::1] IPv6 loopback development', async () => {
+			(window as any).wpceInitialState = {
+				cloudUrl: 'http://[::1]:3000',
 				cloudApiKey: 'key-dev',
 			};
 			const mockFetch = jest
