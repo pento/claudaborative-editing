@@ -28,6 +28,7 @@ import { store as noticesStore } from '@wordpress/notices';
 import { useMcpStatus } from '../../hooks/use-mcp-status';
 import { useCommands } from '../../hooks/use-commands';
 import { getCommandProgressLabel } from '../../utils/command-i18n';
+import { reconnectToCloud } from '../../cloud/connect';
 import aiActionsStore from '../../store';
 import SparkleIcon from '../SparkleIcon';
 import OnboardingContent from './OnboardingContent';
@@ -125,6 +126,20 @@ export default function ConnectionStatus() {
 		if (mcpConnected) {
 			wasConnectedRef.current = true;
 		}
+	}, [mcpConnected]);
+
+	// Poll reconnectToCloud when MCP disconnects after having been connected.
+	// This tells the cloud server to re-establish the SessionManager so
+	// startup recovery can pick up in-flight commands.
+	useEffect(() => {
+		if (mcpConnected || !wasConnectedRef.current) {
+			return;
+		}
+
+		// Fire immediately, then every 10 seconds.
+		void reconnectToCloud();
+		const interval = setInterval(() => void reconnectToCloud(), 10_000);
+		return () => clearInterval(interval);
 	}, [mcpConnected]);
 
 	const [footerEl, setFooterEl] = useState<Element | null>(null);

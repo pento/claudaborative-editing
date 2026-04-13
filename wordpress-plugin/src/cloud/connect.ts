@@ -70,3 +70,46 @@ export function connectToCloud(): void {
 		// the local editor. The cloud service's idle timeout handles cleanup.
 	});
 }
+
+/**
+ * Reconnect to the Claudaborative Cloud service.
+ *
+ * Same as connectToCloud() but returns a promise so callers can
+ * poll on a schedule (e.g., after detecting an MCP disconnect).
+ *
+ * @return True if the request succeeded, false otherwise.
+ */
+export async function reconnectToCloud(): Promise<boolean> {
+	const state = getCloudState();
+
+	if (!state?.cloudUrl || !state?.cloudApiKey) {
+		return false;
+	}
+
+	try {
+		const parsed = new URL(state.cloudUrl);
+		const isLocalhost = ['localhost', '127.0.0.1', '[::1]'].includes(
+			parsed.hostname
+		);
+		if (parsed.protocol !== 'https:' && !isLocalhost) {
+			return false;
+		}
+	} catch {
+		return false;
+	}
+
+	const url = `${state.cloudUrl.replace(/\/+$/, '')}/api/v1/connect`;
+
+	try {
+		const response = await fetch(url, {
+			method: 'POST',
+			headers: {
+				Authorization: `Bearer ${state.cloudApiKey}`,
+			},
+			mode: 'cors',
+		});
+		return response.ok;
+	} catch {
+		return false;
+	}
+}
