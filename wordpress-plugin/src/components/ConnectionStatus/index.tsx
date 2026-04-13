@@ -142,10 +142,6 @@ export default function ConnectionStatus() {
 		let timeout: ReturnType<typeof setTimeout> | undefined;
 
 		const poll = async (): Promise<void> => {
-			if (cancelled) {
-				return;
-			}
-
 			await reconnectToCloud();
 
 			if (!cancelled) {
