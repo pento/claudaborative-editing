@@ -31,16 +31,21 @@ export function isCloudConfigured(): boolean {
 }
 
 /**
- * Connect to the Claudaborative Cloud service when the editor loads.
+ * Validate cloud state and build a connect request.
  *
- * Sends the site's API key so the cloud service creates a SessionManager
- * that will connect back via the Yjs sync protocol.
+ * Shared by connectToCloud() and reconnectToCloud() to avoid
+ * duplicating URL validation and fetch option construction.
+ *
+ * @return The URL and fetch options, or null when the request should be skipped.
  */
-export function connectToCloud(): void {
+function buildConnectRequest(): {
+	url: string;
+	options: RequestInit;
+} | null {
 	const state = getCloudState();
 
 	if (!state?.cloudUrl || !state?.cloudApiKey) {
-		return;
+		return null;
 	}
 
 	// Refuse to send the API key over plaintext (allow http://localhost for dev).
@@ -50,23 +55,62 @@ export function connectToCloud(): void {
 			parsed.hostname
 		);
 		if (parsed.protocol !== 'https:' && !isLocalhost) {
-			return;
+			return null;
 		}
 	} catch {
+		return null;
+	}
+
+	return {
+		url: `${state.cloudUrl.replace(/\/+$/, '')}/api/v1/connect`,
+		options: {
+			method: 'POST',
+			headers: {
+				Authorization: `Bearer ${state.cloudApiKey}`,
+			},
+			// No credentials -- cross-origin request with API key auth.
+			mode: 'cors',
+			credentials: 'omit',
+		},
+	};
+}
+
+/**
+ * Connect to the Claudaborative Cloud service when the editor loads.
+ *
+ * Sends the site's API key so the cloud service creates a SessionManager
+ * that will connect back via the Yjs sync protocol.
+ */
+export function connectToCloud(): void {
+	const request = buildConnectRequest();
+	if (!request) {
 		return;
 	}
 
-	const url = `${state.cloudUrl.replace(/\/+$/, '')}/api/v1/connect`;
-
-	fetch(url, {
-		method: 'POST',
-		headers: {
-			Authorization: `Bearer ${state.cloudApiKey}`,
-		},
-		// No credentials -- cross-origin request with API key auth.
-		mode: 'cors',
-	}).catch(() => {
+	fetch(request.url, request.options).catch(() => {
 		// Best-effort: if the cloud service is down, the user still has
 		// the local editor. The cloud service's idle timeout handles cleanup.
 	});
+}
+
+/**
+ * Reconnect to the Claudaborative Cloud service.
+ *
+ * Same as connectToCloud() but returns a promise so callers can
+ * poll on a schedule (e.g., after detecting an MCP disconnect).
+ *
+ * @return True if the request succeeded, false otherwise.
+ */
+export async function reconnectToCloud(): Promise<boolean> {
+	const request = buildConnectRequest();
+	if (!request) {
+		return false;
+	}
+
+	try {
+		const response = await fetch(request.url, request.options);
+		return response.ok;
+	} catch {
+		return false;
+	}
 }

@@ -118,6 +118,7 @@ describe('cloud/connect', () => {
 						Authorization: 'Bearer key-abc-123',
 					},
 					mode: 'cors',
+					credentials: 'omit',
 				}
 			);
 		});
@@ -181,6 +182,20 @@ describe('cloud/connect', () => {
 			expect(mockFetch).toHaveBeenCalledTimes(1);
 		});
 
+		it('allows HTTP for [::1] IPv6 loopback development', () => {
+			(window as any).wpceInitialState = {
+				cloudUrl: 'http://[::1]:3000',
+				cloudApiKey: 'key-dev',
+			};
+			const mockFetch = jest.fn().mockResolvedValue({});
+			window.fetch = mockFetch;
+
+			const { connectToCloud } = require('../connect');
+			connectToCloud();
+
+			expect(mockFetch).toHaveBeenCalledTimes(1);
+		});
+
 		it('does not call fetch when cloudUrl is an invalid URL', () => {
 			(window as any).wpceInitialState = {
 				cloudUrl: 'not-a-url',
@@ -211,6 +226,191 @@ describe('cloud/connect', () => {
 
 			// Wait for the catch handler to execute.
 			await new Promise((resolve) => setTimeout(resolve, 0));
+		});
+	});
+
+	describe('reconnectToCloud', () => {
+		it('returns true when fetch succeeds', async () => {
+			(window as any).wpceInitialState = {
+				cloudUrl: 'https://claudaborative.cloud',
+				cloudApiKey: 'key-abc',
+			};
+			const mockFetch = jest
+				.fn()
+				.mockResolvedValue({ ok: true, status: 200 });
+			window.fetch = mockFetch;
+
+			const { reconnectToCloud } = require('../connect');
+			const result = await reconnectToCloud();
+
+			expect(result).toBe(true);
+			expect(mockFetch).toHaveBeenCalledWith(
+				'https://claudaborative.cloud/api/v1/connect',
+				expect.objectContaining({ method: 'POST' })
+			);
+		});
+
+		it('returns false when fetch fails', async () => {
+			(window as any).wpceInitialState = {
+				cloudUrl: 'https://claudaborative.cloud',
+				cloudApiKey: 'key-abc',
+			};
+			const mockFetch = jest
+				.fn()
+				.mockRejectedValue(new Error('Network failure'));
+			window.fetch = mockFetch;
+
+			const { reconnectToCloud } = require('../connect');
+			const result = await reconnectToCloud();
+
+			expect(result).toBe(false);
+		});
+
+		it('returns false when response is not ok', async () => {
+			(window as any).wpceInitialState = {
+				cloudUrl: 'https://claudaborative.cloud',
+				cloudApiKey: 'key-abc',
+			};
+			const mockFetch = jest
+				.fn()
+				.mockResolvedValue({ ok: false, status: 502 });
+			window.fetch = mockFetch;
+
+			const { reconnectToCloud } = require('../connect');
+			const result = await reconnectToCloud();
+
+			expect(result).toBe(false);
+		});
+
+		it('returns false when not configured', async () => {
+			(window as any).wpceInitialState = {};
+			const mockFetch = jest.fn().mockResolvedValue({ ok: true });
+			window.fetch = mockFetch;
+
+			const { reconnectToCloud } = require('../connect');
+			const result = await reconnectToCloud();
+
+			expect(result).toBe(false);
+			expect(mockFetch).not.toHaveBeenCalled();
+		});
+
+		it('refuses non-HTTPS URLs', async () => {
+			(window as any).wpceInitialState = {
+				cloudUrl: 'http://cloud.example.com',
+				cloudApiKey: 'key-abc',
+			};
+			const mockFetch = jest.fn().mockResolvedValue({ ok: true });
+			window.fetch = mockFetch;
+
+			const { reconnectToCloud } = require('../connect');
+			const result = await reconnectToCloud();
+
+			expect(result).toBe(false);
+			expect(mockFetch).not.toHaveBeenCalled();
+		});
+
+		it('returns false when URL is invalid', async () => {
+			(window as any).wpceInitialState = {
+				cloudUrl: 'not-a-url',
+				cloudApiKey: 'key-abc',
+			};
+			const mockFetch = jest.fn().mockResolvedValue({ ok: true });
+			window.fetch = mockFetch;
+
+			const { reconnectToCloud } = require('../connect');
+			const result = await reconnectToCloud();
+
+			expect(result).toBe(false);
+			expect(mockFetch).not.toHaveBeenCalled();
+		});
+
+		it('allows HTTP for localhost development', async () => {
+			(window as any).wpceInitialState = {
+				cloudUrl: 'http://localhost:8080',
+				cloudApiKey: 'key-dev',
+			};
+			const mockFetch = jest
+				.fn()
+				.mockResolvedValue({ ok: true, status: 200 });
+			window.fetch = mockFetch;
+
+			const { reconnectToCloud } = require('../connect');
+			const result = await reconnectToCloud();
+
+			expect(result).toBe(true);
+			expect(mockFetch).toHaveBeenCalledTimes(1);
+		});
+
+		it('allows HTTP for 127.0.0.1 development', async () => {
+			(window as any).wpceInitialState = {
+				cloudUrl: 'http://127.0.0.1:3000',
+				cloudApiKey: 'key-dev',
+			};
+			const mockFetch = jest
+				.fn()
+				.mockResolvedValue({ ok: true, status: 200 });
+			window.fetch = mockFetch;
+
+			const { reconnectToCloud } = require('../connect');
+			const result = await reconnectToCloud();
+
+			expect(result).toBe(true);
+			expect(mockFetch).toHaveBeenCalledTimes(1);
+		});
+
+		it('allows HTTP for [::1] IPv6 loopback development', async () => {
+			(window as any).wpceInitialState = {
+				cloudUrl: 'http://[::1]:3000',
+				cloudApiKey: 'key-dev',
+			};
+			const mockFetch = jest
+				.fn()
+				.mockResolvedValue({ ok: true, status: 200 });
+			window.fetch = mockFetch;
+
+			const { reconnectToCloud } = require('../connect');
+			const result = await reconnectToCloud();
+
+			expect(result).toBe(true);
+			expect(mockFetch).toHaveBeenCalledTimes(1);
+		});
+
+		it('strips trailing slashes from cloudUrl', async () => {
+			(window as any).wpceInitialState = {
+				cloudUrl: 'https://claudaborative.cloud///',
+				cloudApiKey: 'key-456',
+			};
+			const mockFetch = jest
+				.fn()
+				.mockResolvedValue({ ok: true, status: 200 });
+			window.fetch = mockFetch;
+
+			const { reconnectToCloud } = require('../connect');
+			await reconnectToCloud();
+
+			expect(mockFetch).toHaveBeenCalledWith(
+				'https://claudaborative.cloud/api/v1/connect',
+				expect.any(Object)
+			);
+		});
+
+		it('includes credentials: omit in fetch options', async () => {
+			(window as any).wpceInitialState = {
+				cloudUrl: 'https://claudaborative.cloud',
+				cloudApiKey: 'key-abc',
+			};
+			const mockFetch = jest
+				.fn()
+				.mockResolvedValue({ ok: true, status: 200 });
+			window.fetch = mockFetch;
+
+			const { reconnectToCloud } = require('../connect');
+			await reconnectToCloud();
+
+			expect(mockFetch).toHaveBeenCalledWith(
+				expect.any(String),
+				expect.objectContaining({ credentials: 'omit' })
+			);
 		});
 	});
 });

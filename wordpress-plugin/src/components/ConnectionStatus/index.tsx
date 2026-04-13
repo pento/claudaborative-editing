@@ -28,6 +28,7 @@ import { store as noticesStore } from '@wordpress/notices';
 import { useMcpStatus } from '../../hooks/use-mcp-status';
 import { useCommands } from '../../hooks/use-commands';
 import { getCommandProgressLabel } from '../../utils/command-i18n';
+import { reconnectToCloud } from '../../cloud/connect';
 import aiActionsStore from '../../store';
 import SparkleIcon from '../SparkleIcon';
 import OnboardingContent from './OnboardingContent';
@@ -125,6 +126,38 @@ export default function ConnectionStatus() {
 		if (mcpConnected) {
 			wasConnectedRef.current = true;
 		}
+	}, [mcpConnected]);
+
+	// Poll reconnectToCloud when MCP disconnects after having been connected.
+	// This tells the cloud server to re-establish the SessionManager so
+	// startup recovery can pick up in-flight commands.
+	// Uses a self-scheduling setTimeout loop so that a slow/hanging fetch
+	// never causes overlapping requests (unlike setInterval).
+	useEffect(() => {
+		if (mcpConnected || !wasConnectedRef.current) {
+			return;
+		}
+
+		let cancelled = false;
+		let timeout: ReturnType<typeof setTimeout> | undefined;
+
+		const poll = async (): Promise<void> => {
+			await reconnectToCloud();
+
+			if (!cancelled) {
+				timeout = setTimeout(() => void poll(), 10_000);
+			}
+		};
+
+		// Fire immediately, then wait 10 seconds after each completed attempt.
+		void poll();
+
+		return () => {
+			cancelled = true;
+			if (timeout) {
+				clearTimeout(timeout);
+			}
+		};
 	}, [mcpConnected]);
 
 	const [footerEl, setFooterEl] = useState<Element | null>(null);

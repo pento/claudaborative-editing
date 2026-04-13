@@ -64,6 +64,12 @@ jest.mock('../../../hooks/use-commands', () => ({
 	useCommands: jest.fn(),
 }));
 
+const mockReconnectToCloud = jest.fn().mockResolvedValue(true);
+jest.mock('../../../cloud/connect', () => ({
+	reconnectToCloud: (...args: unknown[]) => mockReconnectToCloud(...args),
+	isCloudConfigured: jest.fn(() => false),
+}));
+
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { store as coreDataStore } from '@wordpress/core-data';
@@ -675,5 +681,97 @@ describe('ConnectionStatus', () => {
 			.getByTestId('popover')
 			.querySelector('.wpce-footer-status-tooltip-onboarding');
 		expect(tooltip).toBeTruthy();
+	});
+
+	// --- Reconnect polling ---
+
+	it('polls reconnectToCloud when MCP disconnects after being connected', async () => {
+		jest.useFakeTimers();
+
+		try {
+			// Start connected
+			mockedUseMcpStatus.mockReturnValue({
+				mcpConnected: true,
+				mcpLastSeenAt: null,
+				isLoading: false,
+				error: null,
+			});
+
+			const { rerender } = await act(async () =>
+				render(<ConnectionStatus />)
+			);
+
+			// Now disconnect
+			mockedUseMcpStatus.mockReturnValue({
+				mcpConnected: false,
+				mcpLastSeenAt: null,
+				isLoading: false,
+				error: null,
+			});
+
+			await act(async () => rerender(<ConnectionStatus />));
+
+			// Should have called reconnectToCloud immediately
+			expect(mockReconnectToCloud).toHaveBeenCalledTimes(1);
+
+			// Advance 10 seconds — should poll again
+			await act(async () => jest.advanceTimersByTime(10_000));
+			expect(mockReconnectToCloud).toHaveBeenCalledTimes(2);
+		} finally {
+			jest.useRealTimers();
+		}
+	});
+
+	it('stops polling when MCP reconnects', async () => {
+		jest.useFakeTimers();
+
+		try {
+			// Start connected
+			mockedUseMcpStatus.mockReturnValue({
+				mcpConnected: true,
+				mcpLastSeenAt: null,
+				isLoading: false,
+				error: null,
+			});
+
+			const { rerender } = await act(async () =>
+				render(<ConnectionStatus />)
+			);
+
+			// Disconnect
+			mockedUseMcpStatus.mockReturnValue({
+				mcpConnected: false,
+				mcpLastSeenAt: null,
+				isLoading: false,
+				error: null,
+			});
+			await act(async () => rerender(<ConnectionStatus />));
+
+			const callsAfterDisconnect = mockReconnectToCloud.mock.calls.length;
+
+			// Reconnect
+			mockedUseMcpStatus.mockReturnValue({
+				mcpConnected: true,
+				mcpLastSeenAt: null,
+				isLoading: false,
+				error: null,
+			});
+			await act(async () => rerender(<ConnectionStatus />));
+
+			// Advance time — should NOT poll anymore
+			await act(async () => jest.advanceTimersByTime(30_000));
+			expect(mockReconnectToCloud.mock.calls.length).toBe(
+				callsAfterDisconnect
+			);
+		} finally {
+			jest.useRealTimers();
+		}
+	});
+
+	it('does not poll reconnectToCloud on initial disconnect (never connected)', async () => {
+		// mcpConnected starts as false, wasConnectedRef is false
+		await act(async () => render(<ConnectionStatus />));
+
+		expect(mockReconnectToCloud).not.toHaveBeenCalled();
 	});
 });
