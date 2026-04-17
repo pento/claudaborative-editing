@@ -12,7 +12,9 @@ process.env.STORAGE_STATE_PATH = STORAGE_STATE_PATH;
 
 export default defineConfig({
 	testDir: './tests/e2e',
-	timeout: 120_000,
+	// 180s accommodates CI: WASM boot + MCP handshake + 2-3 pre-publish checks
+	// fit comfortably; 120s was borderline on GitHub runners.
+	timeout: 180_000,
 	expect: {
 		timeout: 30_000,
 	},
