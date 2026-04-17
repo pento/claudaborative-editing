@@ -275,7 +275,7 @@ export async function ensurePlaygroundRunning(): Promise<void> {
 	writeState({ appPassword, playgroundPid: pid });
 }
 
-export function stopPlayground(): void {
+export async function stopPlayground(): Promise<void> {
 	// When reuse is enabled, keep the state file and running instance so the
 	// next run can skip startup.
 	if (process.env.CLAUDABORATIVE_E2E_REUSE_ENV === '1') {
@@ -288,6 +288,17 @@ export function stopPlayground(): void {
 			process.kill(state.playgroundPid, 'SIGTERM');
 		} catch {
 			// Process may have exited between the check and the kill; ignore.
+		}
+		// Give Playground a brief window to exit cleanly, then confirm it is
+		// gone before clearing the state file. If the process is still alive,
+		// keep the PID around so the next run can retry cleanup instead of
+		// leaving an orphan behind.
+		const deadline = Date.now() + 2_000;
+		while (Date.now() < deadline && isProcessAlive(state.playgroundPid)) {
+			await new Promise((resolve) => setTimeout(resolve, 50));
+		}
+		if (isProcessAlive(state.playgroundPid)) {
+			return;
 		}
 	}
 	if (existsSync(STATE_FILE)) {
@@ -339,13 +350,6 @@ function basicAuth(): string {
 	);
 }
 
-// Playground's SQLite driver serializes writers and intermittently returns 500
-// "Internal Server Error" (plain text, no JSON) under concurrent REST load
-// from multiple test workers plus MCP polling. The failure is transient — a
-// short retry clears it. Only retry on 5xx; 4xx is a real test failure.
-const API_MAX_ATTEMPTS = 3;
-const API_RETRY_BASE_MS = 250;
-
 async function apiFetch<T>(
 	endpoint: string,
 	options: RequestInit = {},
@@ -368,25 +372,12 @@ async function apiFetch<T>(
 		});
 	}
 
-	let lastBody = '';
-	let lastStatus = 0;
-	for (let attempt = 1; attempt <= API_MAX_ATTEMPTS; attempt++) {
-		const response = await fetch(url, { ...options, headers });
-		if (response.ok) {
-			return (await response.json()) as T;
-		}
-		lastStatus = response.status;
-		lastBody = await response.text();
-		if (response.status < 500 || attempt === API_MAX_ATTEMPTS) {
-			break;
-		}
-		await new Promise((resolve) =>
-			setTimeout(resolve, API_RETRY_BASE_MS * 2 ** (attempt - 1))
-		);
+	const response = await fetch(url, { ...options, headers });
+	if (response.ok) {
+		return (await response.json()) as T;
 	}
-
 	throw new Error(
-		`API ${options.method ?? 'GET'} ${endpoint} failed (${lastStatus}): ${lastBody}`
+		`API ${options.method ?? 'GET'} ${endpoint} failed (${response.status}): ${await response.text()}`
 	);
 }
 

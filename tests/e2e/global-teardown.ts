@@ -1,5 +1,5 @@
 import { stopPlayground } from './helpers/playground';
 
-export default function globalTeardown(): void {
-	stopPlayground();
+export default async function globalTeardown(): Promise<void> {
+	await stopPlayground();
 }
