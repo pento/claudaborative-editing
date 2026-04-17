@@ -2,7 +2,7 @@ import { test, expect } from './test';
 import type { Page } from '@playwright/test';
 import { callToolOrThrow, waitForMCPReady } from './helpers/mcp';
 import { openEditor } from './helpers/editor';
-import { listCommands } from './helpers/wp-env';
+import { listCommands } from './helpers/playground';
 
 /**
  * Opens the pre-publish sidebar by clicking the Publish button.
@@ -21,10 +21,9 @@ async function openPrePublishSidebar(page: Page): Promise<void> {
 test.describe('Pre-Publish Panel', () => {
 	test('panel appears in pre-publish sidebar', async ({
 		page,
-		editor,
 		draftPost,
 	}) => {
-		await openEditor(page, editor, draftPost);
+		await openEditor(page, draftPost);
 		await openPrePublishSidebar(page);
 
 		// The PluginPrePublishPanel should render with our title
@@ -45,10 +44,9 @@ test.describe('Pre-Publish Panel', () => {
 
 	test('run button disabled when MCP not connected', async ({
 		page,
-		editor,
 		draftPost,
 	}) => {
-		await openEditor(page, editor, draftPost);
+		await openEditor(page, draftPost);
 		await openPrePublishSidebar(page);
 
 		// Per-test user isolation ensures no MCP connection exists,
@@ -60,11 +58,10 @@ test.describe('Pre-Publish Panel', () => {
 
 	test('run button enabled when MCP connected', async ({
 		page,
-		editor,
 		draftPost,
 		mcpClient,
 	}) => {
-		await openEditor(page, editor, draftPost);
+		await openEditor(page, draftPost);
 
 		// Wait for MCP connection to be reflected in the browser
 		await waitForMCPReady(mcpClient.client);
@@ -87,11 +84,10 @@ test.describe('Pre-Publish Panel', () => {
 
 	test('clicking run button submits pre-publish-check command', async ({
 		page,
-		editor,
 		draftPost,
 		mcpClient,
 	}) => {
-		await openEditor(page, editor, draftPost);
+		await openEditor(page, draftPost);
 
 		// Wait for MCP connection to be reflected in the browser
 		await waitForMCPReady(mcpClient.client);
@@ -138,11 +134,10 @@ test.describe('Pre-Publish Panel', () => {
 
 	test('displays results after command completes with result_data', async ({
 		page,
-		editor,
 		draftPost,
 		mcpClient,
 	}) => {
-		await openEditor(page, editor, draftPost);
+		await openEditor(page, draftPost);
 
 		// Wait for MCP connection to be reflected in the browser
 		await waitForMCPReady(mcpClient.client);

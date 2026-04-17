@@ -50,7 +50,7 @@ jobs:
     e2e:
         name: E2E (Node 22)
         runs-on: ubuntu-latest
-        timeout-minutes: 45
+        timeout-minutes: 20
 
         steps:
             - uses: actions/checkout@v6
@@ -115,9 +115,14 @@ jobs:
               run: npm ci --no-audit
               working-directory: wordpress-plugin
 
+            - name: Set up PHP
+              uses: shivammathur/setup-php@v2
+              with:
+                  php-version: '8.2'
+                  tools: composer
+
             - name: Run PHPUnit with coverage
-              run: npm run test:php:coverage
-              working-directory: wordpress-plugin
+              run: npm run test:plugin-php:coverage
 
             - name: Convert Clover XML to LCOV
               uses: andstor/clover2lcov-action@v1
@@ -125,10 +130,10 @@ jobs:
                   src: wordpress-plugin/coverage/clover.xml
                   dst: wordpress-plugin/coverage/lcov.info
 
-            - name: Rewrite container paths in LCOV
+            - name: Rewrite VFS paths in LCOV
               run: >-
                   sed -i
-                  's|SF:/var/www/html/wp-content/plugins/claudaborative-editing/|SF:wordpress-plugin/|g'
+                  's|SF:/wordpress/wp-content/plugins/claudaborative-editing/|SF:wordpress-plugin/|g'
                   wordpress-plugin/coverage/lcov.info
 
             - name: Check PHP coverage

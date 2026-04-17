@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { defineConfig, devices } from '@playwright/test';
 
-const baseURL = process.env.WP_BASE_URL ?? 'http://localhost:8889';
+const baseURL = process.env.WP_BASE_URL ?? 'http://127.0.0.1:8889';
 
 // Set STORAGE_STATE_PATH so the @wordpress/e2e-test-utils-playwright
 // requestUtils fixture uses the same storage state as our global setup.

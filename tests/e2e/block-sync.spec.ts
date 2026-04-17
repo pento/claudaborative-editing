@@ -10,11 +10,10 @@ import { openEditor, getBrowserBlocks } from './helpers/editor';
 test.describe('block sync', () => {
 	test('MCP inserts blocks visible in browser', async ({
 		page,
-		editor,
 		mcpClient,
 		draftPost,
 	}) => {
-		await openEditor(page, editor, draftPost);
+		await openEditor(page, draftPost);
 
 		await waitForMCPReady(mcpClient.client);
 
@@ -103,11 +102,10 @@ test.describe('block sync', () => {
 
 	test('MCP edits block content visible in browser', async ({
 		page,
-		editor,
 		mcpClient,
 		draftPost,
 	}) => {
-		await openEditor(page, editor, draftPost);
+		await openEditor(page, draftPost);
 
 		await waitForMCPReady(mcpClient.client);
 
@@ -150,11 +148,10 @@ test.describe('block sync', () => {
 
 	test('MCP changes block attributes visible in browser', async ({
 		page,
-		editor,
 		mcpClient,
 		draftPost,
 	}) => {
-		await openEditor(page, editor, draftPost);
+		await openEditor(page, draftPost);
 
 		await waitForMCPReady(mcpClient.client);
 
@@ -204,11 +201,10 @@ test.describe('block sync', () => {
 
 	test('MCP removes blocks visible in browser', async ({
 		page,
-		editor,
 		mcpClient,
 		draftPost,
 	}) => {
-		await openEditor(page, editor, draftPost);
+		await openEditor(page, draftPost);
 
 		await waitForMCPReady(mcpClient.client);
 
@@ -283,11 +279,10 @@ test.describe('block sync', () => {
 
 	test('browser edits visible in MCP', async ({
 		page,
-		editor,
 		mcpClient,
 		draftPost,
 	}) => {
-		await openEditor(page, editor, draftPost);
+		await openEditor(page, draftPost);
 
 		await waitForMCPReady(mcpClient.client);
 
@@ -349,13 +344,12 @@ test.describe('block sync', () => {
 
 	test('multiple sequential edits in a single session', async ({
 		page,
-		editor,
 		mcpClient,
 		draftPost,
 	}) => {
 		test.setTimeout(180_000);
 
-		await openEditor(page, editor, draftPost);
+		await openEditor(page, draftPost);
 
 		await waitForMCPReady(mcpClient.client);
 

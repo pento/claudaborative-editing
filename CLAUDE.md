@@ -12,6 +12,7 @@ npm run typecheck    # TypeScript type check
 npm run lint         # ESLint + markdownlint + Prettier check
 npm run lint:fix     # Auto-fix all lint and formatting issues
 npm run dev          # Watch mode build
+npm run dev:wp       # Start a local WordPress on http://127.0.0.1:9400 via wp-playground-cli (ephemeral, Gutenberg latest, collab enabled)
 ```
 
 ## Git Hooks
@@ -135,7 +136,16 @@ composer phpstan       # PHPStan static analysis (level 7)
 
 ```bash
 cd wordpress-plugin && npm run test     # TypeScript tests
-cd wordpress-plugin && npm run test:php # PHPUnit tests (requires wp-env)
+npm run test:plugin-php                 # PHPUnit tests (runs in wp-playground-cli, from repo root)
 ```
+
+PHPUnit runs inside `@wp-playground/cli` (PHP-WASM + SQLite). The first run
+clones `tests/phpunit` from `wordpress-develop` into
+`wordpress-plugin/.wp-tests-lib/` (gitignored). Activation is handled by
+`playground/phpunit.blueprint.json`; config is in
+`wordpress-plugin/tests/wp-tests-config.php`. The test library's default install
+path (which forks a PHP subprocess via `system()`) is skipped with
+`WP_TESTS_SKIP_INSTALL=1` because Playground already provides a fresh SQLite DB
+per boot.
 
 Run `npm run lint` from the repo root to lint everything (ESLint + stylelint + markdownlint + Prettier).

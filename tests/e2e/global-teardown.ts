@@ -1,5 +1,5 @@
-import { teardownWpEnv } from './helpers/wp-env';
+import { stopPlayground } from './helpers/playground';
 
 export default function globalTeardown(): void {
-	teardownWpEnv();
+	stopPlayground();
 }

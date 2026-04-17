@@ -22,6 +22,8 @@ export default [
 			'wordpress-plugin/vendor/**',
 			'wordpress-plugin/node_modules/**',
 			'wordpress-plugin/build/**',
+			'wordpress-plugin/coverage/**',
+			'wordpress-plugin/.wp-tests-lib/**',
 		],
 	},
 

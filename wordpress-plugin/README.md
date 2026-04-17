@@ -18,9 +18,12 @@ A WordPress plugin that adds AI action controls to the Gutenberg editor for use 
 
 ### Prerequisites
 
-- Node.js 20+
+- Node.js 22+
 - Composer
-- Docker (for tests via wp-env)
+
+No Docker required. PHPUnit and end-to-end tests run against
+[`@wp-playground/cli`](https://www.npmjs.com/package/@wp-playground/cli)
+(PHP-WASM + SQLite), which `npm run test:plugin-php` launches for you.
 
 ### Setup
 
@@ -49,6 +52,10 @@ JavaScript linting is handled by the root project's ESLint config. Run `npm run 
 ### Test
 
 ```bash
-npm run test:php                 # from plugin directory
+npm run test:php                 # from plugin directory (delegates to repo root)
 npm run test:plugin-php          # from repo root
 ```
+
+The first run clones the WordPress PHPUnit test library into
+`wordpress-plugin/.wp-tests-lib/` (gitignored) via
+`bin/fetch-wp-tests-lib.sh`, then boots Playground and executes the suite.

@@ -1,7 +1,7 @@
 import { test, expect } from './test';
 import type { Page } from '@playwright/test';
 import { openEditor, getFooterStatus } from './helpers/editor';
-import { listCommands } from './helpers/wp-env';
+import { listCommands } from './helpers/playground';
 import { waitForMCPReady } from './helpers/mcp';
 
 /**
@@ -25,8 +25,8 @@ async function openDropdown(page: Page): Promise<void> {
 }
 
 test.describe('AI Actions', () => {
-	test('dropdown opens and closes', async ({ page, editor, draftPost }) => {
-		await openEditor(page, editor, draftPost);
+	test('dropdown opens and closes', async ({ page, draftPost }) => {
+		await openEditor(page, draftPost);
 
 		const toggle = getDropdownToggle(page);
 		await expect(toggle).toBeVisible();
@@ -53,10 +53,9 @@ test.describe('AI Actions', () => {
 
 	test('footer shows disconnected status without MCP', async ({
 		page,
-		editor,
 		draftPost,
 	}) => {
-		await openEditor(page, editor, draftPost);
+		await openEditor(page, draftPost);
 
 		// Footer sparkle should start grey (disconnected), until MCP
 		// receives signal to open this post.
@@ -90,11 +89,10 @@ test.describe('AI Actions', () => {
 
 	test('footer shows connected status with MCP', async ({
 		page,
-		editor,
 		mcpClient,
 		draftPost,
 	}) => {
-		await openEditor(page, editor, draftPost);
+		await openEditor(page, draftPost);
 
 		await waitForMCPReady(mcpClient.client);
 
@@ -131,11 +129,10 @@ test.describe('AI Actions', () => {
 
 	test('Proofread submits command', async ({
 		page,
-		editor,
 		mcpClient,
 		draftPost,
 	}) => {
-		await openEditor(page, editor, draftPost);
+		await openEditor(page, draftPost);
 
 		// Wait for connected status
 		await waitForMCPReady(mcpClient.client);
@@ -177,13 +174,8 @@ test.describe('AI Actions', () => {
 			);
 	});
 
-	test('Review submits command', async ({
-		page,
-		editor,
-		mcpClient,
-		draftPost,
-	}) => {
-		await openEditor(page, editor, draftPost);
+	test('Review submits command', async ({ page, mcpClient, draftPost }) => {
+		await openEditor(page, draftPost);
 
 		// Wait for connected status
 		await waitForMCPReady(mcpClient.client);
@@ -227,11 +219,10 @@ test.describe('AI Actions', () => {
 
 	test('menu items disabled while command is active', async ({
 		page,
-		editor,
 		mcpClient,
 		draftPost,
 	}) => {
-		await openEditor(page, editor, draftPost);
+		await openEditor(page, draftPost);
 
 		// Wait for connected status
 		await waitForMCPReady(mcpClient.client);

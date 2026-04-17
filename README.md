@@ -96,6 +96,7 @@ npm test             # Run vitest
 npm run typecheck    # TypeScript type check
 npm run lint         # ESLint + markdownlint + Prettier check
 npm run dev          # Watch mode build
+npm run dev:wp       # Start a local WordPress via wp-playground-cli (no Docker)
 ```
 
 ### WordPress plugin
