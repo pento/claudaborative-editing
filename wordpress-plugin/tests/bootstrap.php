@@ -41,6 +41,6 @@ if ( ! file_exists( $_tests_dir . '/includes/functions.php' ) ) {
 require_once $_tests_dir . '/includes/functions.php';
 
 // Start up the WP testing environment. The plugin is activated via
-// playground/phpunit.blueprint.json, so the test library's wp-settings.php load
-// picks it up along the normal muplugins_loaded path.
+// playground/phpunit.blueprint.json, so the test library's wp-settings.php
+// load picks it up on the regular plugins_loaded sequence.
 require $_tests_dir . '/includes/bootstrap.php';

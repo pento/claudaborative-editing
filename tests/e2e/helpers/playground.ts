@@ -6,6 +6,7 @@ import {
 	readFileSync,
 	unlinkSync,
 	openSync,
+	closeSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -103,8 +104,8 @@ function startPlaygroundSubprocess(): number {
 			`--port=${PLAYGROUND_PORT}`,
 			// Each Playground worker holds one PHP instance; the CLI's
 			// hard-coded default of 6 serializes under 4 Playwright
-			// workers × (browser + MCP poll + admin REST). 8 covers peak
-			// concurrency without saturating CPU on a 14-core box.
+			// workers × (browser + MCP poll + admin REST). 13 covers peak
+			// concurrency with headroom without saturating CPU on a 14-core box.
 			'--experimental-multi-worker=13',
 			'--wp=latest',
 			'--php=8.5',
@@ -117,6 +118,9 @@ function startPlaygroundSubprocess(): number {
 		}
 	);
 	child.unref();
+	// The child inherits this fd for its stdout/stderr; the parent no longer
+	// needs its own copy and would otherwise leak it across the test run.
+	closeSync(out);
 	if (!child.pid) {
 		throw new Error('Failed to spawn wp-playground-cli');
 	}

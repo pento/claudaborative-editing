@@ -11,6 +11,10 @@
 		{
 			"step": "activatePlugin",
 			"pluginPath": "claudaborative-editing/claudaborative-editing.php"
+		},
+		{
+			"step": "runPHP",
+			"code": "<?php $ini = '/internal/shared/extensions/xdebug.ini'; if (is_file($ini)) { file_put_contents($ini, str_replace('xdebug.mode=debug,develop', 'xdebug.mode=coverage', file_get_contents($ini))); } ?>"
 		}
 	]
 }

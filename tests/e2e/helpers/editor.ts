@@ -13,8 +13,7 @@ export interface BrowserBlock {
 }
 
 /**
- * Navigate to the post editor, disable welcome guide and fullscreen mode,
- * and wait until at least one block is loaded.
+ * Navigate to the post editor and wait until at least one block is loaded.
  */
 export async function openEditor(page: Page, postId: number): Promise<void> {
 	await page.goto(`/wp-admin/post.php?post=${postId}&action=edit`);

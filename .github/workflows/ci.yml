@@ -59,6 +59,12 @@ jobs:
               with:
                   node-version: 22
 
+            - name: Set up PHP
+              uses: shivammathur/setup-php@v2
+              with:
+                  php-version: '8.2'
+                  tools: composer
+
             - run: npm ci --no-audit
 
             - name: Install plugin npm dependencies
