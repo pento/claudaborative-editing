@@ -26,6 +26,8 @@ jobs:
               with:
                   node-version: ${{ matrix.node-version }}
 
+            - run: corepack enable
+
             - run: npm ci --no-audit
 
             - name: Install plugin npm dependencies
@@ -63,6 +65,8 @@ jobs:
             - uses: actions/setup-node@v6
               with:
                   node-version: 22
+
+            - run: corepack enable
 
             - name: Set up PHP
               uses: shivammathur/setup-php@v2
@@ -118,6 +122,8 @@ jobs:
                   cache-dependency-path: |
                       package-lock.json
                       wordpress-plugin/package-lock.json
+
+            - run: corepack enable
 
             - name: Install root npm dependencies
               run: npm ci --no-audit
