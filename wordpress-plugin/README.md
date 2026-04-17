@@ -51,6 +51,9 @@ JavaScript linting is handled by the root project's ESLint config. Run `npm run 
 
 ### Test
 
+Both scripts shell out to `wp-playground-cli` from the **repo root** `node_modules/`,
+so run `npm install` at the repo root at least once before using either:
+
 ```bash
 npm run test:php                 # from plugin directory (delegates to repo root)
 npm run test:plugin-php          # from repo root

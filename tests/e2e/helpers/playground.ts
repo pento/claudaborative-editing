@@ -99,8 +99,6 @@ function startPlaygroundSubprocess(): number {
 			`--mount-before-install=${REPO_ROOT}/tests/e2e/mu-plugins/enable-app-passwords.php:/wordpress/wp-content/mu-plugins/enable-app-passwords.php`,
 			`--blueprint=${REPO_ROOT}/playground/e2e.blueprint.json`,
 			`--port=${PLAYGROUND_PORT}`,
-			'--wp=latest',
-			'--php=8.5',
 		],
 		{
 			cwd: REPO_ROOT,
