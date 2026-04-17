@@ -23,7 +23,7 @@ import {
 	createDraftPost,
 	deletePost,
 	type TestUser,
-} from './helpers/wp-env';
+} from './helpers/playground';
 
 /**
  * Console message substrings to suppress from test output.

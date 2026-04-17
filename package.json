@@ -45,6 +45,7 @@
 		"build:all": "npm run build && npm --prefix wordpress-plugin run build",
 		"check:generated": "npm run generate:defs && git diff --exit-code wordpress-plugin/includes/class-command-defs.php wordpress-plugin/src/utils/command-i18n.ts",
 		"dev": "tsup --watch",
+		"dev:wp": "NODE_USE_ENV_PROXY=1 wp-playground-cli server --mount-before-install=./wordpress-plugin:/wordpress/wp-content/plugins/claudaborative-editing --blueprint=./playground/dev.blueprint.json --port=9400",
 		"generate:defs": "node bin/generate-shared-defs.js && prettier --write wordpress-plugin/src/utils/command-i18n.ts",
 		"lint": "ESLINT_USE_FLAT_CONFIG=true eslint --max-warnings 0 . && npm --prefix wordpress-plugin run lint:style && markdownlint-cli2 && prettier --check -u .",
 		"lint:fix": "ESLINT_USE_FLAT_CONFIG=true eslint --fix --max-warnings 0 . && npm --prefix wordpress-plugin run lint:style:fix && markdownlint-cli2 --fix && prettier --write -u .",
@@ -52,15 +53,17 @@
 		"prepublishOnly": "npm run typecheck && npm run lint && npm test",
 		"start": "node dist/index.js",
 		"test": "vitest run",
-		"pretest:e2e": "npx wp-env --config .wp-env.test.json start",
+		"pretest:e2e": "(cd wordpress-plugin && composer install --no-interaction --prefer-dist) && npm run build:all",
 		"test:e2e": "playwright test",
-		"pretest:e2e:headed": "npx wp-env --config .wp-env.test.json start",
+		"pretest:e2e:headed": "npm run pretest:e2e",
 		"test:e2e:headed": "playwright test --headed",
 		"test:e2e:install": "playwright install chromium",
 		"test:plugin-js": "npm --prefix wordpress-plugin test",
 		"test:plugin-js:coverage": "npm --prefix wordpress-plugin run test:coverage",
-		"test:plugin-php": "npm --prefix wordpress-plugin run test:php",
-		"test:plugin-php:coverage": "npm --prefix wordpress-plugin run test:php:coverage",
+		"pretest:plugin-php": "bash wordpress-plugin/bin/fetch-wp-tests-lib.sh && (cd wordpress-plugin && composer install --no-interaction --prefer-dist) && npm --prefix wordpress-plugin run prebuild",
+		"test:plugin-php": "NODE_USE_ENV_PROXY=1 wp-playground-cli php --mount=./wordpress-plugin:/wordpress/wp-content/plugins/claudaborative-editing --mount=./wordpress-plugin/.wp-tests-lib:/wordpress-phpunit --blueprint=./playground/phpunit.blueprint.json -- /wordpress/wp-content/plugins/claudaborative-editing/vendor/bin/phpunit -c /wordpress/wp-content/plugins/claudaborative-editing/phpunit.xml.dist",
+		"pretest:plugin-php:coverage": "npm run pretest:plugin-php",
+		"test:plugin-php:coverage": "NODE_USE_ENV_PROXY=1 wp-playground-cli php --xdebug --mount=./wordpress-plugin:/wordpress/wp-content/plugins/claudaborative-editing --mount=./wordpress-plugin/.wp-tests-lib:/wordpress-phpunit --blueprint=./playground/phpunit.blueprint.json -- /wordpress/wp-content/plugins/claudaborative-editing/vendor/bin/phpunit -c /wordpress/wp-content/plugins/claudaborative-editing/phpunit.xml.dist",
 		"test:watch": "vitest",
 		"typecheck": "tsc --noEmit"
 	},
@@ -92,9 +95,9 @@
 		"@types/node": "^25.5.2",
 		"@vitest/coverage-v8": "^4.1.2",
 		"@wordpress/e2e-test-utils-playwright": "^1.43.0",
-		"@wordpress/env": "^11.3.0",
 		"@wordpress/eslint-plugin": "^24.5.0",
 		"@wordpress/prettier-config": "^4.43.0",
+		"@wp-playground/cli": "file:./vendor/wp-playground-cli-3.1.19-pr3494.tgz",
 		"eslint": "^8.57.1",
 		"eslint-config-prettier": "^10.1.8",
 		"eslint-plugin-package-json": "^0.91.1",
@@ -109,6 +112,7 @@
 		"vitest": "^4.1.2"
 	},
 	"overrides": {
+		"@php-wasm/universal": "file:./vendor/php-wasm-universal-3.1.19-pr3494.tgz",
 		"@wordpress/e2e-test-utils-playwright": {
 			"@types/node": "$@types/node"
 		}

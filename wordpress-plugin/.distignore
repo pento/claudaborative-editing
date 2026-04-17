@@ -10,12 +10,11 @@
 .DS_Store
 .eslintrc.js
 .gitignore
-.wp-env.json
 .phpcs-cache
 .phpstan-cache
 .prettierrc
 .stylelintrc.json
-.wp-env.test.json
+.wp-tests-lib
 composer.json
 composer.lock
 package.json

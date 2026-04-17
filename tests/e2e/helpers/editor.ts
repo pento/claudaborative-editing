@@ -1,11 +1,10 @@
 /**
  * Shared browser-interaction helpers for e2e tests.
  *
- * These are stateless functions that operate on Playwright Page/Editor
- * objects — they don't manage lifecycle and don't need to be fixtures.
+ * These are stateless functions that take a Playwright `Page` directly —
+ * they don't manage lifecycle and don't need to be fixtures.
  */
 import { expect } from '@playwright/test';
-import type { Editor } from '@wordpress/e2e-test-utils-playwright';
 import type { Page } from '@playwright/test';
 
 export interface BrowserBlock {
@@ -14,22 +13,10 @@ export interface BrowserBlock {
 }
 
 /**
- * Navigate to the post editor, disable welcome guide and fullscreen mode,
- * and wait until at least one block is loaded.
+ * Navigate to the post editor and wait until at least one block is loaded.
  */
-export async function openEditor(
-	page: Page,
-	editor: Editor,
-	postId: number
-): Promise<void> {
+export async function openEditor(page: Page, postId: number): Promise<void> {
 	await page.goto(`/wp-admin/post.php?post=${postId}&action=edit`);
-	await editor.setPreferences('core/edit-post', {
-		welcomeGuide: false,
-		welcomeGuideStyles: false,
-		welcomeGuidePage: false,
-		welcomeGuideTemplate: false,
-		fullscreenMode: false,
-	});
 	await expect
 		.poll(async () => {
 			return page.evaluate(() => {

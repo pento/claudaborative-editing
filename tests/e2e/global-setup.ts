@@ -1,10 +1,10 @@
 import { request, type FullConfig } from '@playwright/test';
 import { RequestUtils } from '@wordpress/e2e-test-utils-playwright';
-import { ensureWpEnvRunning } from './helpers/wp-env';
+import { ensurePlaygroundRunning } from './helpers/playground';
 
 export default async function globalSetup(config: FullConfig): Promise<void> {
-	// Ensure wp-env is running and create a shared app password for MCP tests.
-	ensureWpEnvRunning();
+	// Ensure Playground is running and create a shared app password for MCP tests.
+	await ensurePlaygroundRunning();
 
 	// Authenticate via the WordPress login page and save browser storage state.
 	const project = config.projects.find((p) => p.name === 'chromium');

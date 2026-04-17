@@ -3,7 +3,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { expect } from '@playwright/test';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { listCommands } from './wp-env';
+import { listCommands } from './playground';
 
 const REPO_ROOT = path.resolve(
 	path.dirname(fileURLToPath(import.meta.url)),
@@ -95,6 +95,12 @@ export async function callTool(
 
 /**
  * Poll wp_status until the MCP has joined the post.
+ *
+ * The full handshake is: browser joins the Yjs command room → MCP joins and
+ * broadcasts awareness → browser sees `mcpConnected=true` and emits the
+ * `open-post` signal → MCP's command-channel poll picks it up and opens the
+ * post. On CI's slower WASM runtime this chain routinely runs past 30s, so
+ * the poll timeout is generous.
  */
 export async function waitForMCPReady(client: Client): Promise<void> {
 	await expect
@@ -103,7 +109,7 @@ export async function waitForMCPReady(client: Client): Promise<void> {
 				const s = await callToolOrThrow(client, 'wp_status');
 				return getToolText(s);
 			},
-			{ timeout: 30_000, intervals: [1000] }
+			{ timeout: 90_000, intervals: [1000] }
 		)
 		.toContain(`(2 collaborators)`);
 

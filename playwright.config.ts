@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { defineConfig, devices } from '@playwright/test';
 
-const baseURL = process.env.WP_BASE_URL ?? 'http://localhost:8889';
+const baseURL = process.env.WP_BASE_URL ?? 'http://127.0.0.1:8889';
 
 // Set STORAGE_STATE_PATH so the @wordpress/e2e-test-utils-playwright
 // requestUtils fixture uses the same storage state as our global setup.
@@ -12,12 +12,14 @@ process.env.STORAGE_STATE_PATH = STORAGE_STATE_PATH;
 
 export default defineConfig({
 	testDir: './tests/e2e',
-	timeout: 120_000,
+	// 180s accommodates CI: WASM boot + MCP handshake + 2-3 pre-publish checks
+	// fit comfortably; 120s was borderline on GitHub runners.
+	timeout: 180_000,
 	expect: {
 		timeout: 30_000,
 	},
 	fullyParallel: true,
-	workers: 4,
+	workers: process.env.CI ? 1 : 4,
 	reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
 	outputDir: 'test-results/playwright',
 	use: {

@@ -12,6 +12,7 @@
 	<exclude-pattern>*.css</exclude-pattern>
 	<exclude-pattern>*.js</exclude-pattern>
 	<exclude-pattern>/.phpstan-cache/*</exclude-pattern>
+	<exclude-pattern>/.wp-tests-lib/*</exclude-pattern>
 	<exclude-pattern>/build/*</exclude-pattern>
 	<exclude-pattern>/coverage/*</exclude-pattern>
 	<exclude-pattern>/node_modules/*</exclude-pattern>
@@ -54,11 +55,18 @@
 	<!-- Enforce global prefixing to avoid conflicts -->
 	<rule ref="WordPress.NamingConventions.PrefixAllGlobals">
 		<exclude-pattern>tests/bootstrap.php</exclude-pattern>
+		<exclude-pattern>tests/wp-tests-config.php</exclude-pattern>
 		<properties>
 			<property name="prefixes" type="array">
 				<element value="Claudaborative_Editing" />
 			</property>
 		</properties>
+	</rule>
+
+	<!-- tests/wp-tests-config.php mirrors wordpress-develop's wp-tests-config-sample.php
+	     and intentionally sets $table_prefix at file scope. -->
+	<rule ref="WordPress.WP.GlobalVariablesOverride.Prohibited">
+		<exclude-pattern>tests/wp-tests-config.php</exclude-pattern>
 	</rule>
 
 	<!-- Main plugin file matches the plugin slug, not the class name -->
@@ -72,6 +80,17 @@
 	<!-- Test bootstrap echoes before WordPress is loaded, so esc_html() is unavailable -->
 	<rule ref="WordPress.Security.EscapeOutput.OutputNotEscaped">
 		<exclude-pattern>tests/bootstrap.php</exclude-pattern>
+	</rule>
+
+	<!-- putenv(WP_TESTS_SKIP_INSTALL=1) is how the WP test library detects the skip flag. -->
+	<rule ref="WordPress.PHP.DiscouragedPHPFunctions.runtime_configuration_putenv">
+		<exclude-pattern>tests/bootstrap.php</exclude-pattern>
+	</rule>
+
+	<!-- $table_prefix in wp-tests-config.php is read by wp-settings.php via the calling
+	     scope after PHPUnit's FileLoader hoists it; the sniffer can't see that link. -->
+	<rule ref="VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedVariable">
+		<exclude-pattern>tests/wp-tests-config.php</exclude-pattern>
 	</rule>
 
 	<!-- SSE handler outputs JSON via echo — escaping would break the data format -->

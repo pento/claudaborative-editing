@@ -1,6 +1,6 @@
 import { test, expect } from './test';
 import { callToolOrThrow, callTool, getToolText } from './helpers/mcp';
-import { deletePost, trashPost } from './helpers/wp-env';
+import { deletePost, trashPost } from './helpers/playground';
 
 test.describe('deleted post detection', () => {
 	test('detects permanently deleted post and errors on editing operations', async ({

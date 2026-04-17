@@ -1,0 +1,26 @@
+{
+	"$schema": "https://playground.wordpress.net/blueprint-schema.json",
+	"preferredVersions": {
+		"php": "8.5",
+		"wp": "latest"
+	},
+	"features": {
+		"networking": true
+	},
+	"steps": [
+		{
+			"step": "activatePlugin",
+			"pluginPath": "claudaborative-editing/claudaborative-editing.php"
+		},
+		{
+			"step": "runPHP",
+			"code": "<?php $ini = '/internal/shared/extensions/xdebug.ini'; if (is_file($ini)) { file_put_contents($ini, str_replace('xdebug.mode=debug,develop', 'xdebug.mode=coverage', file_get_contents($ini))); } ?>"
+		},
+		{
+			"step": "defineWpConfigConsts",
+			"consts": {
+				"WP_TESTS_CONFIG_FILE_PATH": "/wordpress/wp-content/plugins/claudaborative-editing/tests/wp-tests-config.php"
+			}
+		}
+	]
+}
