@@ -44,7 +44,10 @@ function readState(): PlaygroundState {
 }
 
 function writeState(state: PlaygroundState): void {
-	writeFileSync(STATE_FILE, JSON.stringify(state), 'utf8');
+	// 0o600 — the state file holds the shared admin application password.
+	// Restrict to the current user so the credential isn't world-readable on
+	// shared CI boxes or dev machines.
+	writeFileSync(STATE_FILE, JSON.stringify(state), { mode: 0o600 });
 }
 
 export async function waitForWordPress(
@@ -81,8 +84,14 @@ export async function waitForWordPress(
  * when the host is sandboxed (no-op outside a sandbox).
  */
 function startPlaygroundSubprocess(): number {
+	// npm installs the CLI under node_modules/.bin as a symlink on macOS/Linux
+	// and as a .cmd shim on Windows; pick the right entry for the host OS.
+	const cliBinary =
+		process.platform === 'win32'
+			? 'wp-playground-cli.cmd'
+			: 'wp-playground-cli';
 	const child = spawn(
-		'./node_modules/.bin/wp-playground-cli',
+		path.join(REPO_ROOT, 'node_modules', '.bin', cliBinary),
 		[
 			'server',
 			`--mount-before-install=${REPO_ROOT}/wordpress-plugin:/wordpress/wp-content/plugins/claudaborative-editing`,
