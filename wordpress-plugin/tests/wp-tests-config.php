@@ -2,7 +2,8 @@
 /**
  * Test config loaded by the WordPress PHPUnit test library when the plugin
  * tests run under wp-playground-cli. Paths reference the in-VFS layout set up
- * by the mounts in `npm run test:php`.
+ * by the mounts in the repo-root `test:plugin-php` script; the plugin-local
+ * `test:php` script just delegates to it.
  *
  * SQLite is provided by Playground's SQLite integration preload; the DB_*
  * constants below are unused but are required by the test bootstrap.

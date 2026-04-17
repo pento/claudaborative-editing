@@ -1,8 +1,8 @@
 /**
  * Shared browser-interaction helpers for e2e tests.
  *
- * These are stateless functions that operate on Playwright Page/Editor
- * objects — they don't manage lifecycle and don't need to be fixtures.
+ * These are stateless functions that take a Playwright `Page` directly —
+ * they don't manage lifecycle and don't need to be fixtures.
  */
 import { expect } from '@playwright/test';
 import type { Page } from '@playwright/test';

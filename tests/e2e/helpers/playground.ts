@@ -272,8 +272,10 @@ export async function ensurePlaygroundRunning(): Promise<void> {
 		await waitForWordPress();
 	}
 
-	// Reuse a cached app password if we have one; otherwise bootstrap.
-	let appPassword = state.appPassword;
+	// Reuse the cached app password only if we're reusing an existing
+	// Playground. A fresh Playground has a fresh SQLite DB, so any cached
+	// credential from a previous run is orphaned and will 401.
+	let appPassword = alreadyUp ? state.appPassword : undefined;
 	if (!appPassword) {
 		appPassword = await bootstrapAppPassword();
 	}
