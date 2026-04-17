@@ -37,7 +37,7 @@
 		"claude"
 	],
 	"engines": {
-		"node": ">=22.6"
+		"node": ">=22.13"
 	},
 	"packageManager": "npm@11.9.0",
 	"scripts": {
@@ -47,8 +47,8 @@
 		"dev": "tsup --watch",
 		"dev:wp": "NODE_USE_ENV_PROXY=1 wp-playground-cli server --mount-before-install=./wordpress-plugin:/wordpress/wp-content/plugins/claudaborative-editing --blueprint=./playground/dev.blueprint.json --port=9400",
 		"generate:defs": "node bin/generate-shared-defs.js && prettier --write wordpress-plugin/src/utils/command-i18n.ts",
-		"lint": "ESLINT_USE_FLAT_CONFIG=true eslint --max-warnings 0 . && npm --prefix wordpress-plugin run lint:style && markdownlint-cli2 && prettier --check -u .",
-		"lint:fix": "ESLINT_USE_FLAT_CONFIG=true eslint --fix --max-warnings 0 . && npm --prefix wordpress-plugin run lint:style:fix && markdownlint-cli2 --fix && prettier --write -u .",
+		"lint": "eslint --max-warnings 0 . && npm --prefix wordpress-plugin run lint:style && markdownlint-cli2 && prettier --check -u .",
+		"lint:fix": "eslint --fix --max-warnings 0 . && npm --prefix wordpress-plugin run lint:style:fix && markdownlint-cli2 --fix && prettier --write -u .",
 		"prepare": "husky && npm run build",
 		"prepublishOnly": "npm run typecheck && npm run lint && npm test",
 		"start": "node dist/index.js",
@@ -69,7 +69,7 @@
 	},
 	"lint-staged": {
 		"*.{ts,js,md,json,jsonc}": "prettier --write",
-		"*.{ts,js}": "env ESLINT_USE_FLAT_CONFIG=true eslint --max-warnings 0 --no-warn-ignored",
+		"*.{ts,js}": "eslint --max-warnings 0 --no-warn-ignored",
 		"*.md": "markdownlint-cli2",
 		"wordpress-plugin/src/**/*.scss": "npm --prefix wordpress-plugin run lint:style:fix",
 		"wordpress-plugin/**/*.php": [
@@ -87,18 +87,16 @@
 	},
 	"devDependencies": {
 		"@babel/core": "^7.29.0",
-		"@eslint/eslintrc": "^2.1.4",
-		"@eslint/js": "^8.57.1",
+		"@eslint/js": "^10.0.1",
 		"@playwright/test": "^1.59.1",
-		"@types/eslint__eslintrc": "^2.1.2",
 		"@types/eslint__js": "^8.42.3",
 		"@types/node": "^25.5.2",
 		"@vitest/coverage-v8": "^4.1.2",
 		"@wordpress/e2e-test-utils-playwright": "^1.43.0",
-		"@wordpress/eslint-plugin": "^24.5.0",
+		"@wordpress/eslint-plugin": "^25.0.0",
 		"@wordpress/prettier-config": "^4.43.0",
 		"@wp-playground/cli": "file:./vendor/wp-playground-cli-3.1.19-pr3494.tgz",
-		"eslint": "^8.57.1",
+		"eslint": "^10.2.0",
 		"eslint-config-prettier": "^10.1.8",
 		"eslint-plugin-package-json": "^0.91.1",
 		"globals": "^17.4.0",
@@ -108,7 +106,7 @@
 		"prettier": "^3.8.1",
 		"tsup": "^8.5.1",
 		"typescript": "~6.0.2",
-		"typescript-eslint": "^8.58.0",
+		"typescript-eslint": "^8.58.2",
 		"vitest": "^4.1.2"
 	},
 	"overrides": {

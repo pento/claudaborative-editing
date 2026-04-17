@@ -148,7 +148,6 @@ import type { Command } from '../../store/types';
 // need to reset between tests. Jest's module registry handles this when we
 // use jest.isolateModules or re-require.
 function loadModule() {
-	// eslint-disable-next-line @typescript-eslint/no-require-imports
 	return require('../command-sync') as typeof import('../command-sync');
 }
 
@@ -924,11 +923,9 @@ describe('command-sync', () => {
 			});
 
 			// Import apiFetch and configure it to return only command 43 as active.
-			const apiFetchMock =
-				// eslint-disable-next-line @typescript-eslint/no-require-imports
-				require('@wordpress/api-fetch') as {
-					default: jest.Mock;
-				};
+			const apiFetchMock = require('@wordpress/api-fetch') as {
+				default: jest.Mock;
+			};
 			apiFetchMock.default.mockResolvedValue([
 				{ id: 43, status: 'running' },
 			]);
@@ -976,7 +973,6 @@ describe('command-sync', () => {
 				text: () => Promise.resolve('ok'),
 			});
 
-			// eslint-disable-next-line @typescript-eslint/no-require-imports
 			const apiFetchMock = require('@wordpress/api-fetch') as {
 				default: jest.Mock;
 			};
@@ -1038,7 +1034,6 @@ describe('command-sync', () => {
 				text: () => Promise.resolve('ok'),
 			});
 
-			// eslint-disable-next-line @typescript-eslint/no-require-imports
 			const apiFetchMock = require('@wordpress/api-fetch') as {
 				default: jest.Mock;
 			};
@@ -1075,7 +1070,6 @@ describe('command-sync', () => {
 				text: () => Promise.resolve('ok'),
 			});
 
-			// eslint-disable-next-line @typescript-eslint/no-require-imports
 			const apiFetchMock = require('@wordpress/api-fetch') as {
 				default: jest.Mock;
 			};

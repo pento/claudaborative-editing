@@ -160,11 +160,9 @@ const test = base.extend<{
 		const origWarn = console.warn;
 		const origError = console.error;
 
-		// eslint-disable-next-line no-console
 		console.warn = (...args: unknown[]) => {
 			if (!isSuppressed(args)) origWarn.apply(console, args);
 		};
-		// eslint-disable-next-line no-console
 		console.error = (...args: unknown[]) => {
 			if (!isSuppressed(args)) origError.apply(console, args);
 		};
@@ -172,9 +170,7 @@ const test = base.extend<{
 		try {
 			await use(page);
 		} finally {
-			// eslint-disable-next-line no-console
 			console.warn = origWarn;
-			// eslint-disable-next-line no-console
 			console.error = origError;
 
 			// localStorage is cleared in testUser's teardown (before
