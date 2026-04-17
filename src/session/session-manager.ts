@@ -1812,6 +1812,11 @@ export class SessionManager {
 			message,
 			resultData
 		);
+
+		// Without this, the browser can lag 250-500ms behind the REST
+		// PATCH — long enough for stale cleanup or subsequent writes to
+		// mask the transition.
+		this._syncClient?.flushQueue();
 	}
 
 	/**

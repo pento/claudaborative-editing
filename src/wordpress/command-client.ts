@@ -10,7 +10,27 @@
 import * as Y from 'yjs';
 import { debugLog, isDebugEnabled } from '../debug-log.js';
 import type { WordPressApiClient } from './api-client.js';
-import { type CommandSlug, type CommandStatus } from '../../shared/commands.js';
+import {
+	commandKey,
+	isCommandKey,
+	type CommandSlug,
+	type CommandStatus,
+} from '../../shared/commands.js';
+
+/**
+ * Status progression rank. Writes that would move a command backward
+ * (lower rank) are skipped so a late-arriving stale REST response can't
+ * overwrite a fresh terminal write.
+ */
+const STATUS_RANK: Record<CommandStatus, number> = {
+	pending: 0,
+	running: 1,
+	awaiting_input: 1,
+	completed: 2,
+	failed: 2,
+	cancelled: 2,
+	expired: 2,
+};
 
 /**
  * Transaction origin used for local writes. Must match the origin
@@ -18,6 +38,14 @@ import { type CommandSlug, type CommandStatus } from '../../shared/commands.js';
  * queued for sync.
  */
 const LOCAL_ORIGIN = 'local';
+
+/**
+ * Maximum time awaitCommandInMap() blocks waiting for sync to deliver
+ * a command. Long enough to absorb the typical browser → sync-server →
+ * MCP round-trip, short enough that a genuinely wedged sync still lets
+ * the tool call return.
+ */
+const AWAIT_COMMAND_TIMEOUT_MS = 2000;
 
 // --- Protocol version compatibility ---
 
@@ -118,9 +146,16 @@ export class CommandClient {
 			// Only process remote changes (from the browser via sync).
 			if (event.transaction.local) return;
 
-			// The 'commands' key in the document map holds all command objects.
-			if (event.changes.keys.has('commands')) {
-				debugLog('cmd-client', 'commands key changed, processing');
+			// Per-command keys (`cmd_${id}`) store individual command objects.
+			let touched = false;
+			for (const key of event.changes.keys.keys()) {
+				if (isCommandKey(key)) {
+					touched = true;
+					break;
+				}
+			}
+			if (touched) {
+				debugLog('cmd-client', 'command keys changed, processing');
 				this.processAllCommands();
 			}
 		};
@@ -165,19 +200,28 @@ export class CommandClient {
 		const map = this.commandMap;
 		if (!map) return;
 
-		// Read current commands, update the specific command, write back.
-		const raw = map.get('commands');
-		const commands = (raw as Record<string, unknown> | undefined) ?? {};
+		const key = commandKey(command.id);
+
+		// Guard against stale writes: if the Y.Doc already holds a more
+		// advanced status for this command, skip. Two REST PATCHes can be
+		// in flight simultaneously (e.g. server auto-claim → running and
+		// Claude completing the command), and the later-resolving one can
+		// otherwise overwrite the earlier-resolving one with older state.
+		const existing = map.get(key) as Command | undefined;
+		if (
+			existing &&
+			STATUS_RANK[command.status] < STATUS_RANK[existing.status]
+		) {
+			return;
+		}
 
 		const plain: Record<string, unknown> = {};
 		for (const [k, v] of Object.entries(command)) {
 			plain[k] = v;
 		}
 
-		const updated = { ...commands, [String(command.id)]: plain };
-
 		map.doc?.transact(() => {
-			map.set('commands', updated);
+			map.set(key, plain);
 		}, LOCAL_ORIGIN);
 	}
 
@@ -188,13 +232,8 @@ export class CommandClient {
 		const map = this.commandMap;
 		if (!map) return;
 
-		const raw = map.get('commands');
-		const commands = (raw as Record<string, unknown> | undefined) ?? {};
-
-		const { [String(commandId)]: _, ...remaining } = commands;
-
 		map.doc?.transact(() => {
-			map.set('commands', remaining);
+			map.delete(commandKey(commandId));
 		}, LOCAL_ORIGIN);
 	}
 
@@ -225,7 +264,15 @@ export class CommandClient {
 			}
 		);
 
-		// Mirror the updated state to the Y.Doc so the browser sees it.
+		// Wait for sync to deliver the command to the shared map before
+		// mirroring the new status. The command originates from the browser,
+		// so if writeCommandToDoc runs before that arrival our item is
+		// CRDT-concurrent with the browser's pending write and Y.Map's
+		// tiebreak can discard ours, stranding the panel at "pending". A
+		// short bounded wait is enough to serialise the writes; if sync is
+		// wedged we fall through and write anyway.
+		await this.awaitCommandInMap(id);
+
 		// Terminal commands are NOT removed here — the browser-side stale
 		// cleanup handles removal after processing. Removing on a timer
 		// risks the browser never seeing the terminal state if its polling
@@ -235,48 +282,59 @@ export class CommandClient {
 		return command;
 	}
 
+	/**
+	 * Resolve once `cmd_${id}` exists in the observed map, or after a
+	 * bounded timeout. Driven by the Y.Map observer rather than a polling
+	 * loop so there's no 50ms jitter on the happy path and no CPU burn
+	 * while waiting.
+	 */
+	private async awaitCommandInMap(id: number): Promise<void> {
+		const map = this.commandMap;
+		if (!map) return;
+		const key = commandKey(id);
+		if (map.get(key) !== undefined) return;
+
+		await new Promise<void>((resolve) => {
+			const timeout = setTimeout(() => {
+				map.unobserve(onChange);
+				resolve();
+			}, AWAIT_COMMAND_TIMEOUT_MS);
+
+			const onChange = (event: Y.YMapEvent<unknown>): void => {
+				if (!event.changes.keys.has(key)) return;
+				if (map.get(key) === undefined) return;
+				clearTimeout(timeout);
+				map.unobserve(onChange);
+				resolve();
+			};
+			map.observe(onChange);
+		});
+	}
+
 	// --- Internal ---
 
-	/**
-	 * Process all commands in the 'commands' key of the document map.
-	 */
 	private processAllCommands(): void {
-		if (!this.commandMap) return;
-
-		const raw = this.commandMap.get('commands');
-		if (isDebugEnabled()) {
-			debugLog(
-				'cmd-client',
-				'processAllCommands, raw type:',
-				typeof raw,
-				'value:',
-				raw ? JSON.stringify(raw).slice(0, 200) : 'undefined'
-			);
-		}
-
-		const commands = raw as Record<string, unknown> | undefined;
-		if (!commands || typeof commands !== 'object') {
-			debugLog('cmd-client', 'No commands object found');
-			return;
-		}
-
-		if (isDebugEnabled()) {
-			debugLog(
-				'cmd-client',
-				'Found',
-				Object.keys(commands).length,
-				'commands:',
-				Object.keys(commands)
-			);
-		}
+		const map = this.commandMap;
+		if (!map) return;
 
 		const currentIds = new Set<number>();
-		for (const value of Object.values(commands)) {
-			if (value && typeof value === 'object') {
-				const cmd = value as Command;
-				if (cmd.id) currentIds.add(cmd.id);
+		map.forEach((value, key) => {
+			if (!isCommandKey(key)) return;
+			if (!value || typeof value !== 'object') return;
+			const cmd = value as Command;
+			if (typeof cmd.id === 'number') {
+				currentIds.add(cmd.id);
 				this.processCommand(cmd);
 			}
+		});
+
+		if (isDebugEnabled()) {
+			debugLog(
+				'cmd-client',
+				'processAllCommands: found',
+				currentIds.size,
+				'commands'
+			);
 		}
 
 		// Prune tracking state for commands no longer in the Y.Map.

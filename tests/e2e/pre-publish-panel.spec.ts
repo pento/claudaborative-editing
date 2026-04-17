@@ -218,19 +218,17 @@ test.describe('Pre-Publish Panel', () => {
 			resultData: JSON.stringify(resultData),
 		});
 
-		// Wait for suggestions to appear in the browser
-		await expect
-			.poll(
-				async () =>
-					page
-						.getByText(
-							'A test post for pre-publish checks with AI-suggested metadata.'
-						)
-						.isVisible()
-						.catch(() => false),
-				{ timeout: 30_000, intervals: [1000] }
-			)
-			.toBe(true);
+		// Wait for the excerpt suggestion to render. The TextareaControl is
+		// a React-controlled <textarea>: React updates the `value` DOM
+		// property on re-render but not the element's text content, so
+		// `getByText` cannot match the excerpt. Assert against the textarea
+		// value instead.
+		await expect(
+			page.locator('.wpce-pre-publish-panel__excerpt-textarea textarea')
+		).toHaveValue(
+			'A test post for pre-publish checks with AI-suggested metadata.',
+			{ timeout: 30_000 }
+		);
 
 		// Verify category and tag term chips are displayed
 		const termsContainers = page.locator('.wpce-pre-publish-panel__terms');

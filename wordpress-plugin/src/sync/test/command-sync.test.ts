@@ -20,13 +20,30 @@ class MockYMap {
 	}
 
 	set(key: string, value: unknown): void {
+		const action = key in this.data ? 'update' : 'add';
 		this.data[key] = value;
-		// Notify observers with a mock YMapEvent containing the changed key.
 		const event = {
-			changes: { keys: new Map([[key, { action: 'update' }]]) },
+			changes: { keys: new Map([[key, { action }]]) },
 		};
 		for (const fn of this.observers) {
 			fn(event);
+		}
+	}
+
+	delete(key: string): void {
+		if (!(key in this.data)) return;
+		delete this.data[key];
+		const event = {
+			changes: { keys: new Map([[key, { action: 'delete' }]]) },
+		};
+		for (const fn of this.observers) {
+			fn(event);
+		}
+	}
+
+	forEach(callback: (value: unknown, key: string) => void): void {
+		for (const [key, value] of Object.entries(this.data)) {
+			callback(value, key);
 		}
 	}
 
@@ -296,8 +313,8 @@ describe('command-sync', () => {
 			expect(typeof awareness.on).toBe('function');
 
 			// After createAwareness, the doc should be captured and commands readable.
-			doc.getMap('state').set('commands', { '1': MOCK_COMMAND });
-			expect(mod.getCommandsFromSync()['1']).toEqual(MOCK_COMMAND);
+			doc.getMap('state').set('cmd_42', MOCK_COMMAND);
+			expect(mod.getCommandsFromSync()['42']).toEqual(MOCK_COMMAND);
 		});
 	});
 
@@ -314,11 +331,9 @@ describe('command-sync', () => {
 			mod.writeCommandToSync(MOCK_COMMAND);
 
 			const stateMap = doc.getMap('state');
-			const commands = stateMap.get('commands') as Record<
-				string,
-				unknown
-			>;
-			expect(commands['42']).toEqual(expect.objectContaining({ id: 42 }));
+			expect(stateMap.get('cmd_42')).toEqual(
+				expect.objectContaining({ id: 42 })
+			);
 			expect(stateMap.get('savedAt')).toEqual(expect.any(Number));
 		});
 
@@ -333,10 +348,8 @@ describe('command-sync', () => {
 			// First, write a running command.
 			mod.writeCommandToSync(MOCK_COMMAND);
 
-			// Verify the command is written.
 			const stateMap = doc.getMap('state');
-			let commands = stateMap.get('commands') as Record<string, unknown>;
-			expect(commands['42']).toBeDefined();
+			expect(stateMap.get('cmd_42')).toBeDefined();
 
 			// Now write a terminal version of the same command.
 			const completedCommand: Command = {
@@ -346,8 +359,7 @@ describe('command-sync', () => {
 			mod.writeCommandToSync(completedCommand);
 
 			// The command should have been removed.
-			commands = stateMap.get('commands') as Record<string, unknown>;
-			expect(commands['42']).toBeUndefined();
+			expect(stateMap.get('cmd_42')).toBeUndefined();
 		});
 
 		it('does nothing when commandDoc is not available', () => {
@@ -408,11 +420,7 @@ describe('command-sync', () => {
 
 				// The retry should have written the command.
 				const stateMap = doc.getMap('state');
-				const commands = stateMap.get('commands') as Record<
-					string,
-					unknown
-				>;
-				expect(commands['42']).toEqual(
+				expect(stateMap.get('cmd_42')).toEqual(
 					expect.objectContaining({ id: 42 })
 				);
 			} finally {
@@ -431,7 +439,7 @@ describe('command-sync', () => {
 			syncConfig.createAwareness(doc);
 
 			// Write a command manually.
-			doc.getMap('state').set('commands', { '42': MOCK_COMMAND });
+			doc.getMap('state').set('cmd_42', MOCK_COMMAND);
 
 			const commands = mod.getCommandsFromSync();
 			expect(commands['42']).toEqual(MOCK_COMMAND);
@@ -723,16 +731,14 @@ describe('command-sync', () => {
 			mod.writeCommandToSync(secondCommand);
 
 			const stateMap = doc.getMap('state');
-			let commands = stateMap.get('commands') as Record<string, unknown>;
-			expect(commands['42']).toBeDefined();
-			expect(commands['43']).toBeDefined();
+			expect(stateMap.get('cmd_42')).toBeDefined();
+			expect(stateMap.get('cmd_43')).toBeDefined();
 
 			// Remove command 42.
 			mod.removeCommandFromSync(42);
 
-			commands = stateMap.get('commands') as Record<string, unknown>;
-			expect(commands['42']).toBeUndefined();
-			expect(commands['43']).toBeDefined();
+			expect(stateMap.get('cmd_42')).toBeUndefined();
+			expect(stateMap.get('cmd_43')).toBeDefined();
 		});
 	});
 
@@ -765,7 +771,7 @@ describe('command-sync', () => {
 			// capturing fetchSpy as origFetch, and replacing window.fetch.
 
 			// Put some data in the doc so it has state to encode.
-			doc.getMap('state').set('commands', { '42': MOCK_COMMAND });
+			doc.getMap('state').set('cmd_42', MOCK_COMMAND);
 
 			// Build a wp-sync request body with the per-user command room having empty updates.
 			const body = JSON.stringify({
@@ -937,12 +943,15 @@ describe('command-sync', () => {
 			const doc = new MockYDoc();
 			syncConfig.createAwareness(doc);
 
-			// Add two commands to the state map — 42 and 43.
+			// Add two commands to the state map. 42 is terminal locally so
+			// cleanup can remove it; 43 stays active.
 			const stateMap = doc.getMap('state');
-			stateMap.set('commands', {
-				'42': { ...MOCK_COMMAND, id: 42 },
-				'43': { ...MOCK_COMMAND, id: 43 },
+			stateMap.set('cmd_42', {
+				...MOCK_COMMAND,
+				id: 42,
+				status: 'completed',
 			});
+			stateMap.set('cmd_43', { ...MOCK_COMMAND, id: 43 });
 
 			// The cleanup polls for the doc every 200ms. Advance to trigger it.
 			jest.advanceTimersByTime(200);
@@ -953,19 +962,57 @@ describe('command-sync', () => {
 			await Promise.resolve();
 			await Promise.resolve();
 
-			// Command 42 should have been removed (not in API response),
-			// command 43 should remain (active in API response).
-			const commands = stateMap.get('commands') as Record<
-				string,
-				unknown
-			>;
-			expect(commands['42']).toBeUndefined();
-			expect(commands['43']).toBeDefined();
+			// Command 42 should have been removed (terminal locally and not in
+			// API response); command 43 should remain (active in API response).
+			expect(stateMap.get('cmd_42')).toBeUndefined();
+			expect(stateMap.get('cmd_43')).toBeDefined();
 
 			jest.useRealTimers();
 		});
 
-		it('removes all stale commands regardless of user_id in per-user room', async () => {
+		it('does not remove non-terminal commands even when REST reports them stale', async () => {
+			jest.useFakeTimers();
+
+			window.fetch = jest.fn().mockResolvedValue({
+				ok: true,
+				text: () => Promise.resolve('ok'),
+			});
+
+			const apiFetchMock = require('@wordpress/api-fetch') as {
+				default: jest.Mock;
+			};
+			// REST reports the command as completed (terminal), but the Y.Doc
+			// still holds the earlier running state — the terminal transition
+			// is presumably in flight from the MCP. Cleanup must leave it
+			// alone so the sync delivery can dispatch CLEAR_ACTIVE_COMMAND.
+			apiFetchMock.default.mockResolvedValue([
+				{ id: 42, status: 'completed' },
+			]);
+
+			const mod = loadModule();
+			await mod.initCommandSync();
+
+			const syncConfig = mockAddEntities.mock.calls[0][0][0].syncConfig;
+			const doc = new MockYDoc();
+			syncConfig.createAwareness(doc);
+
+			const stateMap = doc.getMap('state');
+			stateMap.set('cmd_42', { ...MOCK_COMMAND, id: 42 });
+
+			jest.advanceTimersByTime(200);
+
+			await Promise.resolve();
+			await Promise.resolve();
+			await Promise.resolve();
+			await Promise.resolve();
+
+			// Non-terminal running state is kept; sync is the source of truth.
+			expect(stateMap.get('cmd_42')).toBeDefined();
+
+			jest.useRealTimers();
+		});
+
+		it('removes all stale terminal commands regardless of user_id in per-user room', async () => {
 			jest.useFakeTimers();
 
 			window.fetch = jest.fn().mockResolvedValue({
@@ -986,12 +1033,20 @@ describe('command-sync', () => {
 			const doc = new MockYDoc();
 			syncConfig.createAwareness(doc);
 
-			// Add commands with different user_id values — in per-user rooms,
-			// all commands belong to the room owner, so all should be cleaned.
+			// Both commands are terminal locally, so cleanup should remove
+			// them regardless of user_id (per-user room, all are the owner's).
 			const stateMap = doc.getMap('state');
-			stateMap.set('commands', {
-				'42': { ...MOCK_COMMAND, id: 42, user_id: 1 },
-				'43': { ...MOCK_COMMAND, id: 43, user_id: 99 },
+			stateMap.set('cmd_42', {
+				...MOCK_COMMAND,
+				id: 42,
+				user_id: 1,
+				status: 'completed',
+			});
+			stateMap.set('cmd_43', {
+				...MOCK_COMMAND,
+				id: 43,
+				user_id: 99,
+				status: 'completed',
 			});
 
 			jest.advanceTimersByTime(200);
@@ -1003,12 +1058,8 @@ describe('command-sync', () => {
 			await Promise.resolve();
 
 			// Both commands should be removed (neither is active in the API).
-			const commands = stateMap.get('commands') as Record<
-				string,
-				unknown
-			>;
-			expect(commands['42']).toBeUndefined();
-			expect(commands['43']).toBeUndefined();
+			expect(stateMap.get('cmd_42')).toBeUndefined();
+			expect(stateMap.get('cmd_43')).toBeUndefined();
 
 			jest.useRealTimers();
 		});
@@ -1173,9 +1224,10 @@ describe('command-sync', () => {
 			// Advance timers so the setInterval in subscribeToCommandSync fires.
 			jest.advanceTimersByTime(200);
 
-			// Now change the commands in the state map — the observer should fire.
+			// Now change a command entry in the state map — the observer
+			// should fire and pass the rebuilt id-keyed record.
 			const stateMap = doc.getMap('state');
-			stateMap.set('commands', { '42': MOCK_COMMAND });
+			stateMap.set('cmd_42', MOCK_COMMAND);
 
 			expect(callback).toHaveBeenCalledWith({ '42': MOCK_COMMAND });
 
@@ -1192,7 +1244,7 @@ describe('command-sync', () => {
 			syncConfig.createAwareness(doc);
 
 			// Pre-populate commands.
-			doc.getMap('state').set('commands', { '42': MOCK_COMMAND });
+			doc.getMap('state').set('cmd_42', MOCK_COMMAND);
 
 			const callback = jest.fn();
 			mod.subscribeToCommandSync(callback);
@@ -1200,7 +1252,8 @@ describe('command-sync', () => {
 			// Advance timers so the interval fires.
 			jest.advanceTimersByTime(200);
 
-			// Trigger another observe event with the same commands — should not call callback.
+			// Trigger another observe event that doesn't touch a cmd_* key —
+			// callback shouldn't fire for unrelated keys like savedAt.
 			callback.mockClear();
 			doc.getMap('state').set('savedAt', Date.now());
 
@@ -1247,7 +1300,7 @@ describe('command-sync', () => {
 			unsubscribe();
 
 			// Change commands after unsubscribe — should not fire.
-			doc.getMap('state').set('commands', { '99': MOCK_COMMAND });
+			doc.getMap('state').set('cmd_99', MOCK_COMMAND);
 			expect(callback).not.toHaveBeenCalled();
 
 			jest.useRealTimers();
