@@ -1,14 +1,13 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { FlatCompat } from '@eslint/eslintrc';
 import eslint from '@eslint/js';
 import tseslint from 'typescript-eslint';
+import wordpress from '@wordpress/eslint-plugin';
 import packageJson from 'eslint-plugin-package-json';
 import eslintConfigPrettier from 'eslint-config-prettier';
 import globals from 'globals';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const compat = new FlatCompat({ baseDirectory: __dirname });
 
 export default [
 	// Global ignores
@@ -114,12 +113,10 @@ export default [
 
 	// WordPress plugin JS: @wordpress/eslint-plugin recommended (without Prettier
 	// rule — we handle formatting via eslint-config-prettier at the end)
-	...compat
-		.extends('plugin:@wordpress/eslint-plugin/recommended-with-formatting')
-		.map((config) => ({
-			...config,
-			files: ['wordpress-plugin/**/*.{js,ts,tsx}'],
-		})),
+	...wordpress.configs['recommended-with-formatting'].map((config) => ({
+		...config,
+		files: ['wordpress-plugin/**/*.{js,ts,tsx}'],
+	})),
 
 	// WordPress plugin TypeScript files: use TS parser and disable rules
 	// that conflict with TypeScript (no-undef, no-unused-vars, jsdoc types).

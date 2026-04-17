@@ -162,7 +162,6 @@ test.describe('Pre-Publish Panel', () => {
 			.click();
 
 		// Wait for the command to be created
-		let commandId: number | null = null;
 		await expect
 			.poll(
 				async () => {
@@ -170,9 +169,6 @@ test.describe('Pre-Publish Panel', () => {
 					const cmd = commands.find(
 						(c) => c.prompt === 'pre-publish-check'
 					);
-					if (cmd) {
-						commandId = cmd.id;
-					}
 					return cmd?.status;
 				},
 				{ timeout: 30_000, intervals: [1000] }
@@ -185,7 +181,7 @@ test.describe('Pre-Publish Panel', () => {
 		const commands = await listCommands(draftPost);
 		const cmd = commands.find((c) => c.prompt === 'pre-publish-check');
 		expect(cmd).toBeDefined();
-		commandId = cmd?.id ?? 0;
+		const commandId = cmd?.id ?? 0;
 
 		if (cmd?.status === 'pending') {
 			// The MCP may have already auto-claimed this (channels verified
