@@ -9,19 +9,23 @@
 	}
 }
 
-// Resize handle is portalled into `.interface-interface-skeleton__body`
-// (a sibling container to the sidebar) so the pill can straddle the seam
-// between editor and sidebar without being clipped by the skeleton sidebar's
-// own overflow. Its horizontal position is set inline via `right: {width-3}px`
-// so the 7px grab zone stays centered on that seam as the sidebar resizes.
-// stylelint-disable-next-line selector-class-pattern -- WordPress core class.
-.interface-interface-skeleton__body > .wpce-conversation-panel__resize-handle {
+// Resize handle is portalled into a small wrapper we insert as the
+// previous sibling of `.interface-interface-skeleton__sidebar` inside
+// `.interface-interface-skeleton__body`. That position keeps the pill
+// unclipped by the skeleton sidebar's overflow and also puts the handle
+// before the sidebar content in keyboard tab order. `position: absolute`
+// with `right: {width-3}px` (set inline) centers the 7px grab zone on
+// the seam as the sidebar resizes.
+/* stylelint-disable selector-class-pattern -- BEM class names. */
+.wpce-conversation-panel__resize-handle-slot
+	> .wpce-conversation-panel__resize-handle {
+	/* stylelint-enable selector-class-pattern */
 	position: absolute;
 	top: 0;
 	bottom: 0;
 	width: 7px;
 	cursor: ew-resize;
-	z-index: 100000;
+	z-index: 1000000;
 	touch-action: none;
 	background: transparent;
 

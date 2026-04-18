@@ -97,7 +97,9 @@ test.describe('ConversationPanel resize', () => {
 		const skeleton = page.locator('.interface-interface-skeleton__sidebar');
 		const body = page.locator('.interface-interface-skeleton__body');
 		await expect(
-			body.locator('> .wpce-conversation-panel__resize-handle')
+			body.locator(
+				'> .wpce-conversation-panel__resize-handle-slot > .wpce-conversation-panel__resize-handle'
+			)
 		).toHaveCount(1);
 		await expect(
 			skeleton.locator('.interface-complementary-area')
@@ -105,6 +107,29 @@ test.describe('ConversationPanel resize', () => {
 		await expect(skeleton.locator('.wpce-conversation-panel')).toHaveCount(
 			1
 		);
+		// The slot must sit immediately before the sidebar so keyboard tab
+		// order reaches the handle first.
+		const slotIsBeforeSidebar = await page.evaluate((): boolean => {
+			type DocGlobal = typeof globalThis & {
+				document: {
+					querySelector: (selector: string) => {
+						nextElementSibling?: {
+							classList: { contains: (cls: string) => boolean };
+						} | null;
+					} | null;
+				};
+			};
+			const wrapper = (globalThis as DocGlobal).document.querySelector(
+				'.wpce-conversation-panel__resize-handle-slot'
+			);
+			const sibling = wrapper?.nextElementSibling;
+			return (
+				sibling?.classList.contains(
+					'interface-interface-skeleton__sidebar'
+				) ?? false
+			);
+		});
+		expect(slotIsBeforeSidebar).toBe(true);
 
 		// Default width (280) should be written to the skeleton's inline
 		// style now that the sidebar is active.

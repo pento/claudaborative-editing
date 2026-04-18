@@ -1204,6 +1204,49 @@ describe('ConversationPanel', () => {
 			expect(handle.getAttribute('aria-label')).toBe('Resize sidebar');
 		});
 
+		it('places the handle wrapper before the sidebar for tab-order priority', () => {
+			const { container } = mountWithAwaitingInput();
+
+			const body = container.querySelector(
+				'.interface-interface-skeleton__body'
+			) as HTMLElement;
+			const skeleton = body.querySelector(
+				':scope > .interface-interface-skeleton__sidebar'
+			) as HTMLElement;
+			const wrapper = body.querySelector(
+				':scope > .wpce-conversation-panel__resize-handle-slot'
+			) as HTMLElement;
+
+			expect(wrapper).toBeTruthy();
+			// Wrapper must come first so keyboard focus lands on the handle
+			// before entering the sidebar content.
+			expect(wrapper.nextElementSibling).toBe(skeleton);
+			expect(
+				wrapper.querySelector('.wpce-conversation-panel__resize-handle')
+			).toBeTruthy();
+		});
+
+		it('removes the handle wrapper from the DOM when the panel unmounts', () => {
+			const { unmount, container } = mountWithAwaitingInput();
+
+			const body = container.querySelector(
+				'.interface-interface-skeleton__body'
+			) as HTMLElement;
+			expect(
+				body.querySelector(
+					'.wpce-conversation-panel__resize-handle-slot'
+				)
+			).toBeTruthy();
+
+			unmount();
+
+			expect(
+				body.querySelector(
+					'.wpce-conversation-panel__resize-handle-slot'
+				)
+			).toBeNull();
+		});
+
 		it('applies the default width to the complementary area on mount', () => {
 			mountWithAwaitingInput();
 

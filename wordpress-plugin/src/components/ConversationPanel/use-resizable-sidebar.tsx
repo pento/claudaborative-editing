@@ -16,7 +16,9 @@
 import {
 	createPortal,
 	useCallback,
+	useEffect,
 	useLayoutEffect,
+	useRef,
 	useState,
 } from '@wordpress/element';
 import type { ReactNode, RefCallback } from 'react';
@@ -26,6 +28,7 @@ const STORAGE_KEY = 'wpce:conversation-sidebar-width';
 const HANDLE_HALF_WIDTH = 3;
 const KEYBOARD_STEP = 20;
 const WIDTH_PROPS = ['width', 'flexBasis', 'maxWidth', 'minWidth'] as const;
+const HANDLE_SLOT_CLASS = 'wpce-conversation-panel__resize-handle-slot';
 
 export const MIN_WIDTH = 280;
 export const DEFAULT_WIDTH = 280;
@@ -114,20 +117,46 @@ export function useResizableSidebar(isActive: boolean): ResizableSidebar {
 		setContainerNode(node);
 	}, []);
 	const [width, setWidth] = useState<number>(() => readStoredWidth());
-	const [skeletonBody, setSkeletonBody] = useState<HTMLElement | null>(null);
+	// Portal target = a small wrapper we insert as `__sidebar`'s previous
+	// sibling inside `__body`. Putting it there means keyboard tab order
+	// reaches the handle before the sidebar content (otherwise it'd come
+	// last, after every control inside the panel).
+	const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
+	const wrapperRef = useRef<HTMLDivElement | null>(null);
 
 	useLayoutEffect(() => {
 		const { complementary, skeleton, body } =
 			resolveAncestors(containerNode);
 
-		setSkeletonBody((current) => (current === body ? current : body));
-
 		// Gutenberg always renders both wrappers together; if either is
 		// missing (unexpected layout change) we bail instead of applying a
 		// half-baked style.
-		if (!isActive || !skeleton || !complementary) {
+		if (!isActive || !skeleton || !complementary || !body) {
+			if (wrapperRef.current) {
+				wrapperRef.current.remove();
+			}
+			setPortalTarget(null);
 			return;
 		}
+
+		if (!wrapperRef.current) {
+			wrapperRef.current = document.createElement('div');
+			wrapperRef.current.className = HANDLE_SLOT_CLASS;
+		}
+		// Only (re)insert if the wrapper isn't already in the right spot.
+		// insertBefore on a node already at its target position still
+		// detaches and re-attaches, which drops focus from any
+		// descendant — so pressing arrow keys on the handle would move
+		// the sidebar one step and then lose focus.
+		const alreadyPositioned =
+			wrapperRef.current.parentNode === body &&
+			wrapperRef.current.nextSibling === skeleton;
+		if (!alreadyPositioned) {
+			body.insertBefore(wrapperRef.current, skeleton);
+		}
+		setPortalTarget((current) =>
+			current === wrapperRef.current ? current : wrapperRef.current
+		);
 
 		const targets: HTMLElement[] = [skeleton, complementary];
 		applyWidth(targets, width);
@@ -137,6 +166,15 @@ export function useResizableSidebar(isActive: boolean): ResizableSidebar {
 			complementary.style.position = '';
 		};
 	}, [containerNode, isActive, width]);
+
+	// Tear down the wrapper on final unmount; width-change re-runs of the
+	// main effect leave it in place.
+	useEffect(() => {
+		return () => {
+			wrapperRef.current?.remove();
+			wrapperRef.current = null;
+		};
+	}, []);
 
 	const onPointerDown = useCallback(
 		(event: React.PointerEvent<HTMLDivElement>) => {
@@ -233,7 +271,7 @@ export function useResizableSidebar(isActive: boolean): ResizableSidebar {
 	);
 
 	const handle =
-		isActive && skeletonBody
+		isActive && portalTarget
 			? createPortal(
 					// A focusable resize separator is interactive per ARIA 1.2
 					// (aria-valuenow/min/max make it behave like a slider); the
@@ -255,7 +293,7 @@ export function useResizableSidebar(isActive: boolean): ResizableSidebar {
 						onPointerDown={onPointerDown}
 						onKeyDown={onKeyDown}
 					/>,
-					skeletonBody
+					portalTarget
 				)
 			: null;
 
