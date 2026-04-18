@@ -23,7 +23,12 @@ import apiFetch from '@wordpress/api-fetch';
 import { Y, Awareness } from '@wordpress/sync';
 // eslint-disable-next-line import/no-extraneous-dependencies -- externalized by @wordpress/scripts
 import { addFilter } from '@wordpress/hooks';
-import { TERMINAL_STATUSES, commandKey, isCommandKey } from '#shared/commands';
+import {
+	TERMINAL_STATUSES,
+	commandIdFromKey,
+	commandKey,
+	isCommandKey,
+} from '#shared/commands';
 import { store as coreDataStore } from '@wordpress/core-data';
 
 /**
@@ -447,12 +452,15 @@ export function removeCommandFromSync(commandId: number): void {
 function collectCommandsFromStateMap(stateMap: YMap): Record<string, Command> {
 	const result: Record<string, Command> = {};
 	stateMap.forEach((value, key) => {
-		if (!isCommandKey(key)) return;
+		const id = commandIdFromKey(key);
+		if (id === null) return;
 		if (!value || typeof value !== 'object') return;
 		const cmd = value as Command;
-		if (typeof cmd.id === 'number') {
-			result[String(cmd.id)] = cmd;
-		}
+		// Drop entries whose stored `id` doesn't match the key suffix;
+		// they can't be looked up or removed consistently so treat them
+		// as corrupt.
+		if (cmd.id !== id) return;
+		result[String(id)] = cmd;
 	});
 	return result;
 }

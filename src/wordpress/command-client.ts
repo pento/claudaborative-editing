@@ -11,6 +11,7 @@ import * as Y from 'yjs';
 import { debugLog, isDebugEnabled } from '../debug-log.js';
 import type { WordPressApiClient } from './api-client.js';
 import {
+	commandIdFromKey,
 	commandKey,
 	isCommandKey,
 	type CommandSlug,
@@ -297,19 +298,24 @@ export class CommandClient {
 		if (map.get(key) !== undefined) return;
 
 		await new Promise<void>((resolve) => {
-			const timeout = setTimeout(() => {
-				map.unobserve(onChange);
-				resolve();
-			}, AWAIT_COMMAND_TIMEOUT_MS);
-
-			const onChange = (event: Y.YMapEvent<unknown>): void => {
-				if (!event.changes.keys.has(key)) return;
-				if (map.get(key) === undefined) return;
+			let settled = false;
+			const finish = (): void => {
+				if (settled) return;
+				settled = true;
 				clearTimeout(timeout);
 				map.unobserve(onChange);
 				resolve();
 			};
+			const timeout = setTimeout(finish, AWAIT_COMMAND_TIMEOUT_MS);
+			const onChange = (event: Y.YMapEvent<unknown>): void => {
+				if (!event.changes.keys.has(key)) return;
+				if (map.get(key) === undefined) return;
+				finish();
+			};
 			map.observe(onChange);
+			// Re-check after observing — the key may have arrived between
+			// the earlier `map.get` check and `map.observe` registration.
+			if (map.get(key) !== undefined) finish();
 		});
 	}
 
@@ -321,13 +327,16 @@ export class CommandClient {
 
 		const currentIds = new Set<number>();
 		map.forEach((value, key) => {
-			if (!isCommandKey(key)) return;
+			const id = commandIdFromKey(key);
+			if (id === null) return;
 			if (!value || typeof value !== 'object') return;
 			const cmd = value as Command;
-			if (typeof cmd.id === 'number') {
-				currentIds.add(cmd.id);
-				this.processCommand(cmd);
-			}
+			// Skip entries whose stored `id` doesn't match the key suffix —
+			// they can't be processed or pruned consistently, so treat
+			// them as corrupt and ignore.
+			if (cmd.id !== id) return;
+			currentIds.add(id);
+			this.processCommand(cmd);
 		});
 
 		if (isDebugEnabled()) {

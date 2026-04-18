@@ -10,18 +10,18 @@
 // Mock state — shared between the mock implementations and the test body.
 // ---------------------------------------------------------------------------
 
-/** Simulated Y.Map backed by a plain object. */
+/** Simulated Y.Map backed by a Map (matches Y.Map's own-key semantics). */
 class MockYMap {
-	private data: Record<string, unknown> = {};
+	private data = new Map<string, unknown>();
 	private observers: Array<(event: unknown) => void> = [];
 
 	get(key: string): unknown {
-		return this.data[key];
+		return this.data.get(key);
 	}
 
 	set(key: string, value: unknown): void {
-		const action = key in this.data ? 'update' : 'add';
-		this.data[key] = value;
+		const action = this.data.has(key) ? 'update' : 'add';
+		this.data.set(key, value);
 		const event = {
 			changes: { keys: new Map([[key, { action }]]) },
 		};
@@ -31,8 +31,8 @@ class MockYMap {
 	}
 
 	delete(key: string): void {
-		if (!(key in this.data)) return;
-		delete this.data[key];
+		if (!this.data.has(key)) return;
+		this.data.delete(key);
 		const event = {
 			changes: { keys: new Map([[key, { action: 'delete' }]]) },
 		};
@@ -42,9 +42,7 @@ class MockYMap {
 	}
 
 	forEach(callback: (value: unknown, key: string) => void): void {
-		for (const [key, value] of Object.entries(this.data)) {
-			callback(value, key);
-		}
+		this.data.forEach((value, key) => callback(value, key));
 	}
 
 	observe(fn: (event: unknown) => void): void {
@@ -461,6 +459,24 @@ describe('command-sync', () => {
 			const mod = loadModule();
 			const commands = mod.getCommandsFromSync();
 			expect(commands).toEqual({});
+		});
+
+		it('drops entries whose stored id does not match the key suffix', async () => {
+			const mod = loadModule();
+			await mod.initCommandSync();
+
+			const syncConfig = mockAddEntities.mock.calls[0][0][0].syncConfig;
+			const doc = new MockYDoc();
+			syncConfig.createAwareness(doc);
+
+			// Good entry — key and stored id agree.
+			doc.getMap('state').set('cmd_42', { ...MOCK_COMMAND, id: 42 });
+			// Corrupt entry — stored under cmd_43 but carries id 99. Must
+			// not appear under either 43 or 99 in the collected record.
+			doc.getMap('state').set('cmd_43', { ...MOCK_COMMAND, id: 99 });
+
+			const commands = mod.getCommandsFromSync();
+			expect(commands).toEqual({ '42': { ...MOCK_COMMAND, id: 42 } });
 		});
 	});
 

@@ -541,6 +541,21 @@ describe('CommandClient', () => {
 
 			expect(onCommand).not.toHaveBeenCalled();
 		});
+
+		it('skips entries whose stored id does not match the key suffix', () => {
+			const { remoteDoc, localDoc, syncToLocal } = createSyncedDocs();
+			const documentMap = localDoc.getMap('document');
+			client.startObserving(documentMap);
+
+			// Mismatched entry: stored under cmd_70 but carries id 71.
+			// Can't be looked up or removed consistently, so it must be
+			// ignored rather than dispatched under id 71.
+			const remoteMap = remoteDoc.getMap('document');
+			remoteMap.set('cmd_70', fakeCommand({ id: 71, status: 'pending' }));
+			syncToLocal();
+
+			expect(onCommand).not.toHaveBeenCalled();
+		});
 	});
 
 	// -------------------------------------------------------
