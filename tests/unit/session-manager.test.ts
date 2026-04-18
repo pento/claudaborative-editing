@@ -475,6 +475,173 @@ describe('SessionManager', () => {
 		});
 	});
 
+	describe('openPost() error recovery', () => {
+		it('rolls back post state when the post-room addRoom fails', async () => {
+			mockValidateConnection.mockResolvedValue(fakeUser);
+			mockValidateSyncEndpoint.mockResolvedValue(undefined);
+			await session.connect(fakeConfig);
+			mockGetPost.mockResolvedValue(fakePost);
+
+			// Simulate SyncClient.addRoom throwing on the very first call —
+			// e.g. the "Room already registered" case that motivated this fix.
+			mockSyncAddRoom.mockImplementationOnce(() => {
+				throw new Error('already registered');
+			});
+
+			await expect(session.openPost(42)).rejects.toThrow(
+				'already registered'
+			);
+
+			expect(session.getState()).toBe('connected');
+			expect(session.getCurrentPost()).toBeNull();
+
+			// A retry must succeed — before the fix, _currentPost / _doc /
+			// postRoom were left dangling when addRoom itself threw.
+			await session.openPost(42);
+			expect(session.getState()).toBe('editing');
+			expect(session.getCurrentPost()?.id).toBe(42);
+		});
+
+		it('rolls back post state when comment-room addRoom fails', async () => {
+			mockValidateConnection.mockResolvedValue(fakeUser);
+			mockValidateSyncEndpoint.mockResolvedValue(undefined);
+			// Enable notes so the second addRoom call is issued.
+			mockCheckNotesSupport.mockResolvedValue(true);
+			await session.connect(fakeConfig);
+
+			mockGetPost.mockResolvedValue(fakePost);
+
+			// Succeed for the post room, fail for the comment room.
+			let addRoomCalls = 0;
+			mockSyncAddRoom.mockImplementation(() => {
+				addRoomCalls++;
+				if (addRoomCalls === 2) {
+					throw new Error('boom');
+				}
+			});
+
+			await expect(session.openPost(42)).rejects.toThrow('boom');
+
+			expect(session.getState()).toBe('connected');
+			expect(session.getCurrentPost()).toBeNull();
+			// The post room was removed during rollback.
+			expect(mockSyncRemoveRoom).toHaveBeenCalledWith('postType/post:42');
+		});
+
+		it('allows a retry to succeed on the same post after a failed open', async () => {
+			mockValidateConnection.mockResolvedValue(fakeUser);
+			mockValidateSyncEndpoint.mockResolvedValue(undefined);
+			mockCheckNotesSupport.mockResolvedValue(true);
+			await session.connect(fakeConfig);
+			mockGetPost.mockResolvedValue(fakePost);
+
+			// Fail once on the comment room, then succeed for all subsequent calls.
+			let addRoomCalls = 0;
+			mockSyncAddRoom.mockImplementation(() => {
+				addRoomCalls++;
+				if (addRoomCalls === 2) {
+					throw new Error('transient');
+				}
+			});
+
+			await expect(session.openPost(42)).rejects.toThrow('transient');
+
+			// The retry uses the cleaned-up state and must succeed — previously
+			// it threw "Room 'postType/post:42' is already registered".
+			await session.openPost(42);
+
+			expect(session.getState()).toBe('editing');
+			expect(session.getCurrentPost()?.id).toBe(42);
+		});
+
+		it('leaves the session usable when getPost rejects before any sync state is allocated', async () => {
+			mockValidateConnection.mockResolvedValue(fakeUser);
+			mockValidateSyncEndpoint.mockResolvedValue(undefined);
+			await session.connect(fakeConfig);
+
+			mockGetPost.mockRejectedValueOnce(new Error('404'));
+
+			await expect(session.openPost(42)).rejects.toThrow('404');
+
+			expect(session.getState()).toBe('connected');
+			expect(session.getCurrentPost()).toBeNull();
+
+			mockGetPost.mockResolvedValueOnce(fakePost);
+			await session.openPost(42);
+			expect(session.getState()).toBe('editing');
+		});
+
+		it('clears the currentPost reference set before addRoom', async () => {
+			mockValidateConnection.mockResolvedValue(fakeUser);
+			mockValidateSyncEndpoint.mockResolvedValue(undefined);
+			mockCheckNotesSupport.mockResolvedValue(true);
+			await session.connect(fakeConfig);
+			mockGetPost.mockResolvedValue(fakePost);
+
+			let addRoomCalls = 0;
+			mockSyncAddRoom.mockImplementation(() => {
+				addRoomCalls++;
+				if (addRoomCalls === 2) {
+					throw new Error('comment-room-failure');
+				}
+			});
+
+			await expect(session.openPost(42)).rejects.toThrow(
+				'comment-room-failure'
+			);
+
+			// Before the fix, _currentPost was left referencing the post.
+			expect(session.getCurrentPost()).toBeNull();
+		});
+	});
+
+	describe('preOpenPost() error recovery', () => {
+		it('propagates errors to the caller', async () => {
+			mockValidateConnection.mockResolvedValue(fakeUser);
+			mockValidateSyncEndpoint.mockResolvedValue(undefined);
+			mockCheckNotesSupport.mockResolvedValue(true);
+			await session.connect(fakeConfig);
+			mockGetPost.mockResolvedValue(fakePost);
+
+			let addRoomCalls = 0;
+			mockSyncAddRoom.mockImplementation(() => {
+				addRoomCalls++;
+				if (addRoomCalls === 2) {
+					throw new Error('boom');
+				}
+			});
+
+			// Previously preOpenPost silently swallowed — callers (like the
+			// cloud orchestrator) couldn't see open-failures. It now rejects
+			// so the caller can treat it as a command-level failure.
+			await expect(session.preOpenPost(42)).rejects.toThrow('boom');
+
+			expect(session.getState()).toBe('connected');
+			expect(session.getCurrentPost()).toBeNull();
+		});
+
+		it('surfaces a failure from its own call even after a previous preOpenPost rejected', async () => {
+			mockValidateConnection.mockResolvedValue(fakeUser);
+			mockValidateSyncEndpoint.mockResolvedValue(undefined);
+			mockCheckNotesSupport.mockResolvedValue(true);
+			await session.connect(fakeConfig);
+			mockGetPost.mockResolvedValue(fakePost);
+
+			let addRoomCalls = 0;
+			mockSyncAddRoom.mockImplementation(() => {
+				addRoomCalls++;
+				if (addRoomCalls === 2 || addRoomCalls === 4) {
+					throw new Error(`fail-${addRoomCalls}`);
+				}
+			});
+
+			await expect(session.preOpenPost(42)).rejects.toThrow('fail-2');
+			// The second call must not inherit the previous rejection —
+			// it must surface its own failure.
+			await expect(session.preOpenPost(42)).rejects.toThrow('fail-4');
+		});
+	});
+
 	describe('closePost()', () => {
 		it('removes post room and clears doc', async () => {
 			await connectAndOpen(session);
