@@ -280,6 +280,64 @@ describe('CommandClient', () => {
 			const result = await client.updateCommandStatus(3, 'running');
 			expect(result).toEqual(updated);
 		});
+
+		it('waits for the browser-origin pending write to arrive before mirroring', async () => {
+			// Simulates the ordering the observer-backed wait is meant to
+			// enforce: the REST PATCH resolves before sync has delivered
+			// the browser's pending write, and the mirror must hold off
+			// until the pending entry appears in the Y.Map.
+			const { remoteDoc, localDoc, syncToLocal } = createSyncedDocs();
+			const documentMap = localDoc.getMap('document');
+			client.startObserving(documentMap);
+
+			const running = fakeCommand({ id: 11, status: 'running' });
+			apiClient.request.mockResolvedValue(running);
+
+			const inFlight = client.updateCommandStatus(11, 'running');
+
+			// Y.Map is empty, so the mirror is stalled on awaitCommandInMap.
+			await Promise.resolve();
+			expect(documentMap.get('cmd_11')).toBeUndefined();
+
+			// Deliver the browser's pending write; the observer should
+			// unblock the wait and let the mirror complete.
+			const remoteMap = remoteDoc.getMap('document');
+			remoteMap.set('cmd_11', fakeCommand({ id: 11, status: 'pending' }));
+			syncToLocal();
+
+			await inFlight;
+
+			const entry = documentMap.get('cmd_11') as Command | undefined;
+			expect(entry?.status).toBe('running');
+		});
+
+		it('mirrors after the wait timeout when sync never delivers', async () => {
+			vi.useFakeTimers();
+			try {
+				const { localDoc } = createSyncedDocs();
+				const documentMap = localDoc.getMap('document');
+				client.startObserving(documentMap);
+
+				const failed = fakeCommand({ id: 12, status: 'failed' });
+				apiClient.request.mockResolvedValue(failed);
+
+				const inFlight = client.updateCommandStatus(12, 'failed');
+
+				// Give the REST request time to resolve so the code is
+				// parked inside awaitCommandInMap.
+				await vi.advanceTimersByTimeAsync(0);
+				expect(documentMap.get('cmd_12')).toBeUndefined();
+
+				// Advance past the 2 s timeout; the mirror should fall
+				// through and write anyway.
+				await vi.advanceTimersByTimeAsync(2000);
+				await inFlight;
+
+				expect(documentMap.get('cmd_12')).toBeDefined();
+			} finally {
+				vi.useRealTimers();
+			}
+		});
 	});
 
 	// -------------------------------------------------------
@@ -937,6 +995,30 @@ describe('CommandClient', () => {
 
 			expect(documentMap.get('cmd_101')).toBeDefined();
 			expect(documentMap.get('cmd_102')).toBeDefined();
+		});
+
+		it('skips writes that would downgrade a terminal status', () => {
+			// Guards against a late-arriving stale REST response (e.g.
+			// the server's auto-claim → running resolving after the
+			// caller's → completed) clobbering the fresh terminal state.
+			const { localDoc } = createSyncedDocs();
+			const documentMap = localDoc.getMap('document');
+			client.startObserving(documentMap);
+
+			client.writeCommandToDoc(
+				fakeCommand({
+					id: 105,
+					status: 'completed',
+					message: 'All done',
+				})
+			);
+			client.writeCommandToDoc(
+				fakeCommand({ id: 105, status: 'running' })
+			);
+
+			const entry = documentMap.get('cmd_105') as Command | undefined;
+			expect(entry?.status).toBe('completed');
+			expect(entry?.message).toBe('All done');
 		});
 
 		it('is a no-op when not observing', () => {
