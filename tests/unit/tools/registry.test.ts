@@ -14,8 +14,8 @@ import type { ToolDefinition } from '../../../src/tools/definitions.js';
 
 describe('tools/registry', () => {
 	describe('allTools', () => {
-		it('aggregates all 39 tool definitions', () => {
-			expect(allTools.length).toBe(39);
+		it('aggregates all 40 tool definitions', () => {
+			expect(allTools.length).toBe(40);
 		});
 
 		it('contains known tools from different files', () => {
@@ -281,7 +281,7 @@ describe('tools/registry', () => {
 			const server = createMockServer();
 			const session = createMockSession();
 			registerAllTools(server as unknown as McpServer, session);
-			expect(server.registeredTools.size).toBe(39);
+			expect(server.registeredTools.size).toBe(40);
 		});
 	});
 });

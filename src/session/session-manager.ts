@@ -818,29 +818,13 @@ export class SessionManager {
 		this.state = 'editing';
 
 		// Resolve category/tag IDs to names for display in readPost().
-		// Runs after state is set so it doesn't block the editing transition.
-		// Errors are swallowed — term names are informational, not critical.
-		try {
-			const catIds = post.categories ?? [];
-			if (catIds.length > 0) {
-				const cats = await this.apiClient.getTerms(
-					'categories',
-					catIds
-				);
-				this._cachedCategories = cats.map((t) => t.name);
-			}
-		} catch {
-			// Non-critical: readPost() will omit categories
-		}
-		try {
-			const tagIds = post.tags ?? [];
-			if (tagIds.length > 0) {
-				const tags = await this.apiClient.getTerms('tags', tagIds);
-				this._cachedTags = tags.map((t) => t.name);
-			}
-		} catch {
-			// Non-critical: readPost() will omit tags
-		}
+		// Runs in parallel after the state transition so it doesn't block
+		// the editing transition. Term names are informational, so lookup
+		// failures leave the cached arrays empty.
+		[this._cachedCategories, this._cachedTags] = await Promise.all([
+			this.resolveTermNames('categories', post.categories),
+			this.resolveTermNames('tags', post.tags),
+		]);
 	}
 
 	/**
@@ -981,6 +965,61 @@ export class SessionManager {
 			throw new Error(`Block not found at index ${index}`);
 		}
 		return renderBlock(block, index);
+	}
+
+	/**
+	 * Render any post by ID as Claude-friendly text. Read-only via REST —
+	 * does not touch the Y.Doc, so the currently-open post (if any) is
+	 * undisturbed. Use for research while keeping an editing session open.
+	 */
+	async viewPost(postId: number): Promise<string> {
+		this.requireState('connected', 'editing');
+
+		const post = await this.apiClient.getPost(postId);
+
+		const title = post.title.raw ?? post.title.rendered;
+		const blocks = parseBlocks(post.content.raw ?? '').map(
+			parsedBlockToBlock
+		);
+
+		const [categoryNames, tagNames] = await Promise.all([
+			this.resolveTermNames('categories', post.categories),
+			this.resolveTermNames('tags', post.tags),
+		]);
+
+		const metadata: PostMetadata = {
+			status: post.status,
+			date: post.date ?? undefined,
+			slug: post.slug,
+			sticky: post.sticky,
+			commentStatus: post.comment_status,
+			excerpt: post.excerpt.raw || undefined,
+			categories: categoryNames.length > 0 ? categoryNames : undefined,
+			tags: tagNames.length > 0 ? tagNames : undefined,
+			featuredImage: post.featured_media,
+		};
+
+		return renderPost(title, blocks, metadata);
+	}
+
+	/**
+	 * Resolve taxonomy term IDs to display names. Best-effort: returns []
+	 * when there are no IDs or the lookup fails, so callers can treat the
+	 * metadata as informational.
+	 */
+	private async resolveTermNames(
+		taxonomy: 'categories' | 'tags',
+		ids: number[] | undefined
+	): Promise<string[]> {
+		if (!ids || ids.length === 0) {
+			return [];
+		}
+		try {
+			const terms = await this.apiClient.getTerms(taxonomy, ids);
+			return terms.map((t) => t.name);
+		} catch {
+			return [];
+		}
 	}
 
 	// --- Editing ---

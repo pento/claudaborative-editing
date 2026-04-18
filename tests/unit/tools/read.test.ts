@@ -32,9 +32,10 @@ describe('read tools', () => {
 		);
 	});
 
-	it('registers wp_read_post and wp_read_block', () => {
+	it('registers wp_read_post, wp_read_block, and wp_view_post', () => {
 		expect(server.registeredTools.has('wp_read_post')).toBe(true);
 		expect(server.registeredTools.has('wp_read_block')).toBe(true);
+		expect(server.registeredTools.has('wp_view_post')).toBe(true);
 	});
 
 	describe('wp_read_post', () => {
@@ -102,6 +103,43 @@ describe('read tools', () => {
 
 			expect(result.isError).toBe(true);
 			expect(result.content[0].text).toContain('Block not found');
+		});
+	});
+
+	describe('wp_view_post', () => {
+		it('returns rendered content for the requested post', async () => {
+			(
+				session.viewPost as ReturnType<typeof import('vitest').vi.fn>
+			).mockResolvedValue(
+				'Title: "Other Post"\n\n[0] core/paragraph\n  "Other content"'
+			);
+
+			const tool = server.registeredTools.get('wp_view_post');
+			assertDefined(tool);
+			const result = await tool.handler({ postId: 99 });
+
+			expect(session.viewPost).toHaveBeenCalledWith(99);
+			expect(result.content[0].text).toContain('Title: "Other Post"');
+			expect(result.content[0].text).toContain('Other content');
+		});
+
+		it('returns error when the post is not found', async () => {
+			(
+				session.viewPost as ReturnType<typeof import('vitest').vi.fn>
+			).mockRejectedValue(new Error('Post 999 not found'));
+
+			const tool = server.registeredTools.get('wp_view_post');
+			assertDefined(tool);
+			const result = await tool.handler({ postId: 999 });
+
+			expect(result.isError).toBe(true);
+			expect(result.content[0].text).toContain('Post 999 not found');
+		});
+
+		it('is exposed in connected and editing states', () => {
+			const def = readTools.find((t) => t.name === 'wp_view_post');
+			assertDefined(def);
+			expect(def.availableIn).toEqual(['connected', 'editing']);
 		});
 	});
 });

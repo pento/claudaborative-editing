@@ -545,6 +545,94 @@ describe('SessionManager', () => {
 		});
 	});
 
+	describe('viewPost()', () => {
+		const otherPost: WPPost = {
+			id: 99,
+			title: { rendered: 'Other Post', raw: 'Other Post' },
+			content: {
+				rendered: '<p>Other body</p>',
+				raw: '<!-- wp:paragraph -->\n<p>Other body</p>\n<!-- /wp:paragraph -->',
+			},
+			excerpt: { rendered: '', raw: 'Other excerpt' },
+			status: 'publish',
+			type: 'post',
+			slug: 'other-post',
+			author: 1,
+			date: '2026-02-02T00:00:00',
+			modified: '2026-02-02T00:00:00',
+			categories: [5],
+			tags: [7],
+			featured_media: 0,
+			comment_status: 'open',
+			sticky: false,
+		};
+
+		it('renders any post fetched via REST without touching state', async () => {
+			await connectSession(session);
+			mockGetPost.mockResolvedValue(otherPost);
+			mockGetTerms
+				.mockResolvedValueOnce([
+					{
+						id: 5,
+						name: 'News',
+						slug: 'news',
+						taxonomy: 'category',
+					},
+				])
+				.mockResolvedValueOnce([
+					{ id: 7, name: 'launch', slug: 'launch', taxonomy: 'tag' },
+				]);
+
+			const text = await session.viewPost(99);
+
+			expect(mockGetPost).toHaveBeenCalledWith(99);
+			expect(text).toContain('Title: "Other Post"');
+			expect(text).toContain('Status: publish');
+			expect(text).toContain('Slug: other-post');
+			expect(text).toContain('Excerpt: "Other excerpt"');
+			expect(text).toContain('Categories: News');
+			expect(text).toContain('Tags: launch');
+			expect(text).toContain('core/paragraph');
+			expect(text).toContain('Other body');
+			expect(session.getState()).toBe('connected');
+		});
+
+		it('leaves the currently-open post undisturbed', async () => {
+			await connectAndOpen(session);
+			mockGetPost.mockResolvedValueOnce({
+				...otherPost,
+				categories: undefined,
+				tags: undefined,
+			});
+
+			const before = session.readPost();
+			await session.viewPost(99);
+			const after = session.readPost();
+
+			expect(after).toBe(before);
+			expect(session.getState()).toBe('editing');
+			expect(session.getCurrentPost()?.id).toBe(42);
+		});
+
+		it('omits categories and tags when term lookup fails', async () => {
+			await connectSession(session);
+			mockGetPost.mockResolvedValue(otherPost);
+			mockGetTerms.mockRejectedValue(new Error('boom'));
+
+			const text = await session.viewPost(99);
+
+			expect(text).not.toContain('Categories:');
+			expect(text).not.toContain('Tags:');
+			expect(text).toContain('Title: "Other Post"');
+		});
+
+		it('throws when disconnected', async () => {
+			await expect(session.viewPost(99)).rejects.toThrow(
+				/requires state/
+			);
+		});
+	});
+
 	describe('updateBlock()', () => {
 		it('modifies block content in doc', async () => {
 			await connectAndOpen(session);

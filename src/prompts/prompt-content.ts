@@ -107,6 +107,7 @@ Available tools:
 - wp_set_categories, wp_set_tags — update taxonomy
 - wp_set_excerpt — update the post excerpt
 - wp_read_post — re-read the post after making changes
+- wp_view_post — read another post on the site for reference, without closing the current one
 
 Work block by block. Do not try to replace the entire post at once. Preserve the overall structure unless restructuring was requested. After completing edits, use wp_save to save the post.`;
 }
@@ -264,6 +265,8 @@ Ask me 2-3 focused questions to understand what I want to write about. Ask one q
 - What tone or style should it have?
 
 Do NOT ask all questions at once — ask one, wait for my response, then ask the next based on what I said. Skip questions if the answer is already obvious from context or prior answers.
+
+If it would help inform your questions or the outline, you can research existing posts on this site without leaving the current draft: use wp_list_posts to browse and wp_view_post to read any post by ID. The current post stays open and unaffected.
 
 ### Phase 2: Outlining
 Based on my answers, propose an outline with 4-8 sections. For each section, include:
