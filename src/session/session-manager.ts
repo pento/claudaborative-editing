@@ -606,33 +606,35 @@ export class SessionManager {
 		this.postRoom = room;
 		const initialUpdates = [createSyncStep1(doc)];
 
-		syncClient.addRoom(room, doc.clientID, initialUpdates, {
-			onUpdate: (update) => {
-				try {
-					return processIncomingUpdate(doc, update);
-				} catch {
-					return null;
-				}
-			},
-			onAwareness: (awarenessState) => {
-				this.collaborators = parseCollaborators(
-					awarenessState,
-					doc.clientID
-				);
-			},
-			onCompactionRequested: () => {
-				return createCompactionUpdate(doc);
-			},
-			getAwarenessState: () => {
-				return this.awarenessState;
-			},
-		});
-
 		try {
+			syncClient.addRoom(room, doc.clientID, initialUpdates, {
+				onUpdate: (update) => {
+					try {
+						return processIncomingUpdate(doc, update);
+					} catch {
+						return null;
+					}
+				},
+				onAwareness: (awarenessState) => {
+					this.collaborators = parseCollaborators(
+						awarenessState,
+						doc.clientID
+					);
+				},
+				onCompactionRequested: () => {
+					return createCompactionUpdate(doc);
+				},
+				getAwarenessState: () => {
+					return this.awarenessState;
+				},
+			});
+
 			await this._finishOpenPost(post, doc, syncClient, room);
 		} catch (error) {
 			// Roll back every piece of state allocated so far so the session
 			// stays on 'connected' and the next openPost call can succeed.
+			// removeRoom is a no-op for an unregistered room, so this is
+			// safe even when addRoom itself threw.
 			await this._tearDownPost();
 			throw error;
 		}

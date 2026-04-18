@@ -476,6 +476,32 @@ describe('SessionManager', () => {
 	});
 
 	describe('openPost() error recovery', () => {
+		it('rolls back post state when the post-room addRoom fails', async () => {
+			mockValidateConnection.mockResolvedValue(fakeUser);
+			mockValidateSyncEndpoint.mockResolvedValue(undefined);
+			await session.connect(fakeConfig);
+			mockGetPost.mockResolvedValue(fakePost);
+
+			// Simulate SyncClient.addRoom throwing on the very first call —
+			// e.g. the "Room already registered" case that motivated this fix.
+			mockSyncAddRoom.mockImplementationOnce(() => {
+				throw new Error('already registered');
+			});
+
+			await expect(session.openPost(42)).rejects.toThrow(
+				'already registered'
+			);
+
+			expect(session.getState()).toBe('connected');
+			expect(session.getCurrentPost()).toBeNull();
+
+			// A retry must succeed — before the fix, _currentPost / _doc /
+			// postRoom were left dangling when addRoom itself threw.
+			await session.openPost(42);
+			expect(session.getState()).toBe('editing');
+			expect(session.getCurrentPost()?.id).toBe(42);
+		});
+
 		it('rolls back post state when comment-room addRoom fails', async () => {
 			mockValidateConnection.mockResolvedValue(fakeUser);
 			mockValidateSyncEndpoint.mockResolvedValue(undefined);
