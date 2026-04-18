@@ -1334,6 +1334,191 @@ describe('ConversationPanel', () => {
 			expect(ancestor.style.width).toBe('500px');
 		});
 
+		it('ignores non-numeric persisted widths and falls back to default', () => {
+			window.localStorage.setItem(STORAGE_KEY, 'not-a-number');
+
+			mountWithAwaitingInput();
+
+			const ancestor = getAncestor();
+			expect(ancestor.style.width).toBe('280px');
+		});
+
+		it('falls back to default width when localStorage throws on read', () => {
+			const getItemSpy = jest
+				.spyOn(window.localStorage.__proto__, 'getItem')
+				.mockImplementation(() => {
+					throw new Error('quota exceeded');
+				});
+
+			mountWithAwaitingInput();
+
+			const ancestor = getAncestor();
+			expect(ancestor.style.width).toBe('280px');
+
+			getItemSpy.mockRestore();
+		});
+
+		it('swallows localStorage errors when persisting the width', () => {
+			const setItemSpy = jest
+				.spyOn(window.localStorage.__proto__, 'setItem')
+				.mockImplementation(() => {
+					throw new Error('quota exceeded');
+				});
+
+			mountWithAwaitingInput();
+
+			const handle = screen.getByRole('separator');
+			// Should not throw despite the localStorage.setItem error.
+			fireEvent.pointerDown(handle, {
+				clientX: 500,
+				button: 0,
+				pointerId: 1,
+			});
+			fireEvent.pointerMove(handle, { clientX: 400, pointerId: 1 });
+			fireEvent.pointerUp(handle, { clientX: 400, pointerId: 1 });
+
+			const ancestor = getAncestor();
+			expect(ancestor.style.width).toBe('380px');
+
+			setItemSpy.mockRestore();
+		});
+
+		// jsdom's MouseEvent (our PointerEvent shim) drops `pointerId` from
+		// its init dict, so round-trip it through a writable property.
+		function dispatchPointerEventWithId(
+			target: EventTarget,
+			type: string,
+			init: {
+				clientX?: number;
+				clientY?: number;
+				button?: number;
+				pointerId: number;
+			}
+		): void {
+			const event = new MouseEvent(type, {
+				clientX: init.clientX ?? 0,
+				clientY: init.clientY ?? 0,
+				button: init.button ?? 0,
+				bubbles: true,
+				cancelable: true,
+			});
+			Object.defineProperty(event, 'pointerId', {
+				value: init.pointerId,
+				writable: false,
+			});
+			target.dispatchEvent(event);
+		}
+
+		it('bails out of pointerdown when no resize targets are in the DOM', () => {
+			const { container } = mountWithAwaitingInput();
+
+			const handle = screen.getByRole('separator');
+			// Initial portalled `right` reflects the default 280 width: 280
+			// minus the handle's 3px half-width.
+			expect(handle.style.right).toBe('277px');
+
+			// Detach the panel from its ancestors so `resolveAncestors`
+			// finds nothing, then fire a drag. The handler must return
+			// early without attaching listeners or moving the handle.
+			const panel = container.querySelector(
+				'.wpce-conversation-panel'
+			) as HTMLElement;
+			panel.remove();
+
+			fireEvent.pointerDown(handle, {
+				clientX: 500,
+				button: 0,
+				pointerId: 1,
+			});
+			fireEvent.pointerMove(handle, { clientX: 400, pointerId: 1 });
+
+			// If the handler had wired up its listeners, pointermove would
+			// have repositioned the handle to 377px (380 - 3).
+			expect(handle.style.right).toBe('277px');
+		});
+
+		it('ignores pointer events from a different pointerId mid-drag', () => {
+			mountWithAwaitingInput();
+
+			const handle = screen.getByRole('separator');
+			const ancestor = getAncestor();
+
+			act(() => {
+				dispatchPointerEventWithId(handle, 'pointerdown', {
+					clientX: 500,
+					button: 0,
+					pointerId: 1,
+				});
+			});
+
+			// Stray pointer (different id) must not steer the width or end
+			// the drag prematurely.
+			act(() => {
+				dispatchPointerEventWithId(handle, 'pointermove', {
+					clientX: 300,
+					pointerId: 99,
+				});
+			});
+			expect(ancestor.style.width).toBe('280px');
+
+			act(() => {
+				dispatchPointerEventWithId(handle, 'pointerup', {
+					clientX: 300,
+					pointerId: 99,
+				});
+			});
+			// Original pointer still controls the drag.
+			act(() => {
+				dispatchPointerEventWithId(handle, 'pointermove', {
+					clientX: 400,
+					pointerId: 1,
+				});
+				dispatchPointerEventWithId(handle, 'pointerup', {
+					clientX: 400,
+					pointerId: 1,
+				});
+			});
+
+			expect(ancestor.style.width).toBe('380px');
+			expect(window.localStorage.getItem(STORAGE_KEY)).toBe('380');
+		});
+
+		it('releases pointer capture on drag end when the browser reports it captured', () => {
+			const releaseSpy = jest.fn();
+			const protoHas = Element.prototype.hasPointerCapture;
+			const protoRelease = Element.prototype.releasePointerCapture;
+			// Pretend the browser is still holding capture so the guarded
+			// `releasePointerCapture` call executes.
+			Element.prototype.hasPointerCapture = function () {
+				return true;
+			};
+			Element.prototype.releasePointerCapture = releaseSpy;
+
+			try {
+				mountWithAwaitingInput();
+
+				const handle = screen.getByRole('separator');
+				act(() => {
+					dispatchPointerEventWithId(handle, 'pointerdown', {
+						clientX: 500,
+						button: 0,
+						pointerId: 1,
+					});
+				});
+				act(() => {
+					dispatchPointerEventWithId(handle, 'pointerup', {
+						clientX: 500,
+						pointerId: 1,
+					});
+				});
+
+				expect(releaseSpy).toHaveBeenCalledWith(1);
+			} finally {
+				Element.prototype.hasPointerCapture = protoHas;
+				Element.prototype.releasePointerCapture = protoRelease;
+			}
+		});
+
 		it('ignores primary button mismatches on pointerdown', () => {
 			mountWithAwaitingInput();
 

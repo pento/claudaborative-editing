@@ -16,9 +16,7 @@
 import {
 	createPortal,
 	useCallback,
-	useEffect,
 	useLayoutEffect,
-	useRef,
 	useState,
 } from '@wordpress/element';
 import type { ReactNode, RefCallback } from 'react';
@@ -32,9 +30,6 @@ export const MIN_WIDTH = 280;
 export const DEFAULT_WIDTH = 280;
 
 function getMaxWidth(): number {
-	if (typeof window === 'undefined') {
-		return MIN_WIDTH;
-	}
 	return Math.max(MIN_WIDTH, Math.floor(window.innerWidth * 0.8));
 }
 
@@ -43,9 +38,6 @@ function clampWidth(width: number, max = getMaxWidth()): number {
 }
 
 function readStoredWidth(): number {
-	if (typeof window === 'undefined') {
-		return DEFAULT_WIDTH;
-	}
 	try {
 		const raw = window.localStorage.getItem(STORAGE_KEY);
 		if (raw === null) {
@@ -62,9 +54,6 @@ function readStoredWidth(): number {
 }
 
 function writeStoredWidth(width: number): void {
-	if (typeof window === 'undefined') {
-		return;
-	}
 	try {
 		window.localStorage.setItem(STORAGE_KEY, String(width));
 	} catch {
@@ -126,55 +115,27 @@ export function useResizableSidebar(isActive: boolean): ResizableSidebar {
 	const [width, setWidth] = useState<number>(() => readStoredWidth());
 	const [skeletonBody, setSkeletonBody] = useState<HTMLElement | null>(null);
 
-	// Elements we're managing, for the belt-and-braces unmount cleanup.
-	const appliedRef = useRef<HTMLElement[]>([]);
-	// Portalled handle DOM, so pointermove can reposition it in lockstep
-	// with the skeleton during a drag without waiting for React state.
-	const handleRef = useRef<HTMLDivElement | null>(null);
-
 	useLayoutEffect(() => {
 		const { complementary, skeleton, body } =
 			resolveAncestors(containerNode);
 
 		setSkeletonBody((current) => (current === body ? current : body));
 
-		if (!isActive) {
+		// Gutenberg always renders both wrappers together; if either is
+		// missing (unexpected layout change) we bail instead of applying a
+		// half-baked style.
+		if (!isActive || !skeleton || !complementary) {
 			return;
 		}
 
-		const targets: HTMLElement[] = [skeleton, complementary].filter(
-			(node): node is HTMLElement => node !== null
-		);
-		if (targets.length === 0) {
-			return;
-		}
+		const targets: HTMLElement[] = [skeleton, complementary];
 		applyWidth(targets, width);
-		if (complementary) {
-			complementary.style.position = 'relative';
-		}
-		appliedRef.current = targets;
+		complementary.style.position = 'relative';
 		return () => {
 			clearWidth(targets);
-			if (complementary) {
-				complementary.style.position = '';
-			}
-			appliedRef.current = [];
+			complementary.style.position = '';
 		};
 	}, [containerNode, isActive, width]);
-
-	// If Gutenberg tears down the PluginSidebar before our main effect's
-	// cleanup fires, restore every element we ever touched.
-	useEffect(() => {
-		return () => {
-			const nodes = appliedRef.current;
-			clearWidth(nodes);
-			for (const node of nodes) {
-				node.style.position = '';
-			}
-			appliedRef.current = [];
-			handleRef.current = null;
-		};
-	}, []);
 
 	const onPointerDown = useCallback(
 		(event: React.PointerEvent<HTMLDivElement>) => {
@@ -184,12 +145,10 @@ export function useResizableSidebar(isActive: boolean): ResizableSidebar {
 			// Re-resolve from the live DOM so the handler can't capture
 			// stale refs after a sidebar re-mount.
 			const { complementary, skeleton } = resolveAncestors(containerNode);
-			const targets: HTMLElement[] = [skeleton, complementary].filter(
-				(node): node is HTMLElement => node !== null
-			);
-			if (targets.length === 0) {
+			if (!skeleton || !complementary) {
 				return;
 			}
+			const targets: HTMLElement[] = [skeleton, complementary];
 			event.preventDefault();
 
 			// Pointer capture keeps pointermove flowing even when the cursor
@@ -213,11 +172,7 @@ export function useResizableSidebar(isActive: boolean): ResizableSidebar {
 				const delta = moveEvent.clientX - startX;
 				nextWidth = clampWidth(startWidth - delta, maxWidth);
 				applyWidth(targets, nextWidth);
-				if (handleRef.current) {
-					handleRef.current.style.right = `${
-						nextWidth - HANDLE_HALF_WIDTH
-					}px`;
-				}
+				handleEl.style.right = `${nextWidth - HANDLE_HALF_WIDTH}px`;
 			};
 
 			const prevUserSelect = document.body.style.userSelect;
@@ -249,7 +204,6 @@ export function useResizableSidebar(isActive: boolean): ResizableSidebar {
 		isActive && skeletonBody
 			? createPortal(
 					<div
-						ref={handleRef}
 						role="separator"
 						aria-orientation="vertical"
 						aria-label={__(
