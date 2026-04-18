@@ -18,6 +18,7 @@ import { useSelect, useDispatch } from '@wordpress/data';
 import { useState, useEffect, useRef, RawHTML } from '@wordpress/element';
 import { store as noticesStore } from '@wordpress/notices';
 import { PluginSidebar } from '@wordpress/editor';
+import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 
 /**
  * Internal dependencies
@@ -28,7 +29,7 @@ import aiActionsStore from '../../store';
 import SparkleIcon from '../SparkleIcon';
 import { useResizableSidebar } from './use-resizable-sidebar';
 import { SIDEBAR_ID } from './constants';
-import { TERMINAL_STATUSES } from '#shared/commands';
+import { TERMINAL_STATUSES, type CommandSlug } from '#shared/commands';
 import type {
 	ConversationMessage,
 	ConversationResultData,
@@ -38,7 +39,7 @@ import './style.scss';
 
 // Command prompts that open the conversation sidebar on submit (before the
 // MCP server has produced any messages).
-const CONVERSATIONAL_PROMPTS: readonly string[] = ['compose'];
+const CONVERSATIONAL_PROMPTS: readonly CommandSlug[] = ['compose'];
 
 const PROCESSING_WORD_INTERVAL_MS = 2000;
 
@@ -125,7 +126,7 @@ export default function ConversationPanel() {
 		isAwaitingInput ||
 		isRunningWithConversation ||
 		(isInFlight && isConversationalCommand);
-	const shouldShowProcessing = isInFlight && !isAwaitingInput;
+	const shouldShowProcessing = shouldShow && isInFlight && !isAwaitingInput;
 
 	const conversationData = activeCommand
 		? getConversationData(activeCommand.result_data)
@@ -250,7 +251,7 @@ export default function ConversationPanel() {
 		);
 	};
 
-	const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+	const handleKeyDown = (e: ReactKeyboardEvent<HTMLTextAreaElement>) => {
 		if (e.key === 'Enter' && !e.shiftKey) {
 			e.preventDefault();
 			handleSend();

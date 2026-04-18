@@ -21,7 +21,12 @@ import {
 	useRef,
 	useState,
 } from '@wordpress/element';
-import type { ReactNode, RefCallback } from 'react';
+import type {
+	KeyboardEvent as ReactKeyboardEvent,
+	PointerEvent as ReactPointerEvent,
+	ReactNode,
+	RefCallback,
+} from 'react';
 import { __ } from '@wordpress/i18n';
 
 const STORAGE_KEY = 'wpce:conversation-sidebar-width';
@@ -177,7 +182,7 @@ export function useResizableSidebar(isActive: boolean): ResizableSidebar {
 	}, []);
 
 	const onPointerDown = useCallback(
-		(event: React.PointerEvent<HTMLDivElement>) => {
+		(event: ReactPointerEvent<HTMLDivElement>) => {
 			if (event.button !== 0) {
 				return;
 			}
@@ -240,7 +245,7 @@ export function useResizableSidebar(isActive: boolean): ResizableSidebar {
 	);
 
 	const onKeyDown = useCallback(
-		(event: React.KeyboardEvent<HTMLDivElement>) => {
+		(event: ReactKeyboardEvent<HTMLDivElement>) => {
 			// Arrow keys nudge by one step; Home/End jump to the extremes.
 			// Left grows the sidebar (matches the drag direction: pulling
 			// the seam leftward widens the panel).
