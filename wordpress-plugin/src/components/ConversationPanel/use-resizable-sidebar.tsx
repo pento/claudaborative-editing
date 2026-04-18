@@ -24,6 +24,7 @@ import { __ } from '@wordpress/i18n';
 
 const STORAGE_KEY = 'wpce:conversation-sidebar-width';
 const HANDLE_HALF_WIDTH = 3;
+const KEYBOARD_STEP = 20;
 const WIDTH_PROPS = ['width', 'flexBasis', 'maxWidth', 'minWidth'] as const;
 
 export const MIN_WIDTH = 280;
@@ -200,9 +201,44 @@ export function useResizableSidebar(isActive: boolean): ResizableSidebar {
 		[containerNode, width]
 	);
 
+	const onKeyDown = useCallback(
+		(event: React.KeyboardEvent<HTMLDivElement>) => {
+			// Arrow keys nudge by one step; Home/End jump to the extremes.
+			// Left grows the sidebar (matches the drag direction: pulling
+			// the seam leftward widens the panel).
+			let next: number | null = null;
+			switch (event.key) {
+				case 'ArrowLeft':
+					next = width + KEYBOARD_STEP;
+					break;
+				case 'ArrowRight':
+					next = width - KEYBOARD_STEP;
+					break;
+				case 'Home':
+					next = MIN_WIDTH;
+					break;
+				case 'End':
+					next = getMaxWidth();
+					break;
+			}
+			if (next === null) {
+				return;
+			}
+			event.preventDefault();
+			const clamped = clampWidth(next);
+			setWidth(clamped);
+			writeStoredWidth(clamped);
+		},
+		[width]
+	);
+
 	const handle =
 		isActive && skeletonBody
 			? createPortal(
+					// A focusable resize separator is interactive per ARIA 1.2
+					// (aria-valuenow/min/max make it behave like a slider); the
+					// jsx-a11y rule flags `role="separator"` as non-interactive.
+					// eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
 					<div
 						role="separator"
 						aria-orientation="vertical"
@@ -210,9 +246,14 @@ export function useResizableSidebar(isActive: boolean): ResizableSidebar {
 							'Resize sidebar',
 							'claudaborative-editing'
 						)}
+						aria-valuenow={width}
+						aria-valuemin={MIN_WIDTH}
+						aria-valuemax={getMaxWidth()}
+						tabIndex={0}
 						className="wpce-conversation-panel__resize-handle"
 						style={{ right: `${width - HANDLE_HALF_WIDTH}px` }}
 						onPointerDown={onPointerDown}
+						onKeyDown={onKeyDown}
 					/>,
 					skeletonBody
 				)

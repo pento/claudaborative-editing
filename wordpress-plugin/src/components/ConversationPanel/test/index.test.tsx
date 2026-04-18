@@ -1483,6 +1483,69 @@ describe('ConversationPanel', () => {
 			expect(window.localStorage.getItem(STORAGE_KEY)).toBe('380');
 		});
 
+		it('exposes keyboard/screen-reader semantics on the separator', () => {
+			mountWithAwaitingInput();
+
+			const handle = screen.getByRole('separator');
+			expect(handle.getAttribute('tabindex')).toBe('0');
+			expect(handle.getAttribute('aria-valuenow')).toBe('280');
+			expect(handle.getAttribute('aria-valuemin')).toBe('280');
+			expect(
+				Number(handle.getAttribute('aria-valuemax'))
+			).toBeGreaterThanOrEqual(280);
+		});
+
+		it('grows the sidebar on ArrowLeft and shrinks on ArrowRight', () => {
+			mountWithAwaitingInput();
+
+			const handle = screen.getByRole('separator');
+			const ancestor = getAncestor();
+
+			fireEvent.keyDown(handle, { key: 'ArrowLeft' });
+			expect(ancestor.style.width).toBe('300px');
+
+			fireEvent.keyDown(handle, { key: 'ArrowRight' });
+			fireEvent.keyDown(handle, { key: 'ArrowRight' });
+			// 300 → 280 (clamped) → still 280.
+			expect(ancestor.style.width).toBe('280px');
+		});
+
+		it('jumps to minimum and maximum on Home and End', () => {
+			mountWithAwaitingInput();
+
+			const handle = screen.getByRole('separator');
+			const ancestor = getAncestor();
+			const max = Math.floor(window.innerWidth * 0.8);
+
+			fireEvent.keyDown(handle, { key: 'End' });
+			expect(ancestor.style.width).toBe(`${max}px`);
+
+			fireEvent.keyDown(handle, { key: 'Home' });
+			expect(ancestor.style.width).toBe('280px');
+		});
+
+		it('ignores unrelated keys on the separator', () => {
+			mountWithAwaitingInput();
+
+			const handle = screen.getByRole('separator');
+			const ancestor = getAncestor();
+
+			fireEvent.keyDown(handle, { key: 'Enter' });
+			fireEvent.keyDown(handle, { key: 'a' });
+
+			expect(ancestor.style.width).toBe('280px');
+			expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
+		});
+
+		it('persists the keyboard-adjusted width to localStorage', () => {
+			mountWithAwaitingInput();
+
+			const handle = screen.getByRole('separator');
+			fireEvent.keyDown(handle, { key: 'ArrowLeft' });
+
+			expect(window.localStorage.getItem(STORAGE_KEY)).toBe('300');
+		});
+
 		it('releases pointer capture on drag end when the browser reports it captured', () => {
 			const releaseSpy = jest.fn();
 			const protoHas = Element.prototype.hasPointerCapture;
