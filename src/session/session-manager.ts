@@ -818,29 +818,13 @@ export class SessionManager {
 		this.state = 'editing';
 
 		// Resolve category/tag IDs to names for display in readPost().
-		// Runs after state is set so it doesn't block the editing transition.
-		// Errors are swallowed — term names are informational, not critical.
-		try {
-			const catIds = post.categories ?? [];
-			if (catIds.length > 0) {
-				const cats = await this.apiClient.getTerms(
-					'categories',
-					catIds
-				);
-				this._cachedCategories = cats.map((t) => t.name);
-			}
-		} catch {
-			// Non-critical: readPost() will omit categories
-		}
-		try {
-			const tagIds = post.tags ?? [];
-			if (tagIds.length > 0) {
-				const tags = await this.apiClient.getTerms('tags', tagIds);
-				this._cachedTags = tags.map((t) => t.name);
-			}
-		} catch {
-			// Non-critical: readPost() will omit tags
-		}
+		// Runs in parallel after the state transition so it doesn't block
+		// the editing transition. Term names are informational, so lookup
+		// failures leave the cached arrays empty.
+		[this._cachedCategories, this._cachedTags] = await Promise.all([
+			this.resolveTermNames('categories', post.categories),
+			this.resolveTermNames('tags', post.tags),
+		]);
 	}
 
 	/**
@@ -998,30 +982,10 @@ export class SessionManager {
 			parsedBlockToBlock
 		);
 
-		// Resolve category/tag IDs to names. Best-effort: if the lookup
-		// fails the metadata is shown without them rather than the whole
-		// call failing.
-		let categoryNames: string[] | undefined;
-		let tagNames: string[] | undefined;
-		if (post.categories && post.categories.length > 0) {
-			try {
-				const cats = await this.apiClient.getTerms(
-					'categories',
-					post.categories
-				);
-				categoryNames = cats.map((t) => t.name);
-			} catch {
-				// Non-critical
-			}
-		}
-		if (post.tags && post.tags.length > 0) {
-			try {
-				const tags = await this.apiClient.getTerms('tags', post.tags);
-				tagNames = tags.map((t) => t.name);
-			} catch {
-				// Non-critical
-			}
-		}
+		const [categoryNames, tagNames] = await Promise.all([
+			this.resolveTermNames('categories', post.categories),
+			this.resolveTermNames('tags', post.tags),
+		]);
 
 		const metadata: PostMetadata = {
 			status: post.status,
@@ -1030,12 +994,32 @@ export class SessionManager {
 			sticky: post.sticky,
 			commentStatus: post.comment_status,
 			excerpt: post.excerpt.raw || undefined,
-			categories: categoryNames,
-			tags: tagNames,
+			categories: categoryNames.length > 0 ? categoryNames : undefined,
+			tags: tagNames.length > 0 ? tagNames : undefined,
 			featuredImage: post.featured_media,
 		};
 
 		return renderPost(title, blocks, metadata);
+	}
+
+	/**
+	 * Resolve taxonomy term IDs to display names. Best-effort: returns []
+	 * when there are no IDs or the lookup fails, so callers can treat the
+	 * metadata as informational.
+	 */
+	private async resolveTermNames(
+		taxonomy: 'categories' | 'tags',
+		ids: number[] | undefined
+	): Promise<string[]> {
+		if (!ids || ids.length === 0) {
+			return [];
+		}
+		try {
+			const terms = await this.apiClient.getTerms(taxonomy, ids);
+			return terms.map((t) => t.name);
+		} catch {
+			return [];
+		}
 	}
 
 	// --- Editing ---
