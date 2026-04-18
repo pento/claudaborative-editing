@@ -9,19 +9,31 @@ Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Adds AI action controls to the Gutenberg editor for use with the Claudaborative Editing MCP server.
+Adds AI action controls to the Gutenberg editor for use with [Claudaborative Cloud](https://claudaborative.cloud), or the Claudaborative Editing MCP server.
 
 == Description ==
 
-Claudaborative Editing adds controls to the WordPress block editor that let you trigger AI-powered actions, including proofreading, reviewing, translating, and more, directly from within WordPress. Commands are sent to a running Claude Code session via the Claudaborative Editing MCP server.
+Claudaborative Editing adds controls to the WordPress block editor that let you trigger AI-powered actions, including proofreading, reviewing, translating, and more, directly from within WordPress.
 
-**Requires:** [Claude Code](https://claude.ai/download) with the [Claudaborative Editing MCP server](https://www.npmjs.com/package/claudaborative-editing) configured.
+It can be run for free with the [Claudaborative Editing MCP server](https://www.npmjs.com/package/claudaborative-editing), which can be installed in your local copy of Claude Code.
 
-**How it works:** This plugin adds REST API endpoints (`/wpce/v1/`) to your WordPress site that the MCP server (running locally on your machine) uses to send and receive commands. The data is not sent to any third-party service along the way; all communication happens between your browser, your WordPress site, and the MCP server running on your local machine. The data then may be shared with Anthropic, depending on how you have Claude Code configured.
+For a complete seamless experience, we recommend a [Claudaborative Cloud](https://claudaborative.cloud) subscription, which does all of the hard work for you.
 
-The MCP server connects to the same WordPress collaborative editing infrastructure that powers multi-user editing in the block editor.
+This plugin has no official affiliation with Anthropic or Claude.
 
-= Setting up the MCP server =
+== Frequently Asked Questions ==
+
+= Does this work without Claude Code? =
+
+The free version requires Claude Code. The plugin provides the browser-side UI, but all AI processing happens through a Claude Code session running the Claudaborative Editing MCP server.
+
+If you don't want to use Claude Code, then a [Claudaborative Cloud](https://claudaborative.cloud) subscription is the way to go.
+
+= What version of WordPress is required? =
+
+WordPress 7.0 or later for a standalone block editor experience, or WordPress 6.9 and Gutenberg 22.8+ if you're using the Gutenberg plugin. Collaborative editing must be enabled in Writing settings.
+
+= How do I set up the MCP server? =
 
 1. Install [Claude Code](https://claude.ai/download) if you haven't already.
 2. Run the following command in your terminal:
@@ -38,16 +50,6 @@ Then start Claude Code with channels enabled:
 
 `claude --dangerously-load-development-channels server:wpce --permission-mode acceptEdits`
 
-== Frequently Asked Questions ==
-
-= Does this work without Claude Code? =
-
-No. The plugin provides the browser-side UI, but all AI processing happens through a Claude Code session running the Claudaborative Editing MCP server.
-
-= What version of WordPress is required? =
-
-WordPress 7.0 or later for a standalone block editor experience, or WordPress 6.9 and Gutenberg 22.8+ if using the block editor plugin. Collaborative editing must be enabled in WordPress settings.
-
 == Screenshots ==
 
 1. The toolbar dropdown menu with AI actions (Proofread, Review) in the block editor.
@@ -60,7 +62,7 @@ The source code is available on GitHub:
 
 [Claudaborative Editing on GitHub](https://github.com/pento/claudaborative-editing)
 
-Source files are in the `wordpress-plugin/src/` directory. See the repository `README.md` for build instructions.
+Source files are in the `wordpress-plugin/` directory. See the repository `README.md` for build instructions.
 
 == Changelog ==
 
