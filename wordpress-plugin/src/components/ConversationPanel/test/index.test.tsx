@@ -475,34 +475,36 @@ describe('ConversationPanel', () => {
 
 	it('cycles the processing indicator through its phrases', () => {
 		jest.useFakeTimers();
-		mockedUseCommands.mockReturnValue({
-			activeCommand: {
-				id: 1,
-				prompt: 'compose',
-				status: 'running',
-				post_id: 100,
-				result_data: null,
-			},
-			isResponding: false,
-			respondToCommand: jest.fn(),
-			cancel: jest.fn(),
-		});
+		try {
+			mockedUseCommands.mockReturnValue({
+				activeCommand: {
+					id: 1,
+					prompt: 'compose',
+					status: 'running',
+					post_id: 100,
+					result_data: null,
+				},
+				isResponding: false,
+				respondToCommand: jest.fn(),
+				cancel: jest.fn(),
+			});
 
-		render(<ConversationPanel />);
+			render(<ConversationPanel />);
 
-		expect(screen.getByText('Reading\u2026')).toBeTruthy();
+			expect(screen.getByText('Reading\u2026')).toBeTruthy();
 
-		act(() => {
-			jest.advanceTimersByTime(2000);
-		});
-		expect(screen.getByText('Thinking\u2026')).toBeTruthy();
+			act(() => {
+				jest.advanceTimersByTime(2000);
+			});
+			expect(screen.getByText('Thinking\u2026')).toBeTruthy();
 
-		act(() => {
-			jest.advanceTimersByTime(2000);
-		});
-		expect(screen.getByText('Conjugating\u2026')).toBeTruthy();
-
-		jest.useRealTimers();
+			act(() => {
+				jest.advanceTimersByTime(2000);
+			});
+			expect(screen.getByText('Conjugating\u2026')).toBeTruthy();
+		} finally {
+			jest.useRealTimers();
+		}
 	});
 
 	it('does not show Processing indicator when awaiting_input', () => {
@@ -1636,6 +1638,67 @@ describe('ConversationPanel', () => {
 				configurable: true,
 				writable: true,
 			});
+		});
+
+		it('aborts the drag on pointercancel without committing the width', () => {
+			mountWithAwaitingInput();
+
+			const handle = screen.getByRole('separator');
+			const ancestor = getAncestor();
+
+			dispatchPointerEventWithId(handle, 'pointerdown', {
+				clientX: 500,
+				button: 0,
+				pointerId: 1,
+			});
+			dispatchPointerEventWithId(handle, 'pointermove', {
+				clientX: 400,
+				pointerId: 1,
+			});
+			expect(ancestor.style.width).toBe('380px');
+
+			// OS / browser aborts the gesture — revert DOM, don't persist.
+			act(() => {
+				dispatchPointerEventWithId(handle, 'pointercancel', {
+					clientX: 400,
+					pointerId: 1,
+				});
+			});
+
+			expect(ancestor.style.width).toBe('280px');
+			expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
+			expect(document.body.style.userSelect).toBe('');
+		});
+
+		it('ignores pointercancel from a different pointerId', () => {
+			mountWithAwaitingInput();
+
+			const handle = screen.getByRole('separator');
+			const ancestor = getAncestor();
+
+			dispatchPointerEventWithId(handle, 'pointerdown', {
+				clientX: 500,
+				button: 0,
+				pointerId: 1,
+			});
+			dispatchPointerEventWithId(handle, 'pointermove', {
+				clientX: 400,
+				pointerId: 1,
+			});
+			// Stray cancel from a different pointer must not interrupt.
+			dispatchPointerEventWithId(handle, 'pointercancel', {
+				clientX: 400,
+				pointerId: 99,
+			});
+			expect(ancestor.style.width).toBe('380px');
+
+			act(() => {
+				dispatchPointerEventWithId(handle, 'pointerup', {
+					clientX: 400,
+					pointerId: 1,
+				});
+			});
+			expect(window.localStorage.getItem(STORAGE_KEY)).toBe('380');
 		});
 
 		it('restores document.body.userSelect on lostpointercapture without committing the width', () => {

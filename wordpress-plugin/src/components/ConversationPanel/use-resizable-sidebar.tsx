@@ -269,7 +269,7 @@ export function useResizableSidebar(isActive: boolean): ResizableSidebar {
 			const dispose = (commit: boolean) => {
 				handleEl.removeEventListener('pointermove', handleMove);
 				handleEl.removeEventListener('pointerup', handleUp);
-				handleEl.removeEventListener('pointercancel', handleUp);
+				handleEl.removeEventListener('pointercancel', handleCancel);
 				handleEl.removeEventListener(
 					'lostpointercapture',
 					handleLostCapture
@@ -297,12 +297,21 @@ export function useResizableSidebar(isActive: boolean): ResizableSidebar {
 				}
 				dispose(true);
 			};
+			// `pointercancel` means the gesture was aborted (OS gesture,
+			// browser cancellation, etc.), so we shouldn't commit the
+			// in-progress width.
+			const handleCancel = (cancelEvent: PointerEvent) => {
+				if (cancelEvent.pointerId !== capturedPointerId) {
+					return;
+				}
+				dispose(false);
+			};
 			const handleLostCapture = () => dispose(false);
 
 			dragCleanupRef.current = () => dispose(false);
 			handleEl.addEventListener('pointermove', handleMove);
 			handleEl.addEventListener('pointerup', handleUp);
-			handleEl.addEventListener('pointercancel', handleUp);
+			handleEl.addEventListener('pointercancel', handleCancel);
 			handleEl.addEventListener('lostpointercapture', handleLostCapture);
 		},
 		[containerNode, width, maxWidth]
