@@ -1,6 +1,27 @@
 // jsdom does not implement scrollIntoView
 Element.prototype.scrollIntoView = jest.fn();
 
+// jsdom does not implement PointerEvent. MouseEvent is a close-enough
+// substitute for the pointer-based resize-handle tests: both carry clientX
+// and dispatch the same way through addEventListener('pointermove', ...).
+if (typeof (window as any).PointerEvent === 'undefined') {
+	(window as any).PointerEvent = window.MouseEvent;
+}
+
+// jsdom does not implement the pointer-capture API. The drag handler calls
+// these to keep pointermove flowing while the cursor is over Gutenberg's
+// iframe; stub them so tests don't throw.
+{
+	const proto = Element.prototype as unknown as Record<string, unknown>;
+	if (typeof proto.setPointerCapture !== 'function') {
+		proto.setPointerCapture = function () {};
+		proto.releasePointerCapture = function () {};
+		proto.hasPointerCapture = function () {
+			return false;
+		};
+	}
+}
+
 jest.mock('@wordpress/i18n', () => ({
 	__: jest.fn((str: string) => str),
 }));
@@ -8,11 +29,30 @@ jest.mock('@wordpress/i18n', () => ({
 jest.mock('@wordpress/editor', () => {
 	const { createElement } = require('react');
 	return {
+		// Wrap children in the same ancestor chain Gutenberg renders so
+		// useResizableSidebar's closest() lookups for all three ancestors
+		// (`.interface-interface-skeleton__body`, the skeleton sidebar, and
+		// the complementary area) succeed in jsdom.
 		PluginSidebar: ({ children, title }: any) =>
 			createElement(
 				'div',
-				{ 'data-testid': 'plugin-sidebar', 'data-title': title },
-				children
+				{ className: 'interface-interface-skeleton__body' },
+				createElement(
+					'div',
+					{ className: 'interface-interface-skeleton__sidebar' },
+					createElement(
+						'div',
+						{ className: 'interface-complementary-area' },
+						createElement(
+							'div',
+							{
+								'data-testid': 'plugin-sidebar',
+								'data-title': title,
+							},
+							children
+						)
+					)
+				)
 			),
 	};
 });
@@ -86,7 +126,7 @@ jest.mock('../../../utils/command-i18n', () => ({
 	}),
 }));
 
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { useCommands } from '../../../hooks/use-commands';
 import ConversationPanel from '..';
@@ -109,13 +149,17 @@ function mockUseSelect(
 describe('ConversationPanel', () => {
 	beforeEach(() => {
 		jest.clearAllMocks();
+		window.localStorage.clear();
 
 		mockedUseDispatch.mockImplementation((storeNameOrDescriptor?: any) => {
 			if (
 				storeNameOrDescriptor === 'core/interface' ||
 				storeNameOrDescriptor?.name === 'core/interface'
 			) {
-				return { enableComplementaryArea: jest.fn() };
+				return {
+					enableComplementaryArea: jest.fn(),
+					disableComplementaryArea: jest.fn(),
+				};
 			}
 			return { createNotice: jest.fn() };
 		});
@@ -123,6 +167,13 @@ describe('ConversationPanel', () => {
 		mockUseSelect(
 			new Map<unknown, Record<string, (...args: any[]) => any>>([
 				[aiActionsStore, { getCurrentPostId: () => 100 }],
+				[
+					'core/interface',
+					{
+						getActiveComplementaryArea: () =>
+							'claudaborative-editing-conversation/conversation',
+					},
+				],
 			])
 		);
 
@@ -139,7 +190,48 @@ describe('ConversationPanel', () => {
 		expect(container.innerHTML).toBe('');
 	});
 
-	it('returns null when the active command is running without conversation data', () => {
+	it('returns null when a non-conversational command is running without conversation data', () => {
+		mockedUseCommands.mockReturnValue({
+			activeCommand: {
+				id: 1,
+				prompt: 'proofread',
+				status: 'running',
+				post_id: 100,
+				result_data: null,
+			},
+			isResponding: false,
+			respondToCommand: jest.fn(),
+			cancel: jest.fn(),
+		});
+
+		const { container } = render(<ConversationPanel />);
+		expect(container.innerHTML).toBe('');
+	});
+
+	it('opens immediately for a pending compose command', () => {
+		mockedUseCommands.mockReturnValue({
+			activeCommand: {
+				id: 1,
+				prompt: 'compose',
+				status: 'pending',
+				post_id: 100,
+				result_data: null,
+			},
+			isResponding: false,
+			respondToCommand: jest.fn(),
+			cancel: jest.fn(),
+		});
+
+		render(<ConversationPanel />);
+
+		// Panel mounts with the processing indicator visible before the MCP
+		// server has even picked up the command.
+		expect(screen.getByTestId('plugin-sidebar')).toBeTruthy();
+		expect(screen.getByText('Reading\u2026')).toBeTruthy();
+		expect(screen.queryByTestId('conversation-textarea')).toBeNull();
+	});
+
+	it('opens immediately for a running compose command even without conversation data', () => {
 		mockedUseCommands.mockReturnValue({
 			activeCommand: {
 				id: 1,
@@ -153,8 +245,14 @@ describe('ConversationPanel', () => {
 			cancel: jest.fn(),
 		});
 
-		const { container } = render(<ConversationPanel />);
-		expect(container.innerHTML).toBe('');
+		render(<ConversationPanel />);
+
+		// Panel mounts with the processing indicator visible while we wait
+		// for the MCP server's first message.
+		expect(screen.getByTestId('plugin-sidebar')).toBeTruthy();
+		expect(screen.getByText('Reading\u2026')).toBeTruthy();
+		// No awaiting-input input area yet.
+		expect(screen.queryByTestId('conversation-textarea')).toBeNull();
 	});
 
 	it('renders message history when command is awaiting_input with messages', () => {
@@ -371,7 +469,42 @@ describe('ConversationPanel', () => {
 
 		render(<ConversationPanel />);
 
-		expect(screen.getByText('Processing\u2026')).toBeTruthy();
+		// First phrase in the rotating list.
+		expect(screen.getByText('Reading\u2026')).toBeTruthy();
+	});
+
+	it('cycles the processing indicator through its phrases', () => {
+		jest.useFakeTimers();
+		try {
+			mockedUseCommands.mockReturnValue({
+				activeCommand: {
+					id: 1,
+					prompt: 'compose',
+					status: 'running',
+					post_id: 100,
+					result_data: null,
+				},
+				isResponding: false,
+				respondToCommand: jest.fn(),
+				cancel: jest.fn(),
+			});
+
+			render(<ConversationPanel />);
+
+			expect(screen.getByText('Reading\u2026')).toBeTruthy();
+
+			act(() => {
+				jest.advanceTimersByTime(2000);
+			});
+			expect(screen.getByText('Thinking\u2026')).toBeTruthy();
+
+			act(() => {
+				jest.advanceTimersByTime(2000);
+			});
+			expect(screen.getByText('Conjugating\u2026')).toBeTruthy();
+		} finally {
+			jest.useRealTimers();
+		}
 	});
 
 	it('does not show Processing indicator when awaiting_input', () => {
@@ -398,7 +531,8 @@ describe('ConversationPanel', () => {
 
 		render(<ConversationPanel />);
 
-		expect(screen.queryByText('Processing\u2026')).toBeNull();
+		expect(screen.queryByText('Reading\u2026')).toBeNull();
+		expect(screen.queryByText('Thinking\u2026')).toBeNull();
 	});
 
 	it('shows Approve outline button when planReady is true', () => {
@@ -860,8 +994,21 @@ describe('ConversationPanel', () => {
 		);
 	});
 
-	it('calls cancel with the command ID when Cancel is clicked', () => {
-		const cancel = jest.fn();
+	it('closes the sidebar when Cancel is clicked so the slide-out animation plays', () => {
+		const disableComplementaryArea = jest.fn();
+		mockedUseDispatch.mockImplementation((storeNameOrDescriptor?: any) => {
+			if (
+				storeNameOrDescriptor === 'core/interface' ||
+				storeNameOrDescriptor?.name === 'core/interface'
+			) {
+				return {
+					enableComplementaryArea: jest.fn(),
+					disableComplementaryArea,
+				};
+			}
+			return { createNotice: jest.fn() };
+		});
+
 		mockedUseCommands.mockReturnValue({
 			activeCommand: {
 				id: 7,
@@ -880,13 +1027,968 @@ describe('ConversationPanel', () => {
 			},
 			isResponding: false,
 			respondToCommand: jest.fn(),
-			cancel,
+			cancel: jest.fn(),
 		});
 
 		render(<ConversationPanel />);
 
 		fireEvent.click(screen.getByText('Cancel'));
 
+		expect(disableComplementaryArea).toHaveBeenCalledWith('core');
+	});
+
+	it('cancels the in-flight command when the sidebar becomes inactive', () => {
+		const cancel = jest.fn();
+		const activeCommand = {
+			id: 7,
+			prompt: 'compose',
+			status: 'running',
+			post_id: 100,
+			result_data: null,
+		};
+		mockedUseCommands.mockReturnValue({
+			activeCommand,
+			isResponding: false,
+			respondToCommand: jest.fn(),
+			cancel,
+		});
+
+		const { rerender } = render(<ConversationPanel />);
+
+		// Sidebar was open and command was in-flight — no cancel yet.
+		expect(cancel).not.toHaveBeenCalled();
+
+		// Flip the active complementary area to something else, mimicking
+		// the close button or switching to the block inspector.
+		mockUseSelect(
+			new Map<unknown, Record<string, (...args: any[]) => any>>([
+				[aiActionsStore, { getCurrentPostId: () => 100 }],
+				[
+					'core/interface',
+					{
+						getActiveComplementaryArea: () => 'edit-post/document',
+					},
+				],
+			])
+		);
+
+		rerender(<ConversationPanel />);
+
 		expect(cancel).toHaveBeenCalledWith(7);
+	});
+
+	it('cancels an awaiting_input command when the sidebar becomes inactive', () => {
+		const cancel = jest.fn();
+		mockedUseCommands.mockReturnValue({
+			activeCommand: {
+				id: 9,
+				prompt: 'compose',
+				status: 'awaiting_input',
+				post_id: 100,
+				result_data: {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'What is the topic?',
+							timestamp: '2026-04-06T10:00:00Z',
+						},
+					],
+				},
+			},
+			isResponding: false,
+			respondToCommand: jest.fn(),
+			cancel,
+		});
+
+		const { rerender } = render(<ConversationPanel />);
+
+		expect(cancel).not.toHaveBeenCalled();
+
+		// User clicks close/Cancel — sidebar becomes inactive.
+		mockUseSelect(
+			new Map<unknown, Record<string, (...args: any[]) => any>>([
+				[aiActionsStore, { getCurrentPostId: () => 100 }],
+				[
+					'core/interface',
+					{
+						getActiveComplementaryArea: () => 'edit-post/document',
+					},
+				],
+			])
+		);
+
+		rerender(<ConversationPanel />);
+
+		expect(cancel).toHaveBeenCalledWith(9);
+	});
+
+	it('does not cancel a terminal command when the sidebar becomes inactive', () => {
+		const cancel = jest.fn();
+		mockedUseCommands.mockReturnValue({
+			activeCommand: {
+				id: 11,
+				prompt: 'compose',
+				status: 'completed',
+				post_id: 100,
+				result_data: null,
+			},
+			isResponding: false,
+			respondToCommand: jest.fn(),
+			cancel,
+		});
+
+		const { rerender } = render(<ConversationPanel />);
+
+		mockUseSelect(
+			new Map<unknown, Record<string, (...args: any[]) => any>>([
+				[aiActionsStore, { getCurrentPostId: () => 100 }],
+				[
+					'core/interface',
+					{
+						getActiveComplementaryArea: () => 'edit-post/document',
+					},
+				],
+			])
+		);
+
+		rerender(<ConversationPanel />);
+
+		expect(cancel).not.toHaveBeenCalled();
+	});
+
+	describe('resize', () => {
+		const STORAGE_KEY = 'wpce:conversation-sidebar-width';
+
+		function mountWithAwaitingInput() {
+			mockedUseCommands.mockReturnValue({
+				activeCommand: {
+					id: 1,
+					prompt: 'compose',
+					status: 'awaiting_input',
+					post_id: 100,
+					result_data: {
+						messages: [
+							{
+								role: 'assistant',
+								content: 'Hello',
+								timestamp: '2026-04-06T10:00:00Z',
+							},
+						],
+					},
+				},
+				isResponding: false,
+				respondToCommand: jest.fn(),
+				cancel: jest.fn(),
+			});
+
+			return render(<ConversationPanel />);
+		}
+
+		function getAncestor(): HTMLElement {
+			// The handle is portalled into
+			// `.interface-interface-skeleton__body`, so walk the DOM
+			// directly rather than via the handle.
+			const ancestor = document.querySelector(
+				'.interface-complementary-area'
+			) as HTMLElement | null;
+			if (!ancestor) {
+				throw new Error('Ancestor not found');
+			}
+			return ancestor;
+		}
+
+		it('renders a resize handle when the panel is visible', () => {
+			mountWithAwaitingInput();
+
+			const handle = screen.getByRole('separator');
+			expect(handle).toBeTruthy();
+			expect(handle.getAttribute('aria-orientation')).toBe('vertical');
+			expect(handle.getAttribute('aria-label')).toBe('Resize sidebar');
+		});
+
+		it('places the handle wrapper before the sidebar for tab-order priority', () => {
+			const { container } = mountWithAwaitingInput();
+
+			const body = container.querySelector(
+				'.interface-interface-skeleton__body'
+			) as HTMLElement;
+			const skeleton = body.querySelector(
+				':scope > .interface-interface-skeleton__sidebar'
+			) as HTMLElement;
+			const wrapper = body.querySelector(
+				':scope > .wpce-conversation-panel__resize-handle-slot'
+			) as HTMLElement;
+
+			expect(wrapper).toBeTruthy();
+			// Wrapper must come first so keyboard focus lands on the handle
+			// before entering the sidebar content.
+			expect(wrapper.nextElementSibling).toBe(skeleton);
+			expect(
+				wrapper.querySelector('.wpce-conversation-panel__resize-handle')
+			).toBeTruthy();
+		});
+
+		it('removes the handle wrapper from the DOM when the panel unmounts', () => {
+			const { unmount, container } = mountWithAwaitingInput();
+
+			const body = container.querySelector(
+				'.interface-interface-skeleton__body'
+			) as HTMLElement;
+			expect(
+				body.querySelector(
+					'.wpce-conversation-panel__resize-handle-slot'
+				)
+			).toBeTruthy();
+
+			unmount();
+
+			expect(
+				body.querySelector(
+					'.wpce-conversation-panel__resize-handle-slot'
+				)
+			).toBeNull();
+		});
+
+		it('applies the default width to the complementary area on mount', () => {
+			mountWithAwaitingInput();
+
+			const ancestor = getAncestor();
+			expect(ancestor.style.width).toBe('280px');
+			expect(ancestor.style.flexBasis).toBe('280px');
+			expect(ancestor.style.position).toBe('relative');
+		});
+
+		it('does not apply width when a different sidebar is active', () => {
+			mockUseSelect(
+				new Map<unknown, Record<string, (...args: any[]) => any>>([
+					[aiActionsStore, { getCurrentPostId: () => 100 }],
+					[
+						'core/interface',
+						{
+							getActiveComplementaryArea: () =>
+								'edit-post/document',
+						},
+					],
+				])
+			);
+
+			mountWithAwaitingInput();
+
+			// When another sidebar is active, the resize handle is not
+			// portalled into the ancestor and inline styles stay untouched.
+			expect(screen.queryByRole('separator')).toBeNull();
+			const ancestor = document.querySelector(
+				'.interface-complementary-area'
+			) as HTMLElement | null;
+			expect(ancestor).toBeTruthy();
+			expect(ancestor!.style.width).toBe('');
+			expect(ancestor!.style.flexBasis).toBe('');
+		});
+
+		it('updates the ancestor width during a pointer drag', () => {
+			mountWithAwaitingInput();
+
+			const handle = screen.getByRole('separator');
+			const ancestor = getAncestor();
+
+			fireEvent.pointerDown(handle, {
+				clientX: 500,
+				button: 0,
+				pointerId: 1,
+			});
+			fireEvent.pointerMove(handle, { clientX: 400, pointerId: 1 });
+
+			// Dragging 100px to the left grows the sidebar from 280 → 380.
+			expect(ancestor.style.width).toBe('380px');
+
+			fireEvent.pointerUp(handle, { clientX: 400, pointerId: 1 });
+			expect(ancestor.style.width).toBe('380px');
+		});
+
+		it('clamps the width at MIN_WIDTH when dragging right', () => {
+			mountWithAwaitingInput();
+
+			const handle = screen.getByRole('separator');
+			const ancestor = getAncestor();
+
+			fireEvent.pointerDown(handle, {
+				clientX: 500,
+				button: 0,
+				pointerId: 1,
+			});
+			fireEvent.pointerMove(handle, { clientX: 2000, pointerId: 1 });
+			fireEvent.pointerUp(handle, { clientX: 2000, pointerId: 1 });
+
+			expect(ancestor.style.width).toBe('280px');
+		});
+
+		it('clamps the width at 80% of window.innerWidth when dragging left', () => {
+			mountWithAwaitingInput();
+
+			const handle = screen.getByRole('separator');
+			const ancestor = getAncestor();
+
+			const max = Math.floor(window.innerWidth * 0.8);
+
+			fireEvent.pointerDown(handle, {
+				clientX: 500,
+				button: 0,
+				pointerId: 1,
+			});
+			fireEvent.pointerMove(handle, { clientX: -10000, pointerId: 1 });
+			fireEvent.pointerUp(handle, { clientX: -10000, pointerId: 1 });
+
+			expect(ancestor.style.width).toBe(`${max}px`);
+		});
+
+		it('writes to localStorage only on pointerup', () => {
+			const setItemSpy = jest.spyOn(
+				window.localStorage.__proto__,
+				'setItem'
+			);
+
+			mountWithAwaitingInput();
+
+			const handle = screen.getByRole('separator');
+
+			fireEvent.pointerDown(handle, {
+				clientX: 500,
+				button: 0,
+				pointerId: 1,
+			});
+			fireEvent.pointerMove(handle, { clientX: 400, pointerId: 1 });
+
+			expect(setItemSpy).not.toHaveBeenCalledWith(
+				STORAGE_KEY,
+				expect.anything()
+			);
+
+			fireEvent.pointerUp(handle, { clientX: 400, pointerId: 1 });
+
+			expect(setItemSpy).toHaveBeenCalledWith(STORAGE_KEY, '380');
+
+			setItemSpy.mockRestore();
+		});
+
+		it('hydrates the width from localStorage on mount', () => {
+			window.localStorage.setItem(STORAGE_KEY, '500');
+
+			mountWithAwaitingInput();
+
+			const ancestor = getAncestor();
+			expect(ancestor.style.width).toBe('500px');
+		});
+
+		it('ignores non-numeric persisted widths and falls back to default', () => {
+			window.localStorage.setItem(STORAGE_KEY, 'not-a-number');
+
+			mountWithAwaitingInput();
+
+			const ancestor = getAncestor();
+			expect(ancestor.style.width).toBe('280px');
+		});
+
+		it('falls back to default width when localStorage throws on read', () => {
+			const getItemSpy = jest
+				.spyOn(window.localStorage.__proto__, 'getItem')
+				.mockImplementation(() => {
+					throw new Error('quota exceeded');
+				});
+
+			mountWithAwaitingInput();
+
+			const ancestor = getAncestor();
+			expect(ancestor.style.width).toBe('280px');
+
+			getItemSpy.mockRestore();
+		});
+
+		it('swallows localStorage errors when persisting the width', () => {
+			const setItemSpy = jest
+				.spyOn(window.localStorage.__proto__, 'setItem')
+				.mockImplementation(() => {
+					throw new Error('quota exceeded');
+				});
+
+			mountWithAwaitingInput();
+
+			const handle = screen.getByRole('separator');
+			// Should not throw despite the localStorage.setItem error.
+			fireEvent.pointerDown(handle, {
+				clientX: 500,
+				button: 0,
+				pointerId: 1,
+			});
+			fireEvent.pointerMove(handle, { clientX: 400, pointerId: 1 });
+			fireEvent.pointerUp(handle, { clientX: 400, pointerId: 1 });
+
+			const ancestor = getAncestor();
+			expect(ancestor.style.width).toBe('380px');
+
+			setItemSpy.mockRestore();
+		});
+
+		// jsdom's MouseEvent (our PointerEvent shim) drops `pointerId` from
+		// its init dict, so round-trip it through a writable property.
+		function dispatchPointerEventWithId(
+			target: EventTarget,
+			type: string,
+			init: {
+				clientX?: number;
+				clientY?: number;
+				button?: number;
+				pointerId: number;
+			}
+		): void {
+			const event = new MouseEvent(type, {
+				clientX: init.clientX ?? 0,
+				clientY: init.clientY ?? 0,
+				button: init.button ?? 0,
+				bubbles: true,
+				cancelable: true,
+			});
+			Object.defineProperty(event, 'pointerId', {
+				value: init.pointerId,
+				writable: false,
+			});
+			target.dispatchEvent(event);
+		}
+
+		it('bails out of pointerdown when no resize targets are in the DOM', () => {
+			const { container } = mountWithAwaitingInput();
+
+			const handle = screen.getByRole('separator');
+			// Initial portalled `right` reflects the default 280 width: 280
+			// minus the handle's 3px half-width.
+			expect(handle.style.right).toBe('277px');
+
+			// Detach the panel from its ancestors so `resolveAncestors`
+			// finds nothing, then fire a drag. The handler must return
+			// early without attaching listeners or moving the handle.
+			const panel = container.querySelector(
+				'.wpce-conversation-panel'
+			) as HTMLElement;
+			panel.remove();
+
+			fireEvent.pointerDown(handle, {
+				clientX: 500,
+				button: 0,
+				pointerId: 1,
+			});
+			fireEvent.pointerMove(handle, { clientX: 400, pointerId: 1 });
+
+			// If the handler had wired up its listeners, pointermove would
+			// have repositioned the handle to 377px (380 - 3).
+			expect(handle.style.right).toBe('277px');
+		});
+
+		it('ignores pointer events from a different pointerId mid-drag', () => {
+			mountWithAwaitingInput();
+
+			const handle = screen.getByRole('separator');
+			const ancestor = getAncestor();
+
+			act(() => {
+				dispatchPointerEventWithId(handle, 'pointerdown', {
+					clientX: 500,
+					button: 0,
+					pointerId: 1,
+				});
+			});
+
+			// Stray pointer (different id) must not steer the width or end
+			// the drag prematurely.
+			act(() => {
+				dispatchPointerEventWithId(handle, 'pointermove', {
+					clientX: 300,
+					pointerId: 99,
+				});
+			});
+			expect(ancestor.style.width).toBe('280px');
+
+			act(() => {
+				dispatchPointerEventWithId(handle, 'pointerup', {
+					clientX: 300,
+					pointerId: 99,
+				});
+			});
+			// Original pointer still controls the drag.
+			act(() => {
+				dispatchPointerEventWithId(handle, 'pointermove', {
+					clientX: 400,
+					pointerId: 1,
+				});
+				dispatchPointerEventWithId(handle, 'pointerup', {
+					clientX: 400,
+					pointerId: 1,
+				});
+			});
+
+			expect(ancestor.style.width).toBe('380px');
+			expect(window.localStorage.getItem(STORAGE_KEY)).toBe('380');
+		});
+
+		it('exposes keyboard/screen-reader semantics on the separator', () => {
+			mountWithAwaitingInput();
+
+			const handle = screen.getByRole('separator');
+			expect(handle.getAttribute('tabindex')).toBe('0');
+			expect(handle.getAttribute('aria-valuenow')).toBe('280');
+			expect(handle.getAttribute('aria-valuemin')).toBe('280');
+			expect(
+				Number(handle.getAttribute('aria-valuemax'))
+			).toBeGreaterThanOrEqual(280);
+		});
+
+		it('grows the sidebar on ArrowLeft and shrinks on ArrowRight', () => {
+			mountWithAwaitingInput();
+
+			const handle = screen.getByRole('separator');
+			const ancestor = getAncestor();
+
+			fireEvent.keyDown(handle, { key: 'ArrowLeft' });
+			expect(ancestor.style.width).toBe('300px');
+
+			fireEvent.keyDown(handle, { key: 'ArrowRight' });
+			fireEvent.keyDown(handle, { key: 'ArrowRight' });
+			// 300 → 280 (clamped) → still 280.
+			expect(ancestor.style.width).toBe('280px');
+		});
+
+		it('jumps to minimum and maximum on Home and End', () => {
+			mountWithAwaitingInput();
+
+			const handle = screen.getByRole('separator');
+			const ancestor = getAncestor();
+			const max = Math.floor(window.innerWidth * 0.8);
+
+			fireEvent.keyDown(handle, { key: 'End' });
+			expect(ancestor.style.width).toBe(`${max}px`);
+
+			fireEvent.keyDown(handle, { key: 'Home' });
+			expect(ancestor.style.width).toBe('280px');
+		});
+
+		it('ignores unrelated keys on the separator', () => {
+			mountWithAwaitingInput();
+
+			const handle = screen.getByRole('separator');
+			const ancestor = getAncestor();
+
+			fireEvent.keyDown(handle, { key: 'Enter' });
+			fireEvent.keyDown(handle, { key: 'a' });
+
+			expect(ancestor.style.width).toBe('280px');
+			expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
+		});
+
+		it('persists the keyboard-adjusted width to localStorage', () => {
+			mountWithAwaitingInput();
+
+			const handle = screen.getByRole('separator');
+			fireEvent.keyDown(handle, { key: 'ArrowLeft' });
+
+			expect(window.localStorage.getItem(STORAGE_KEY)).toBe('300');
+		});
+
+		it('only subscribes to window.resize while the sidebar is active', () => {
+			const addSpy = jest.spyOn(window, 'addEventListener');
+			const removeSpy = jest.spyOn(window, 'removeEventListener');
+
+			// Start with a different sidebar active so our hook's
+			// `isActive` is false and no listener should be attached.
+			mockUseSelect(
+				new Map<unknown, Record<string, (...args: any[]) => any>>([
+					[aiActionsStore, { getCurrentPostId: () => 100 }],
+					[
+						'core/interface',
+						{
+							getActiveComplementaryArea: () =>
+								'edit-post/document',
+						},
+					],
+				])
+			);
+			const { rerender } = mountWithAwaitingInput();
+			expect(addSpy).not.toHaveBeenCalledWith(
+				'resize',
+				expect.any(Function)
+			);
+
+			// Activate our sidebar — listener attaches.
+			mockUseSelect(
+				new Map<unknown, Record<string, (...args: any[]) => any>>([
+					[aiActionsStore, { getCurrentPostId: () => 100 }],
+					[
+						'core/interface',
+						{
+							getActiveComplementaryArea: () =>
+								'claudaborative-editing-conversation/conversation',
+						},
+					],
+				])
+			);
+			act(() => {
+				rerender(<ConversationPanel />);
+			});
+			expect(addSpy).toHaveBeenCalledWith('resize', expect.any(Function));
+
+			// Deactivate — listener detaches.
+			mockUseSelect(
+				new Map<unknown, Record<string, (...args: any[]) => any>>([
+					[aiActionsStore, { getCurrentPostId: () => 100 }],
+					[
+						'core/interface',
+						{
+							getActiveComplementaryArea: () =>
+								'edit-post/document',
+						},
+					],
+				])
+			);
+			act(() => {
+				rerender(<ConversationPanel />);
+			});
+			expect(removeSpy).toHaveBeenCalledWith(
+				'resize',
+				expect.any(Function)
+			);
+
+			addSpy.mockRestore();
+			removeSpy.mockRestore();
+		});
+
+		it('ignores viewport resize events that do not change the max width', () => {
+			mountWithAwaitingInput();
+
+			const handle = screen.getByRole('separator');
+			const maxBefore = handle.getAttribute('aria-valuemax');
+
+			// innerWidth unchanged — the functional setState bails via the
+			// identity check and no re-render should be needed.
+			act(() => {
+				window.dispatchEvent(new Event('resize'));
+			});
+
+			expect(handle.getAttribute('aria-valuemax')).toBe(maxBefore);
+		});
+
+		it('reacts to viewport resizes by clamping width and updating aria-valuemax', () => {
+			window.localStorage.setItem(STORAGE_KEY, '800');
+
+			mountWithAwaitingInput();
+
+			const handle = screen.getByRole('separator');
+			const ancestor = getAncestor();
+			// jsdom default innerWidth is 1024 → max = floor(1024*0.8) = 819.
+			expect(handle.getAttribute('aria-valuemax')).toBe('819');
+			expect(ancestor.style.width).toBe('800px');
+
+			// Shrink the window so the new max drops below 800.
+			const originalInnerWidth = window.innerWidth;
+			Object.defineProperty(window, 'innerWidth', {
+				value: 500,
+				configurable: true,
+				writable: true,
+			});
+			act(() => {
+				window.dispatchEvent(new Event('resize'));
+			});
+
+			// Max recomputed: floor(500*0.8) = 400.
+			expect(handle.getAttribute('aria-valuemax')).toBe('400');
+			// Stored width (800) clamped down to the new max.
+			expect(ancestor.style.width).toBe('400px');
+
+			Object.defineProperty(window, 'innerWidth', {
+				value: originalInnerWidth,
+				configurable: true,
+				writable: true,
+			});
+		});
+
+		it('aborts the drag on pointercancel without committing the width', () => {
+			mountWithAwaitingInput();
+
+			const handle = screen.getByRole('separator');
+			const ancestor = getAncestor();
+
+			dispatchPointerEventWithId(handle, 'pointerdown', {
+				clientX: 500,
+				button: 0,
+				pointerId: 1,
+			});
+			dispatchPointerEventWithId(handle, 'pointermove', {
+				clientX: 400,
+				pointerId: 1,
+			});
+			expect(ancestor.style.width).toBe('380px');
+
+			// OS / browser aborts the gesture — revert DOM, don't persist.
+			act(() => {
+				dispatchPointerEventWithId(handle, 'pointercancel', {
+					clientX: 400,
+					pointerId: 1,
+				});
+			});
+
+			expect(ancestor.style.width).toBe('280px');
+			expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
+			expect(document.body.style.userSelect).toBe('');
+		});
+
+		it('ignores pointercancel from a different pointerId', () => {
+			mountWithAwaitingInput();
+
+			const handle = screen.getByRole('separator');
+			const ancestor = getAncestor();
+
+			dispatchPointerEventWithId(handle, 'pointerdown', {
+				clientX: 500,
+				button: 0,
+				pointerId: 1,
+			});
+			dispatchPointerEventWithId(handle, 'pointermove', {
+				clientX: 400,
+				pointerId: 1,
+			});
+			// Stray cancel from a different pointer must not interrupt.
+			dispatchPointerEventWithId(handle, 'pointercancel', {
+				clientX: 400,
+				pointerId: 99,
+			});
+			expect(ancestor.style.width).toBe('380px');
+
+			act(() => {
+				dispatchPointerEventWithId(handle, 'pointerup', {
+					clientX: 400,
+					pointerId: 1,
+				});
+			});
+			expect(window.localStorage.getItem(STORAGE_KEY)).toBe('380');
+		});
+
+		it('restores document.body.userSelect on lostpointercapture without committing the width', () => {
+			mountWithAwaitingInput();
+
+			const handle = screen.getByRole('separator');
+			const ancestor = getAncestor();
+
+			dispatchPointerEventWithId(handle, 'pointerdown', {
+				clientX: 500,
+				button: 0,
+				pointerId: 1,
+			});
+			expect(document.body.style.userSelect).toBe('none');
+			dispatchPointerEventWithId(handle, 'pointermove', {
+				clientX: 400,
+				pointerId: 1,
+			});
+			expect(ancestor.style.width).toBe('380px');
+
+			// Browser loses capture mid-drag — should restore userSelect,
+			// revert the DOM to the pre-drag width so it matches React
+			// state, and not persist.
+			act(() => {
+				handle.dispatchEvent(
+					new Event('lostpointercapture', { bubbles: true })
+				);
+			});
+			expect(document.body.style.userSelect).toBe('');
+			expect(ancestor.style.width).toBe('280px');
+			expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
+		});
+
+		it('tears down an in-progress drag when the sidebar deactivates', () => {
+			const { rerender } = mountWithAwaitingInput();
+
+			const handle = screen.getByRole('separator');
+			dispatchPointerEventWithId(handle, 'pointerdown', {
+				clientX: 500,
+				button: 0,
+				pointerId: 1,
+			});
+			dispatchPointerEventWithId(handle, 'pointermove', {
+				clientX: 400,
+				pointerId: 1,
+			});
+			expect(document.body.style.userSelect).toBe('none');
+
+			// Flip to a different sidebar (equivalent to close / switch)
+			// so our hook sees `isActive === false` while the drag is
+			// still in flight.
+			mockUseSelect(
+				new Map<unknown, Record<string, (...args: any[]) => any>>([
+					[aiActionsStore, { getCurrentPostId: () => 100 }],
+					[
+						'core/interface',
+						{
+							getActiveComplementaryArea: () =>
+								'edit-post/document',
+						},
+					],
+				])
+			);
+			act(() => {
+				rerender(<ConversationPanel />);
+			});
+
+			expect(document.body.style.userSelect).toBe('');
+		});
+
+		it('does not run cleanup twice if pointerup arrives after lostpointercapture', () => {
+			mountWithAwaitingInput();
+
+			const handle = screen.getByRole('separator');
+
+			dispatchPointerEventWithId(handle, 'pointerdown', {
+				clientX: 500,
+				button: 0,
+				pointerId: 1,
+			});
+			dispatchPointerEventWithId(handle, 'pointermove', {
+				clientX: 400,
+				pointerId: 1,
+			});
+			act(() => {
+				handle.dispatchEvent(
+					new Event('lostpointercapture', { bubbles: true })
+				);
+			});
+			// Second teardown (stale pointerup) must not throw nor commit.
+			act(() => {
+				dispatchPointerEventWithId(handle, 'pointerup', {
+					clientX: 400,
+					pointerId: 1,
+				});
+			});
+			expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
+		});
+
+		it('restores document.body.userSelect when the panel unmounts mid-drag', () => {
+			const { unmount } = mountWithAwaitingInput();
+
+			const handle = screen.getByRole('separator');
+			dispatchPointerEventWithId(handle, 'pointerdown', {
+				clientX: 500,
+				button: 0,
+				pointerId: 1,
+			});
+			expect(document.body.style.userSelect).toBe('none');
+
+			act(() => {
+				unmount();
+			});
+
+			expect(document.body.style.userSelect).toBe('');
+		});
+
+		it('releases pointer capture on drag end when the browser reports it captured', () => {
+			const releaseSpy = jest.fn();
+			const protoHas = Element.prototype.hasPointerCapture;
+			const protoRelease = Element.prototype.releasePointerCapture;
+			// Pretend the browser is still holding capture so the guarded
+			// `releasePointerCapture` call executes.
+			Element.prototype.hasPointerCapture = function () {
+				return true;
+			};
+			Element.prototype.releasePointerCapture = releaseSpy;
+
+			try {
+				mountWithAwaitingInput();
+
+				const handle = screen.getByRole('separator');
+				act(() => {
+					dispatchPointerEventWithId(handle, 'pointerdown', {
+						clientX: 500,
+						button: 0,
+						pointerId: 1,
+					});
+				});
+				act(() => {
+					dispatchPointerEventWithId(handle, 'pointerup', {
+						clientX: 500,
+						pointerId: 1,
+					});
+				});
+
+				expect(releaseSpy).toHaveBeenCalledWith(1);
+			} finally {
+				Element.prototype.hasPointerCapture = protoHas;
+				Element.prototype.releasePointerCapture = protoRelease;
+			}
+		});
+
+		it('ignores primary button mismatches on pointerdown', () => {
+			mountWithAwaitingInput();
+
+			const handle = screen.getByRole('separator');
+			const ancestor = getAncestor();
+
+			// Right-click (button 2) should not start a drag.
+			fireEvent.pointerDown(handle, {
+				clientX: 500,
+				button: 2,
+				pointerId: 1,
+			});
+			fireEvent.pointerMove(handle, { clientX: 100, pointerId: 1 });
+
+			expect(ancestor.style.width).toBe('280px');
+		});
+
+		it('clears inline styles on both skeleton and complementary wrappers when the panel unmounts', () => {
+			const { unmount, container } = mountWithAwaitingInput();
+
+			const skeleton = container.querySelector(
+				'.interface-interface-skeleton__sidebar'
+			) as HTMLElement;
+			const complementary = container.querySelector(
+				'.interface-complementary-area'
+			) as HTMLElement;
+
+			expect(skeleton.style.width).toBe('280px');
+			expect(skeleton.style.flexBasis).toBe('280px');
+			expect(complementary.style.width).toBe('280px');
+			expect(complementary.style.position).toBe('relative');
+
+			unmount();
+
+			expect(skeleton.style.width).toBe('');
+			expect(skeleton.style.flexBasis).toBe('');
+			expect(skeleton.style.maxWidth).toBe('');
+			expect(skeleton.style.minWidth).toBe('');
+			expect(complementary.style.width).toBe('');
+			expect(complementary.style.flexBasis).toBe('');
+			expect(complementary.style.maxWidth).toBe('');
+			expect(complementary.style.minWidth).toBe('');
+			expect(complementary.style.position).toBe('');
+		});
+
+		it('clears skeleton inline styles after a drag when the panel unmounts', () => {
+			const { unmount, container } = mountWithAwaitingInput();
+
+			const skeleton = container.querySelector(
+				'.interface-interface-skeleton__sidebar'
+			) as HTMLElement;
+			const handle = screen.getByRole('separator');
+
+			// Drag to widen the sidebar.
+			fireEvent.pointerDown(handle, {
+				clientX: 500,
+				button: 0,
+				pointerId: 1,
+			});
+			fireEvent.pointerMove(handle, { clientX: 400, pointerId: 1 });
+			fireEvent.pointerUp(handle, { clientX: 400, pointerId: 1 });
+
+			expect(skeleton.style.width).toBe('380px');
+
+			unmount();
+
+			expect(skeleton.style.width).toBe('');
+			expect(skeleton.style.flexBasis).toBe('');
+			expect(skeleton.style.maxWidth).toBe('');
+			expect(skeleton.style.minWidth).toBe('');
+		});
 	});
 });

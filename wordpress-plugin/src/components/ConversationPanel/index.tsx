@@ -18,6 +18,7 @@ import { useSelect, useDispatch } from '@wordpress/data';
 import { useState, useEffect, useRef, RawHTML } from '@wordpress/element';
 import { store as noticesStore } from '@wordpress/notices';
 import { PluginSidebar } from '@wordpress/editor';
+import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 
 /**
  * Internal dependencies
@@ -26,6 +27,9 @@ import { useCommands } from '../../hooks/use-commands';
 import { getCommandLabel } from '../../utils/command-i18n';
 import aiActionsStore from '../../store';
 import SparkleIcon from '../SparkleIcon';
+import { useResizableSidebar } from './use-resizable-sidebar';
+import { SIDEBAR_ID } from './constants';
+import { TERMINAL_STATUSES, type CommandSlug } from '#shared/commands';
 import type {
 	ConversationMessage,
 	ConversationResultData,
@@ -33,7 +37,22 @@ import type {
 
 import './style.scss';
 
-const SIDEBAR_ID = 'claudaborative-editing-conversation/conversation';
+// Command prompts that open the conversation sidebar on submit (before the
+// MCP server has produced any messages).
+const CONVERSATIONAL_PROMPTS: readonly CommandSlug[] = ['compose'];
+
+const PROCESSING_WORD_INTERVAL_MS = 2000;
+
+// Declared at module scope so the interval effect's `deps.length` reference
+// is stable and doesn't cause restarts across renders.
+const PROCESSING_WORDS = [
+	__('Reading\u2026', 'claudaborative-editing'),
+	__('Thinking\u2026', 'claudaborative-editing'),
+	__('Conjugating\u2026', 'claudaborative-editing'),
+	__('Pondering\u2026', 'claudaborative-editing'),
+	__('Drafting\u2026', 'claudaborative-editing'),
+	__('Outlining\u2026', 'claudaborative-editing'),
+];
 
 /**
  * Extract conversation data from a command's result_data.
@@ -71,17 +90,43 @@ export default function ConversationPanel() {
 	const { createNotice } = useDispatch(noticesStore);
 
 	const [inputValue, setInputValue] = useState('');
+	const [processingWordIndex, setProcessingWordIndex] = useState(0);
 	const messagesEndRef = useRef<HTMLDivElement>(null);
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 	const prevStatusRef = useRef<string | null>(null);
 
+	// Single subscription to the interface store for our sidebar's active
+	// state; the hook below reuses this rather than subscribing separately.
+	const isSidebarActive = useSelect((select) => {
+		const iface = select('core/interface') as {
+			getActiveComplementaryArea: (scope: string) => string | null;
+		};
+		return iface.getActiveComplementaryArea('core') === SIDEBAR_ID;
+	}, []);
+
+	const { containerRef, handle: resizeHandle } =
+		useResizableSidebar(isSidebarActive);
+
+	const isPending = activeCommand?.status === 'pending';
+	const isRunning = activeCommand?.status === 'running';
 	const isAwaitingInput = activeCommand?.status === 'awaiting_input';
+	const isInFlight = isPending || isRunning;
+	const isConversationalCommand = !!(
+		activeCommand && CONVERSATIONAL_PROMPTS.includes(activeCommand.prompt)
+	);
 	const isRunningWithConversation =
-		activeCommand?.status === 'running' &&
+		isRunning &&
 		activeCommand.result_data &&
 		Array.isArray(activeCommand.result_data.messages);
 
-	const shouldShow = isAwaitingInput || isRunningWithConversation;
+	// Conversational commands open the sidebar the moment they're pending,
+	// so the user sees the processing indicator instead of staring at
+	// nothing while the MCP server spins up.
+	const shouldShow =
+		isAwaitingInput ||
+		isRunningWithConversation ||
+		(isInFlight && isConversationalCommand);
+	const shouldShowProcessing = shouldShow && isInFlight && !isAwaitingInput;
 
 	const conversationData = activeCommand
 		? getConversationData(activeCommand.result_data)
@@ -104,23 +149,40 @@ export default function ConversationPanel() {
 	const inputPrompt = conversationData?.input_prompt;
 	const planReady = activeCommand?.result_data?.planReady === true;
 
-	// Auto-open the sidebar when entering awaiting_input state or on
-	// initial mount with an existing awaiting_input command.
-	const { enableComplementaryArea } = useDispatch('core/interface') as {
+	const { enableComplementaryArea, disableComplementaryArea } = useDispatch(
+		'core/interface'
+	) as {
 		enableComplementaryArea: (scope: string, id: string) => void;
+		disableComplementaryArea: (scope: string) => void;
 	};
 
 	useEffect(() => {
 		const currentStatus = activeCommand?.status ?? null;
+		const prevStatus = prevStatusRef.current;
 
-		if (
+		const enteredAwaitingInput =
 			currentStatus === 'awaiting_input' &&
-			prevStatusRef.current !== 'awaiting_input'
-		) {
+			prevStatus !== 'awaiting_input';
+		// Fire once when a conversational command first enters an in-flight
+		// status; don't re-fire on pending → running transitions.
+		const inFlightStatuses: readonly (string | null)[] = [
+			'pending',
+			'running',
+		];
+		const startedConversationalCommand =
+			isConversationalCommand &&
+			inFlightStatuses.includes(currentStatus) &&
+			!inFlightStatuses.includes(prevStatus);
+
+		if (enteredAwaitingInput || startedConversationalCommand) {
 			enableComplementaryArea?.('core', SIDEBAR_ID);
 		}
 		prevStatusRef.current = currentStatus;
-	}, [activeCommand?.status, enableComplementaryArea]);
+	}, [
+		activeCommand?.status,
+		isConversationalCommand,
+		enableComplementaryArea,
+	]);
 
 	// Auto-scroll to bottom when messages change
 	useEffect(() => {
@@ -136,6 +198,38 @@ export default function ConversationPanel() {
 			return () => clearTimeout(timer);
 		}
 	}, [isAwaitingInput]);
+
+	// Close actions (built-in close button, Cancel button, switching to
+	// another sidebar) all route through `disableComplementaryArea`, which
+	// flips `isSidebarActive` false. When that happens while a non-terminal
+	// command is loaded, cancel it — one watcher for every close path.
+	const isCommandActive = !!(
+		activeCommand &&
+		!TERMINAL_STATUSES.includes(
+			activeCommand.status as (typeof TERMINAL_STATUSES)[number]
+		)
+	);
+	const prevSidebarActiveRef = useRef(isSidebarActive);
+	useEffect(() => {
+		const wasActive = prevSidebarActiveRef.current;
+		prevSidebarActiveRef.current = isSidebarActive;
+		if (wasActive && !isSidebarActive && activeCommand && isCommandActive) {
+			cancel(activeCommand.id);
+		}
+	}, [isSidebarActive, activeCommand, isCommandActive, cancel]);
+
+	useEffect(() => {
+		if (!shouldShowProcessing) {
+			setProcessingWordIndex(0);
+			return;
+		}
+		const interval = setInterval(() => {
+			setProcessingWordIndex(
+				(index) => (index + 1) % PROCESSING_WORDS.length
+			);
+		}, PROCESSING_WORD_INTERVAL_MS);
+		return () => clearInterval(interval);
+	}, [shouldShowProcessing]);
 
 	if (!shouldShow) {
 		return null;
@@ -157,7 +251,7 @@ export default function ConversationPanel() {
 		);
 	};
 
-	const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+	const handleKeyDown = (e: ReactKeyboardEvent<HTMLTextAreaElement>) => {
 		if (e.key === 'Enter' && !e.shiftKey) {
 			e.preventDefault();
 			handleSend();
@@ -179,9 +273,9 @@ export default function ConversationPanel() {
 	};
 
 	const handleCancel = () => {
-		if (activeCommand) {
-			cancel(activeCommand.id);
-		}
+		// Closing via the store plays the slide-out animation; the watcher
+		// above cancels the actual command as the sidebar goes inactive.
+		disableComplementaryArea?.('core');
 	};
 
 	const commandLabel = getCommandLabel(activeCommand.prompt);
@@ -191,8 +285,17 @@ export default function ConversationPanel() {
 			name="conversation"
 			title={commandLabel}
 			isPinnable={false}
+			// @ts-expect-error `closeLabel` is supported by the underlying
+			// ComplementaryArea at runtime but not declared on PluginSidebar's
+			// upstream type. Remove this suppression once @wordpress/editor
+			// publishes the prop.
+			closeLabel={__(
+				'Close conversation panel',
+				'claudaborative-editing'
+			)}
 		>
-			<div className="wpce-conversation-panel">
+			<div className="wpce-conversation-panel" ref={containerRef}>
+				{resizeHandle}
 				<div className="wpce-conversation-panel__messages">
 					{messages.map((msg, index) => (
 						<div
@@ -205,15 +308,10 @@ export default function ConversationPanel() {
 						</div>
 					))}
 
-					{!isAwaitingInput && isRunningWithConversation && (
+					{shouldShowProcessing && (
 						<div className="wpce-conversation-panel__processing">
 							<SparkleIcon size={16} active processing />
-							<span>
-								{__(
-									'Processing\u2026',
-									'claudaborative-editing'
-								)}
-							</span>
+							<span>{PROCESSING_WORDS[processingWordIndex]}</span>
 						</div>
 					)}
 
