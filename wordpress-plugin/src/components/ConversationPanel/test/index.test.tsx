@@ -1656,15 +1656,54 @@ describe('ConversationPanel', () => {
 			});
 			expect(ancestor.style.width).toBe('380px');
 
-			// Browser loses capture mid-drag — should restore userSelect
-			// without persisting the in-progress width.
+			// Browser loses capture mid-drag — should restore userSelect,
+			// revert the DOM to the pre-drag width so it matches React
+			// state, and not persist.
 			act(() => {
 				handle.dispatchEvent(
 					new Event('lostpointercapture', { bubbles: true })
 				);
 			});
 			expect(document.body.style.userSelect).toBe('');
+			expect(ancestor.style.width).toBe('280px');
 			expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
+		});
+
+		it('tears down an in-progress drag when the sidebar deactivates', () => {
+			const { rerender } = mountWithAwaitingInput();
+
+			const handle = screen.getByRole('separator');
+			dispatchPointerEventWithId(handle, 'pointerdown', {
+				clientX: 500,
+				button: 0,
+				pointerId: 1,
+			});
+			dispatchPointerEventWithId(handle, 'pointermove', {
+				clientX: 400,
+				pointerId: 1,
+			});
+			expect(document.body.style.userSelect).toBe('none');
+
+			// Flip to a different sidebar (equivalent to close / switch)
+			// so our hook sees `isActive === false` while the drag is
+			// still in flight.
+			mockUseSelect(
+				new Map<unknown, Record<string, (...args: any[]) => any>>([
+					[aiActionsStore, { getCurrentPostId: () => 100 }],
+					[
+						'core/interface',
+						{
+							getActiveComplementaryArea: () =>
+								'edit-post/document',
+						},
+					],
+				])
+			);
+			act(() => {
+				rerender(<ConversationPanel />);
+			});
+
+			expect(document.body.style.userSelect).toBe('');
 		});
 
 		it('does not run cleanup twice if pointerup arrives after lostpointercapture', () => {

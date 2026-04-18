@@ -170,6 +170,9 @@ export function useResizableSidebar(isActive: boolean): ResizableSidebar {
 		// missing (unexpected layout change) we bail instead of applying a
 		// half-baked style.
 		if (!isActive || !skeleton || !complementary || !body) {
+			// Sidebar closed mid-drag — tear down the in-progress drag so
+			// `document.body.style.userSelect` doesn't stay stuck at 'none'.
+			dragCleanupRef.current?.();
 			if (wrapperRef.current) {
 				wrapperRef.current.remove();
 			}
@@ -278,6 +281,12 @@ export function useResizableSidebar(isActive: boolean): ResizableSidebar {
 				if (commit) {
 					setWidth(nextWidth);
 					writeStoredWidth(nextWidth);
+				} else {
+					// Revert DOM to pre-drag state so it matches React
+					// state and ARIA — otherwise the user would see the
+					// sidebar snap back on the next render.
+					applyWidth(targets, startWidth);
+					handleEl.style.right = `${startWidth - HANDLE_HALF_WIDTH}px`;
 				}
 				dragCleanupRef.current = null;
 			};
