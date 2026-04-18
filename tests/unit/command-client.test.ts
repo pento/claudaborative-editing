@@ -213,26 +213,31 @@ describe('CommandClient', () => {
 		});
 
 		it('does not schedule removal for non-terminal statuses', async () => {
-			const { localDoc } = createSyncedDocs();
-			const documentMap = localDoc.getMap('document');
-			client.startObserving(documentMap);
-			seedPending(documentMap, 8);
-
-			const running = fakeCommand({ id: 8, status: 'running' });
-			apiClient.request.mockResolvedValue(running);
-
-			await client.updateCommandStatus(8, 'running');
-
 			vi.useFakeTimers();
+			try {
+				const { localDoc } = createSyncedDocs();
+				const documentMap = localDoc.getMap('document');
+				client.startObserving(documentMap);
+				seedPending(documentMap, 8);
 
-			expect(documentMap.get('cmd_8')).toBeDefined();
+				const running = fakeCommand({ id: 8, status: 'running' });
+				apiClient.request.mockResolvedValue(running);
 
-			// Even after 5s, it should still be there
-			vi.advanceTimersByTime(5000);
+				// Flush microtasks so the awaited PATCH resolves under
+				// fake timers; updateCommandStatus short-circuits its
+				// awaitCommandInMap because cmd_8 is already seeded.
+				await vi.advanceTimersByTimeAsync(0);
+				await client.updateCommandStatus(8, 'running');
 
-			expect(documentMap.get('cmd_8')).toBeDefined();
+				expect(documentMap.get('cmd_8')).toBeDefined();
 
-			vi.useRealTimers();
+				// Even after 5 s, nothing should have scheduled the entry
+				// for removal.
+				await vi.advanceTimersByTimeAsync(5000);
+				expect(documentMap.get('cmd_8')).toBeDefined();
+			} finally {
+				vi.useRealTimers();
+			}
 		});
 
 		it('keeps failed commands in Y.Map for browser-side cleanup', async () => {

@@ -114,9 +114,10 @@ export class CommandClient {
 
 	/**
 	 * Start observing the provided Y.Map for command changes.
-	 * The concrete shared map is injected by the caller/session layer; this
-	 * method only depends on that map containing a 'commands' key whose value
-	 * is a plain object of command objects keyed by ID.
+	 * The concrete shared map is injected by the caller/session layer;
+	 * each command lives at its own `cmd_${id}` entry and is detected
+	 * via `isCommandKey`. Other keys in the map (e.g. `savedAt`) are
+	 * ignored.
 	 *
 	 * Called by CommandHandler after the command doc is synced.
 	 */
@@ -193,8 +194,9 @@ export class CommandClient {
 	 * Write a command object to the Y.Map after a successful REST call.
 	 * The update will be synced to the browser on the next poll cycle.
 	 *
-	 * Commands are stored under the 'commands' key in the document map,
-	 * matching core-data's entity record structure.
+	 * Each command is stored under its own `cmd_${id}` entry so that
+	 * concurrent writes targeting different commands commute, and
+	 * same-command writes stay causally ordered.
 	 */
 	writeCommandToDoc(command: Command): void {
 		const map = this.commandMap;
