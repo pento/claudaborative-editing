@@ -50,18 +50,29 @@ function clampWidth(width: number, max = getMaxWidth()): number {
  * Tracks the current max-width derived from `window.innerWidth`. Gutenberg
  * doesn't ship a useViewportWidth hook (`useViewportMatch` is
  * breakpoint-only, `useResizeObserver` targets a specific element), so we
- * subscribe to `window.resize` directly.
+ * subscribe to `window.resize` directly — but only when `enabled`, since
+ * `ConversationPanel` stays mounted as a plugin and would otherwise tie up
+ * a listener for the entire editor session even when the sidebar is closed.
+ *
+ * @param enabled Whether to subscribe to resize events.
+ * @return The clamped max-width that tracks the viewport while enabled.
  */
-function useViewportMaxWidth(): number {
+function useViewportMaxWidth(enabled: boolean): number {
 	const [maxWidth, setMaxWidth] = useState<number>(() => getMaxWidth());
 	useEffect(() => {
+		if (!enabled) {
+			return;
+		}
 		function handleResize(): void {
 			const next = getMaxWidth();
 			setMaxWidth((current) => (current === next ? current : next));
 		}
+		// Sync up on re-enable in case the viewport changed while the
+		// listener was detached.
+		handleResize();
 		window.addEventListener('resize', handleResize);
 		return () => window.removeEventListener('resize', handleResize);
-	}, []);
+	}, [enabled]);
 	return maxWidth;
 }
 
@@ -141,7 +152,7 @@ export function useResizableSidebar(isActive: boolean): ResizableSidebar {
 		setContainerNode(node);
 	}, []);
 	const [width, setWidth] = useState<number>(() => readStoredWidth());
-	const maxWidth = useViewportMaxWidth();
+	const maxWidth = useViewportMaxWidth(isActive);
 	// Portal target = a small wrapper we insert as `__sidebar`'s previous
 	// sibling inside `__body`. Putting it there means keyboard tab order
 	// reaches the handle before the sidebar content (otherwise it'd come

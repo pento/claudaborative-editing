@@ -1591,6 +1591,73 @@ describe('ConversationPanel', () => {
 			expect(window.localStorage.getItem(STORAGE_KEY)).toBe('300');
 		});
 
+		it('only subscribes to window.resize while the sidebar is active', () => {
+			const addSpy = jest.spyOn(window, 'addEventListener');
+			const removeSpy = jest.spyOn(window, 'removeEventListener');
+
+			// Start with a different sidebar active so our hook's
+			// `isActive` is false and no listener should be attached.
+			mockUseSelect(
+				new Map<unknown, Record<string, (...args: any[]) => any>>([
+					[aiActionsStore, { getCurrentPostId: () => 100 }],
+					[
+						'core/interface',
+						{
+							getActiveComplementaryArea: () =>
+								'edit-post/document',
+						},
+					],
+				])
+			);
+			const { rerender } = mountWithAwaitingInput();
+			expect(addSpy).not.toHaveBeenCalledWith(
+				'resize',
+				expect.any(Function)
+			);
+
+			// Activate our sidebar — listener attaches.
+			mockUseSelect(
+				new Map<unknown, Record<string, (...args: any[]) => any>>([
+					[aiActionsStore, { getCurrentPostId: () => 100 }],
+					[
+						'core/interface',
+						{
+							getActiveComplementaryArea: () =>
+								'claudaborative-editing-conversation/conversation',
+						},
+					],
+				])
+			);
+			act(() => {
+				rerender(<ConversationPanel />);
+			});
+			expect(addSpy).toHaveBeenCalledWith('resize', expect.any(Function));
+
+			// Deactivate — listener detaches.
+			mockUseSelect(
+				new Map<unknown, Record<string, (...args: any[]) => any>>([
+					[aiActionsStore, { getCurrentPostId: () => 100 }],
+					[
+						'core/interface',
+						{
+							getActiveComplementaryArea: () =>
+								'edit-post/document',
+						},
+					],
+				])
+			);
+			act(() => {
+				rerender(<ConversationPanel />);
+			});
+			expect(removeSpy).toHaveBeenCalledWith(
+				'resize',
+				expect.any(Function)
+			);
+
+			addSpy.mockRestore();
+			removeSpy.mockRestore();
+		});
+
 		it('ignores viewport resize events that do not change the max width', () => {
 			mountWithAwaitingInput();
 
