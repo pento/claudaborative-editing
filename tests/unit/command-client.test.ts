@@ -37,6 +37,14 @@ function fakeCommand(overrides?: Partial<Command>): Command {
 }
 
 /**
+ * Seed a pending command into the observed map so updateCommandStatus()
+ * finds it immediately and skips the sync-delivery wait.
+ */
+function seedPending(map: Y.Map<unknown>, id: number): void {
+	map.set(`cmd_${id}`, fakeCommand({ id, status: 'pending' }));
+}
+
+/**
  * Creates a pair of Y.Docs that simulate remote/local sync.
  * Changes on `remoteDoc` can be synced to `localDoc` via `syncToLocal()`.
  */
@@ -188,6 +196,7 @@ describe('CommandClient', () => {
 			const { localDoc } = createSyncedDocs();
 			const documentMap = localDoc.getMap('document');
 			client.startObserving(documentMap);
+			seedPending(documentMap, 7);
 
 			const completed = fakeCommand({ id: 7, status: 'completed' });
 			apiClient.request.mockResolvedValue(completed);
@@ -196,81 +205,75 @@ describe('CommandClient', () => {
 
 			// Terminal command should persist in the Y.Map (browser-side
 			// stale cleanup handles removal after processing).
-			const commands = documentMap.get('commands') as Record<
-				string,
-				unknown
-			>;
-			expect(commands['7']).toBeDefined();
-			expect((commands['7'] as { status: string }).status).toBe(
-				'completed'
-			);
+			const entry = documentMap.get('cmd_7') as
+				| { status: string }
+				| undefined;
+			expect(entry).toBeDefined();
+			expect(entry?.status).toBe('completed');
 		});
 
 		it('does not schedule removal for non-terminal statuses', async () => {
 			vi.useFakeTimers();
+			try {
+				const { localDoc } = createSyncedDocs();
+				const documentMap = localDoc.getMap('document');
+				client.startObserving(documentMap);
+				seedPending(documentMap, 8);
 
-			const { localDoc } = createSyncedDocs();
-			const documentMap = localDoc.getMap('document');
-			client.startObserving(documentMap);
+				const running = fakeCommand({ id: 8, status: 'running' });
+				apiClient.request.mockResolvedValue(running);
 
-			const running = fakeCommand({ id: 8, status: 'running' });
-			apiClient.request.mockResolvedValue(running);
+				// Flush microtasks so the awaited PATCH resolves under
+				// fake timers; updateCommandStatus short-circuits its
+				// awaitCommandInMap because cmd_8 is already seeded.
+				await vi.advanceTimersByTimeAsync(0);
+				await client.updateCommandStatus(8, 'running');
 
-			await client.updateCommandStatus(8, 'running');
+				expect(documentMap.get('cmd_8')).toBeDefined();
 
-			// Command should be in the Y.Map
-			let commands = documentMap.get('commands') as Record<
-				string,
-				unknown
-			>;
-			expect(commands['8']).toBeDefined();
-
-			// Even after 5s, it should still be there
-			vi.advanceTimersByTime(5000);
-
-			commands = documentMap.get('commands') as Record<string, unknown>;
-			expect(commands['8']).toBeDefined();
-
-			vi.useRealTimers();
+				// Even after 5 s, nothing should have scheduled the entry
+				// for removal.
+				await vi.advanceTimersByTimeAsync(5000);
+				expect(documentMap.get('cmd_8')).toBeDefined();
+			} finally {
+				vi.useRealTimers();
+			}
 		});
 
 		it('keeps failed commands in Y.Map for browser-side cleanup', async () => {
 			const { localDoc } = createSyncedDocs();
 			const documentMap = localDoc.getMap('document');
 			client.startObserving(documentMap);
+			seedPending(documentMap, 9);
 
 			const failed = fakeCommand({ id: 9, status: 'failed' });
 			apiClient.request.mockResolvedValue(failed);
 
 			await client.updateCommandStatus(9, 'failed', 'Something broke');
 
-			const commands = documentMap.get('commands') as Record<
-				string,
-				unknown
-			>;
-			expect(commands['9']).toBeDefined();
-			expect((commands['9'] as { status: string }).status).toBe('failed');
+			const entry = documentMap.get('cmd_9') as
+				| { status: string }
+				| undefined;
+			expect(entry).toBeDefined();
+			expect(entry?.status).toBe('failed');
 		});
 
 		it('writes the updated command to the Y.Map', async () => {
 			const { localDoc } = createSyncedDocs();
 			const documentMap = localDoc.getMap('document');
 			client.startObserving(documentMap);
+			seedPending(documentMap, 3);
 
 			const updated = fakeCommand({ id: 3, status: 'running' });
 			apiClient.request.mockResolvedValue(updated);
 
 			await client.updateCommandStatus(3, 'running');
 
-			const commands = documentMap.get('commands') as Record<
-				string,
-				unknown
-			>;
-			expect(commands).toBeDefined();
-			expect(commands['3']).toBeDefined();
-			expect((commands['3'] as Record<string, unknown>).status).toBe(
-				'running'
-			);
+			const entry = documentMap.get('cmd_3') as
+				| Record<string, unknown>
+				| undefined;
+			expect(entry).toBeDefined();
+			expect(entry?.status).toBe('running');
 		});
 
 		it('does not write to Y.Map when not observing', async () => {
@@ -281,6 +284,64 @@ describe('CommandClient', () => {
 
 			const result = await client.updateCommandStatus(3, 'running');
 			expect(result).toEqual(updated);
+		});
+
+		it('waits for the browser-origin pending write to arrive before mirroring', async () => {
+			// Simulates the ordering the observer-backed wait is meant to
+			// enforce: the REST PATCH resolves before sync has delivered
+			// the browser's pending write, and the mirror must hold off
+			// until the pending entry appears in the Y.Map.
+			const { remoteDoc, localDoc, syncToLocal } = createSyncedDocs();
+			const documentMap = localDoc.getMap('document');
+			client.startObserving(documentMap);
+
+			const running = fakeCommand({ id: 11, status: 'running' });
+			apiClient.request.mockResolvedValue(running);
+
+			const inFlight = client.updateCommandStatus(11, 'running');
+
+			// Y.Map is empty, so the mirror is stalled on awaitCommandInMap.
+			await Promise.resolve();
+			expect(documentMap.get('cmd_11')).toBeUndefined();
+
+			// Deliver the browser's pending write; the observer should
+			// unblock the wait and let the mirror complete.
+			const remoteMap = remoteDoc.getMap('document');
+			remoteMap.set('cmd_11', fakeCommand({ id: 11, status: 'pending' }));
+			syncToLocal();
+
+			await inFlight;
+
+			const entry = documentMap.get('cmd_11') as Command | undefined;
+			expect(entry?.status).toBe('running');
+		});
+
+		it('mirrors after the wait timeout when sync never delivers', async () => {
+			vi.useFakeTimers();
+			try {
+				const { localDoc } = createSyncedDocs();
+				const documentMap = localDoc.getMap('document');
+				client.startObserving(documentMap);
+
+				const failed = fakeCommand({ id: 12, status: 'failed' });
+				apiClient.request.mockResolvedValue(failed);
+
+				const inFlight = client.updateCommandStatus(12, 'failed');
+
+				// Give the REST request time to resolve so the code is
+				// parked inside awaitCommandInMap.
+				await vi.advanceTimersByTimeAsync(0);
+				expect(documentMap.get('cmd_12')).toBeUndefined();
+
+				// Advance past the 2 s timeout; the mirror should fall
+				// through and write anyway.
+				await vi.advanceTimersByTimeAsync(2000);
+				await inFlight;
+
+				expect(documentMap.get('cmd_12')).toBeDefined();
+			} finally {
+				vi.useRealTimers();
+			}
 		});
 	});
 
@@ -305,9 +366,7 @@ describe('CommandClient', () => {
 
 			// Write a pending command to the remote doc before observing
 			const remoteMap = remoteDoc.getMap('document');
-			remoteMap.set('commands', {
-				'10': fakeCommand({ id: 10, status: 'pending' }),
-			});
+			remoteMap.set('cmd_10', fakeCommand({ id: 10, status: 'pending' }));
 			syncToLocal();
 
 			const documentMap = localDoc.getMap('document');
@@ -345,9 +404,7 @@ describe('CommandClient', () => {
 
 			// Write a command after stop
 			const remoteMap = remoteDoc.getMap('document');
-			remoteMap.set('commands', {
-				'20': fakeCommand({ id: 20, status: 'pending' }),
-			});
+			remoteMap.set('cmd_20', fakeCommand({ id: 20, status: 'pending' }));
 			syncToLocal();
 
 			expect(onCommand).not.toHaveBeenCalled();
@@ -359,9 +416,7 @@ describe('CommandClient', () => {
 
 			// Write a command and observe
 			const remoteMap = remoteDoc.getMap('document');
-			remoteMap.set('commands', {
-				'30': fakeCommand({ id: 30, status: 'pending' }),
-			});
+			remoteMap.set('cmd_30', fakeCommand({ id: 30, status: 'pending' }));
 			syncToLocal();
 
 			client.startObserving(documentMap);
@@ -404,13 +459,14 @@ describe('CommandClient', () => {
 
 			// Remote browser writes a pending command
 			const remoteMap = remoteDoc.getMap('document');
-			remoteMap.set('commands', {
-				'50': fakeCommand({
+			remoteMap.set(
+				'cmd_50',
+				fakeCommand({
 					id: 50,
 					status: 'pending',
 					prompt: 'review',
-				}),
-			});
+				})
+			);
 			syncToLocal();
 
 			expect(onCommand).toHaveBeenCalledOnce();
@@ -429,10 +485,8 @@ describe('CommandClient', () => {
 			client.startObserving(documentMap);
 
 			const remoteMap = remoteDoc.getMap('document');
-			remoteMap.set('commands', {
-				'51': fakeCommand({ id: 51, status: 'pending' }),
-				'52': fakeCommand({ id: 52, status: 'pending' }),
-			});
+			remoteMap.set('cmd_51', fakeCommand({ id: 51, status: 'pending' }));
+			remoteMap.set('cmd_52', fakeCommand({ id: 52, status: 'pending' }));
 			syncToLocal();
 
 			expect(onCommand).toHaveBeenCalledTimes(2);
@@ -444,9 +498,7 @@ describe('CommandClient', () => {
 			client.startObserving(documentMap);
 
 			const remoteMap = remoteDoc.getMap('document');
-			remoteMap.set('commands', {
-				'60': fakeCommand({ id: 60, status: 'running' }),
-			});
+			remoteMap.set('cmd_60', fakeCommand({ id: 60, status: 'running' }));
 			syncToLocal();
 
 			expect(onCommand).not.toHaveBeenCalled();
@@ -458,9 +510,10 @@ describe('CommandClient', () => {
 			client.startObserving(documentMap);
 
 			// Local write (e.g., status update written by MCP server)
-			documentMap.set('commands', {
-				'70': fakeCommand({ id: 70, status: 'pending' }),
-			});
+			documentMap.set(
+				'cmd_70',
+				fakeCommand({ id: 70, status: 'pending' })
+			);
 
 			// The initial processAllCommands in startObserving would
 			// have seen the empty map, so onCommand should only be
@@ -480,9 +533,25 @@ describe('CommandClient', () => {
 			client.startObserving(documentMap);
 
 			const remoteMap = remoteDoc.getMap('document');
-			remoteMap.set('commands', {
-				bad: { status: 'pending', prompt: 'proofread' },
+			remoteMap.set('cmd_bad', {
+				status: 'pending',
+				prompt: 'proofread',
 			});
+			syncToLocal();
+
+			expect(onCommand).not.toHaveBeenCalled();
+		});
+
+		it('skips entries whose stored id does not match the key suffix', () => {
+			const { remoteDoc, localDoc, syncToLocal } = createSyncedDocs();
+			const documentMap = localDoc.getMap('document');
+			client.startObserving(documentMap);
+
+			// Mismatched entry: stored under cmd_70 but carries id 71.
+			// Can't be looked up or removed consistently, so it must be
+			// ignored rather than dispatched under id 71.
+			const remoteMap = remoteDoc.getMap('document');
+			remoteMap.set('cmd_70', fakeCommand({ id: 71, status: 'pending' }));
 			syncToLocal();
 
 			expect(onCommand).not.toHaveBeenCalled();
@@ -503,14 +572,14 @@ describe('CommandClient', () => {
 			const cmd = fakeCommand({ id: 80, status: 'pending' });
 
 			// First sync
-			remoteMap.set('commands', { '80': cmd });
+			remoteMap.set('cmd_80', cmd);
 			syncToLocal();
 			expect(onCommand).toHaveBeenCalledOnce();
 
 			onCommand.mockClear();
 
 			// Second sync with same command (e.g., another field in the map changes)
-			remoteMap.set('commands', { '80': cmd });
+			remoteMap.set('cmd_80', { ...cmd });
 			syncToLocal();
 			expect(onCommand).not.toHaveBeenCalled();
 		});
@@ -520,9 +589,7 @@ describe('CommandClient', () => {
 
 			// Pre-populate
 			const remoteMap = remoteDoc.getMap('document');
-			remoteMap.set('commands', {
-				'81': fakeCommand({ id: 81, status: 'pending' }),
-			});
+			remoteMap.set('cmd_81', fakeCommand({ id: 81, status: 'pending' }));
 			syncToLocal();
 
 			const documentMap = localDoc.getMap('document');
@@ -531,9 +598,7 @@ describe('CommandClient', () => {
 			onCommand.mockClear();
 
 			// Sync again with same data — should not re-notify
-			remoteMap.set('commands', {
-				'81': fakeCommand({ id: 81, status: 'pending' }),
-			});
+			remoteMap.set('cmd_81', fakeCommand({ id: 81, status: 'pending' }));
 			syncToLocal();
 			expect(onCommand).not.toHaveBeenCalled();
 		});
@@ -552,22 +617,18 @@ describe('CommandClient', () => {
 			const remoteMap = remoteDoc.getMap('document');
 
 			// Add a pending command — it gets tracked in notifiedPendingIds.
-			remoteMap.set('commands', {
-				'90': fakeCommand({ id: 90, status: 'pending' }),
-			});
+			remoteMap.set('cmd_90', fakeCommand({ id: 90, status: 'pending' }));
 			syncToLocal();
 			expect(onCommand).toHaveBeenCalledOnce();
 			onCommand.mockClear();
 
 			// Remove the command from the Y.Map (simulates terminal cleanup).
-			remoteMap.set('commands', {});
+			remoteMap.delete('cmd_90');
 			syncToLocal();
 
 			// Re-add the same command — should be notified again because
 			// the pruning cleared the tracked ID.
-			remoteMap.set('commands', {
-				'90': fakeCommand({ id: 90, status: 'pending' }),
-			});
+			remoteMap.set('cmd_90', fakeCommand({ id: 90, status: 'pending' }));
 			syncToLocal();
 			expect(onCommand).toHaveBeenCalledOnce();
 		});
@@ -590,18 +651,18 @@ describe('CommandClient', () => {
 					],
 				},
 			});
-			remoteMap.set('commands', { '91': cmd });
+			remoteMap.set('cmd_91', cmd);
 			syncToLocal();
 			expect(onResponse).toHaveBeenCalledOnce();
 			onResponse.mockClear();
 
 			// Remove the command.
-			remoteMap.set('commands', {});
+			remoteMap.delete('cmd_91');
 			syncToLocal();
 
 			// Re-add with same message count — should trigger onResponse
 			// again because the pruning cleared the tracked count.
-			remoteMap.set('commands', { '91': cmd });
+			remoteMap.set('cmd_91', { ...cmd });
 			syncToLocal();
 			expect(onResponse).toHaveBeenCalledOnce();
 		});
@@ -617,8 +678,9 @@ describe('CommandClient', () => {
 
 			// Pre-populate a running command with user messages BEFORE observing
 			const remoteMap = remoteDoc.getMap('document');
-			remoteMap.set('commands', {
-				'200': fakeCommand({
+			remoteMap.set(
+				'cmd_200',
+				fakeCommand({
 					id: 200,
 					status: 'running',
 					result_data: {
@@ -627,8 +689,8 @@ describe('CommandClient', () => {
 							{ role: 'assistant', content: 'Working on it' },
 						],
 					},
-				}),
-			});
+				})
+			);
 			syncToLocal();
 
 			const documentMap = localDoc.getMap('document');
@@ -643,8 +705,9 @@ describe('CommandClient', () => {
 
 			// Pre-populate a running command with one user message
 			const remoteMap = remoteDoc.getMap('document');
-			remoteMap.set('commands', {
-				'201': fakeCommand({
+			remoteMap.set(
+				'cmd_201',
+				fakeCommand({
 					id: 201,
 					status: 'running',
 					result_data: {
@@ -653,8 +716,8 @@ describe('CommandClient', () => {
 							{ role: 'assistant', content: 'Got it' },
 						],
 					},
-				}),
-			});
+				})
+			);
 			syncToLocal();
 
 			const documentMap = localDoc.getMap('document');
@@ -662,8 +725,9 @@ describe('CommandClient', () => {
 			expect(onResponse).not.toHaveBeenCalled();
 
 			// Now a NEW user message arrives via remote sync
-			remoteMap.set('commands', {
-				'201': fakeCommand({
+			remoteMap.set(
+				'cmd_201',
+				fakeCommand({
 					id: 201,
 					status: 'running',
 					result_data: {
@@ -673,8 +737,8 @@ describe('CommandClient', () => {
 							{ role: 'user', content: 'Second message' },
 						],
 					},
-				}),
-			});
+				})
+			);
 			syncToLocal();
 
 			expect(onResponse).toHaveBeenCalledOnce();
@@ -688,15 +752,19 @@ describe('CommandClient', () => {
 
 			// Pre-populate multiple running commands with messages
 			const remoteMap = remoteDoc.getMap('document');
-			remoteMap.set('commands', {
-				'202': fakeCommand({
+			remoteMap.set(
+				'cmd_202',
+				fakeCommand({
 					id: 202,
 					status: 'running',
 					result_data: {
 						messages: [{ role: 'user', content: 'Message A' }],
 					},
-				}),
-				'203': fakeCommand({
+				})
+			);
+			remoteMap.set(
+				'cmd_203',
+				fakeCommand({
 					id: 203,
 					status: 'running',
 					result_data: {
@@ -705,8 +773,8 @@ describe('CommandClient', () => {
 							{ role: 'user', content: 'Message C' },
 						],
 					},
-				}),
-			});
+				})
+			);
 			syncToLocal();
 
 			const documentMap = localDoc.getMap('document');
@@ -730,8 +798,9 @@ describe('CommandClient', () => {
 			const remoteMap = remoteDoc.getMap('document');
 
 			// First: command arrives as running (claimed by MCP)
-			remoteMap.set('commands', {
-				'90': fakeCommand({
+			remoteMap.set(
+				'cmd_90',
+				fakeCommand({
 					id: 90,
 					status: 'running',
 					result_data: {
@@ -739,14 +808,15 @@ describe('CommandClient', () => {
 							{ role: 'assistant', content: 'Working on it...' },
 						],
 					},
-				}),
-			});
+				})
+			);
 			syncToLocal();
 			expect(onResponse).not.toHaveBeenCalled();
 
 			// User sends a message
-			remoteMap.set('commands', {
-				'90': fakeCommand({
+			remoteMap.set(
+				'cmd_90',
+				fakeCommand({
 					id: 90,
 					status: 'running',
 					result_data: {
@@ -758,8 +828,8 @@ describe('CommandClient', () => {
 							},
 						],
 					},
-				}),
-			});
+				})
+			);
 			syncToLocal();
 			expect(onResponse).toHaveBeenCalledOnce();
 			expect(onResponse).toHaveBeenCalledWith(
@@ -777,8 +847,9 @@ describe('CommandClient', () => {
 
 			const remoteMap = remoteDoc.getMap('document');
 
-			const cmdData = {
-				'91': fakeCommand({
+			remoteMap.set(
+				'cmd_91',
+				fakeCommand({
 					id: 91,
 					status: 'running',
 					result_data: {
@@ -787,17 +858,16 @@ describe('CommandClient', () => {
 							{ role: 'assistant', content: 'Done.' },
 						],
 					},
-				}),
-			};
-
-			remoteMap.set('commands', cmdData);
+				})
+			);
 			syncToLocal();
 			expect(onResponse).toHaveBeenCalledOnce();
 			onResponse.mockClear();
 
 			// Sync again with same message count — no new notification
-			remoteMap.set('commands', {
-				'91': fakeCommand({
+			remoteMap.set(
+				'cmd_91',
+				fakeCommand({
 					id: 91,
 					status: 'running',
 					result_data: {
@@ -806,8 +876,8 @@ describe('CommandClient', () => {
 							{ role: 'assistant', content: 'Done, updated.' },
 						],
 					},
-				}),
-			});
+				})
+			);
 			syncToLocal();
 			expect(onResponse).not.toHaveBeenCalled();
 		});
@@ -820,15 +890,16 @@ describe('CommandClient', () => {
 			const remoteMap = remoteDoc.getMap('document');
 
 			// Completed command with messages — should not trigger response
-			remoteMap.set('commands', {
-				'92': fakeCommand({
+			remoteMap.set(
+				'cmd_92',
+				fakeCommand({
 					id: 92,
 					status: 'completed',
 					result_data: {
 						messages: [{ role: 'user', content: 'Thanks' }],
 					},
-				}),
-			});
+				})
+			);
 			syncToLocal();
 			expect(onResponse).not.toHaveBeenCalled();
 		});
@@ -840,13 +911,14 @@ describe('CommandClient', () => {
 
 			const remoteMap = remoteDoc.getMap('document');
 
-			remoteMap.set('commands', {
-				'93': fakeCommand({
+			remoteMap.set(
+				'cmd_93',
+				fakeCommand({
 					id: 93,
 					status: 'running',
 					result_data: { some_other_field: true },
-				}),
-			});
+				})
+			);
 			syncToLocal();
 			expect(onResponse).not.toHaveBeenCalled();
 		});
@@ -859,22 +931,24 @@ describe('CommandClient', () => {
 			const remoteMap = remoteDoc.getMap('document');
 
 			// First user message
-			remoteMap.set('commands', {
-				'94': fakeCommand({
+			remoteMap.set(
+				'cmd_94',
+				fakeCommand({
 					id: 94,
 					status: 'running',
 					result_data: {
 						messages: [{ role: 'user', content: 'First question' }],
 					},
-				}),
-			});
+				})
+			);
 			syncToLocal();
 			expect(onResponse).toHaveBeenCalledOnce();
 			onResponse.mockClear();
 
 			// Second user message
-			remoteMap.set('commands', {
-				'94': fakeCommand({
+			remoteMap.set(
+				'cmd_94',
+				fakeCommand({
 					id: 94,
 					status: 'running',
 					result_data: {
@@ -884,8 +958,8 @@ describe('CommandClient', () => {
 							{ role: 'user', content: 'Follow-up question' },
 						],
 					},
-				}),
-			});
+				})
+			);
 			syncToLocal();
 			expect(onResponse).toHaveBeenCalledOnce();
 		});
@@ -896,7 +970,7 @@ describe('CommandClient', () => {
 	// -------------------------------------------------------
 
 	describe('writeCommandToDoc()', () => {
-		it('sets the command under the commands key in the Y.Map', () => {
+		it('sets the command under its dedicated key in the Y.Map', () => {
 			const { localDoc } = createSyncedDocs();
 			const documentMap = localDoc.getMap('document');
 			client.startObserving(documentMap);
@@ -904,14 +978,10 @@ describe('CommandClient', () => {
 			const cmd = fakeCommand({ id: 100, status: 'running' });
 			client.writeCommandToDoc(cmd);
 
-			const commands = documentMap.get('commands') as Record<
-				string,
-				unknown
-			>;
-			expect(commands).toBeDefined();
-			expect(commands['100']).toBeDefined();
-			expect((commands['100'] as Command).id).toBe(100);
-			expect((commands['100'] as Command).status).toBe('running');
+			const entry = documentMap.get('cmd_100') as Command | undefined;
+			expect(entry).toBeDefined();
+			expect(entry?.id).toBe(100);
+			expect(entry?.status).toBe('running');
 		});
 
 		it('uses LOCAL_ORIGIN so updates are queued for sync', () => {
@@ -943,12 +1013,32 @@ describe('CommandClient', () => {
 				fakeCommand({ id: 102, status: 'running' })
 			);
 
-			const commands = documentMap.get('commands') as Record<
-				string,
-				unknown
-			>;
-			expect(commands['101']).toBeDefined();
-			expect(commands['102']).toBeDefined();
+			expect(documentMap.get('cmd_101')).toBeDefined();
+			expect(documentMap.get('cmd_102')).toBeDefined();
+		});
+
+		it('skips writes that would downgrade a terminal status', () => {
+			// Guards against a late-arriving stale REST response (e.g.
+			// the server's auto-claim → running resolving after the
+			// caller's → completed) clobbering the fresh terminal state.
+			const { localDoc } = createSyncedDocs();
+			const documentMap = localDoc.getMap('document');
+			client.startObserving(documentMap);
+
+			client.writeCommandToDoc(
+				fakeCommand({
+					id: 105,
+					status: 'completed',
+					message: 'All done',
+				})
+			);
+			client.writeCommandToDoc(
+				fakeCommand({ id: 105, status: 'running' })
+			);
+
+			const entry = documentMap.get('cmd_105') as Command | undefined;
+			expect(entry?.status).toBe('completed');
+			expect(entry?.message).toBe('All done');
 		});
 
 		it('is a no-op when not observing', () => {
@@ -964,7 +1054,7 @@ describe('CommandClient', () => {
 	// -------------------------------------------------------
 
 	describe('removeCommandFromDoc()', () => {
-		it('removes a command from the commands key in the Y.Map', () => {
+		it('removes a command entry from the Y.Map', () => {
 			const { localDoc } = createSyncedDocs();
 			const documentMap = localDoc.getMap('document');
 			client.startObserving(documentMap);
@@ -978,12 +1068,8 @@ describe('CommandClient', () => {
 
 			client.removeCommandFromDoc(110);
 
-			const commands = documentMap.get('commands') as Record<
-				string,
-				unknown
-			>;
-			expect(commands['110']).toBeUndefined();
-			expect(commands['111']).toBeDefined();
+			expect(documentMap.get('cmd_110')).toBeUndefined();
+			expect(documentMap.get('cmd_111')).toBeDefined();
 		});
 
 		it('uses LOCAL_ORIGIN so updates are queued for sync', () => {
@@ -1091,9 +1177,10 @@ describe('CommandClient', () => {
 			debugSpy.mockClear();
 
 			const remoteMap = remoteDoc.getMap('document');
-			remoteMap.set('commands', {
-				'300': fakeCommand({ id: 300, status: 'pending' }),
-			});
+			remoteMap.set(
+				'cmd_300',
+				fakeCommand({ id: 300, status: 'pending' })
+			);
 			syncToLocal();
 
 			expect(debugSpy).toHaveBeenCalledWith(
@@ -1108,9 +1195,10 @@ describe('CommandClient', () => {
 		it('logs processAllCommands details when debug is enabled', () => {
 			const { remoteDoc, localDoc, syncToLocal } = createSyncedDocs();
 			const remoteMap = remoteDoc.getMap('document');
-			remoteMap.set('commands', {
-				'301': fakeCommand({ id: 301, status: 'pending' }),
-			});
+			remoteMap.set(
+				'cmd_301',
+				fakeCommand({ id: 301, status: 'pending' })
+			);
 			syncToLocal();
 
 			const documentMap = localDoc.getMap('document');
@@ -1118,17 +1206,9 @@ describe('CommandClient', () => {
 
 			expect(debugSpy).toHaveBeenCalledWith(
 				'cmd-client',
-				'processAllCommands, raw type:',
-				'object',
-				'value:',
-				expect.any(String)
-			);
-			expect(debugSpy).toHaveBeenCalledWith(
-				'cmd-client',
-				'Found',
+				'processAllCommands: found',
 				1,
-				'commands:',
-				['301']
+				'commands'
 			);
 		});
 	});

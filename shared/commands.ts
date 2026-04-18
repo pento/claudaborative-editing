@@ -164,6 +164,35 @@ export const VALID_TRANSITIONS: Readonly<
 	awaiting_input: ['running', 'cancelled'],
 } as const;
 
+// --- Y.Doc schema ---
+
+/**
+ * Prefix for per-command keys in the shared command state map. Each
+ * command lives at `cmd_${id}` as an individual Y.Map entry rather than
+ * packed into a single `commands` object — Y.Map tiebreaks can otherwise
+ * silently pick one client's write and discard another's when they both
+ * set the same key.
+ */
+export const COMMAND_KEY_PREFIX = 'cmd_';
+export const commandKey = (id: number | string): string =>
+	`${COMMAND_KEY_PREFIX}${id}`;
+export const isCommandKey = (key: string): boolean =>
+	key.startsWith(COMMAND_KEY_PREFIX);
+
+/**
+ * Extract the numeric command id from a `cmd_${id}` key, or `null` if
+ * the key isn't a command key or doesn't carry a valid positive
+ * integer suffix. Readers use this instead of trusting the `id` field
+ * inside the stored value, so a corrupted entry (e.g. `cmd_42` with
+ * `{ id: 43 }`) can't be silently processed under the wrong id.
+ */
+export function commandIdFromKey(key: string): number | null {
+	if (!isCommandKey(key)) return null;
+	const raw = key.slice(COMMAND_KEY_PREFIX.length);
+	if (!/^[1-9][0-9]*$/.test(raw)) return null;
+	return Number(raw);
+}
+
 // --- Conversation types ---
 
 /** A single message in a two-way command conversation. */

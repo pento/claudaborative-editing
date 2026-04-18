@@ -23,7 +23,12 @@ import apiFetch from '@wordpress/api-fetch';
 import { Y, Awareness } from '@wordpress/sync';
 // eslint-disable-next-line import/no-extraneous-dependencies -- externalized by @wordpress/scripts
 import { addFilter } from '@wordpress/hooks';
-import { TERMINAL_STATUSES } from '#shared/commands';
+import {
+	TERMINAL_STATUSES,
+	commandIdFromKey,
+	commandKey,
+	isCommandKey,
+} from '#shared/commands';
 import { store as coreDataStore } from '@wordpress/core-data';
 
 /**
@@ -287,10 +292,8 @@ async function startStaleCommandCleanup(): Promise<void> {
 		const stateMap = getStateMap();
 		if (!stateMap) return;
 
-		const commands = stateMap.get('commands') as
-			| Record<string, unknown>
-			| undefined;
-		if (!commands || Object.keys(commands).length === 0) return;
+		const current = collectCommandsFromStateMap(stateMap);
+		if (Object.keys(current).length === 0) return;
 
 		try {
 			// Per-user room: all commands belong to the current user,
@@ -304,19 +307,25 @@ async function startStaleCommandCleanup(): Promise<void> {
 					.map((c) => String(c.id))
 			);
 
-			const cleaned: Record<string, unknown> = {};
-			let changed = false;
-			for (const [id, value] of Object.entries(commands)) {
-				if (activeIds.has(id)) {
-					cleaned[id] = value;
-				} else {
-					changed = true;
+			const toRemove: string[] = [];
+			for (const [id, cmd] of Object.entries(current)) {
+				if (activeIds.has(id)) continue;
+				// Only remove commands that have already reached a terminal
+				// state in the local Y.Doc. If REST reports terminal but the
+				// Y.Doc still holds a non-terminal status, the terminal
+				// update is in flight from the MCP server — removing it now
+				// would drop the transition before handleSyncUpdate can
+				// dispatch CLEAR_ACTIVE_COMMAND.
+				if (cmd && TERMINAL_STATUSES.includes(cmd.status)) {
+					toRemove.push(id);
 				}
 			}
 
-			if (changed) {
+			if (toRemove.length > 0) {
 				commandDoc?.transact(() => {
-					stateMap.set('commands', cleaned);
+					for (const id of toRemove) {
+						stateMap.delete(commandKey(id));
+					}
 					stateMap.set('savedAt', Date.now());
 				});
 				commandDocDirty = true;
@@ -357,24 +366,21 @@ function flushPendingWrites(): boolean {
 }
 
 /**
- * Apply a single command write to the state map.
+ * Apply a single command write to the state map. Writes to a dedicated
+ * `cmd_${id}` key so the write only affects that command's item — no
+ * chance of clobbering concurrent updates for other commands, and
+ * same-command writes from the MCP stay causally ordered.
  * @param stateMap
  * @param command
  */
 function applyCommandToStateMap(stateMap: YMap, command: Command): void {
-	const commands = {
-		...((stateMap.get('commands') as Record<string, unknown> | undefined) ??
-			{}),
-	};
-
-	if (TERMINAL_STATUSES.includes(command.status)) {
-		delete commands[String(command.id)];
-	} else {
-		commands[String(command.id)] = { ...command };
-	}
-
+	const key = commandKey(command.id);
 	commandDoc?.transact(() => {
-		stateMap.set('commands', commands);
+		if (TERMINAL_STATUSES.includes(command.status)) {
+			stateMap.delete(key);
+		} else {
+			stateMap.set(key, { ...command });
+		}
 		stateMap.set('savedAt', Date.now());
 	});
 
@@ -429,19 +435,34 @@ export function removeCommandFromSync(commandId: number): void {
 	const stateMap = getStateMap();
 	if (!stateMap) return;
 
-	const commands = {
-		...((stateMap.get('commands') as Record<string, unknown> | undefined) ??
-			{}),
-	};
-
-	delete commands[String(commandId)];
-
 	commandDoc?.transact(() => {
-		stateMap.set('commands', commands);
+		stateMap.delete(commandKey(commandId));
 		stateMap.set('savedAt', Date.now());
 	});
 
 	commandDocDirty = true;
+}
+
+/**
+ * Collect all commands stored as `cmd_${id}` entries in the state map.
+ * Returns an ID-keyed record so callers can keep the previous shape.
+ *
+ * @param stateMap The state Y.Map to read from.
+ */
+function collectCommandsFromStateMap(stateMap: YMap): Record<string, Command> {
+	const result: Record<string, Command> = {};
+	stateMap.forEach((value, key) => {
+		const id = commandIdFromKey(key);
+		if (id === null) return;
+		if (!value || typeof value !== 'object') return;
+		const cmd = value as Command;
+		// Drop entries whose stored `id` doesn't match the key suffix;
+		// they can't be looked up or removed consistently so treat them
+		// as corrupt.
+		if (cmd.id !== id) return;
+		result[String(id)] = cmd;
+	});
+	return result;
 }
 
 /**
@@ -450,8 +471,7 @@ export function removeCommandFromSync(commandId: number): void {
 export function getCommandsFromSync(): Record<string, Command> {
 	const stateMap = getStateMap();
 	if (!stateMap) return {};
-
-	return (stateMap.get('commands') as Record<string, Command>) ?? {};
+	return collectCommandsFromStateMap(stateMap);
 }
 
 /**
@@ -485,10 +505,15 @@ export function subscribeToCommandSync(
 		observedMap = stateMap;
 
 		observer = (event: YMapEvent) => {
-			if (!event.changes.keys.has('commands')) return;
-			callback(
-				(stateMap.get('commands') as Record<string, Command>) ?? {}
-			);
+			let touched = false;
+			for (const key of event.changes.keys.keys()) {
+				if (isCommandKey(key)) {
+					touched = true;
+					break;
+				}
+			}
+			if (!touched) return;
+			callback(collectCommandsFromStateMap(stateMap));
 		};
 
 		stateMap.observe(observer);
