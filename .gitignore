@@ -6,6 +6,7 @@ coverage/
 test-results/
 .DS_Store
 .claude/
+.playwright-mcp/
 wordpress-plugin/build/
 wordpress-plugin/node_modules/
 wordpress-plugin/vendor/

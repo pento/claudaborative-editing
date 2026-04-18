@@ -9,6 +9,67 @@
 	}
 }
 
+// Resize handle is portalled into `.interface-interface-skeleton__body`
+// (a sibling container to the sidebar) so the pill can straddle the seam
+// between editor and sidebar without being clipped by the skeleton sidebar's
+// own overflow. Its horizontal position is set inline via `right: {width-3}px`
+// so the 7px grab zone stays centered on that seam as the sidebar resizes.
+// stylelint-disable-next-line selector-class-pattern -- WordPress core class.
+.interface-interface-skeleton__body > .wpce-conversation-panel__resize-handle {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	width: 7px;
+	cursor: ew-resize;
+	z-index: 100000;
+	touch-action: none;
+	background: transparent;
+
+	// Full-height seam line that covers the sidebar's 1px border-left so
+	// the entire edge picks up the theme colour on hover.
+	&::before {
+		content: "";
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		left: 50%;
+		transform: translateX(-50%);
+		width: 1px;
+		background: transparent;
+		transition: background 150ms ease-in-out;
+	}
+
+	&::after {
+		content: "";
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		transform: translate(-50%, -50%);
+		width: 3px;
+		height: 32px;
+		border-radius: 2px;
+		background: #bbb;
+		transition:
+			background 150ms ease-in-out,
+			width 150ms ease-in-out,
+			border-radius 150ms ease-in-out;
+	}
+
+	&:hover,
+	&:focus-visible,
+	&:active {
+		&::before {
+			background: var(--wp-admin-theme-color, #3858e9);
+		}
+
+		&::after {
+			background: var(--wp-admin-theme-color, #3858e9);
+			width: 5px;
+			border-radius: 3px;
+		}
+	}
+}
+
 .wpce-conversation-panel {
 	display: flex;
 	flex-direction: column;
