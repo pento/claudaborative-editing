@@ -46,6 +46,25 @@ function clampWidth(width: number, max = getMaxWidth()): number {
 	return Math.min(max, Math.max(MIN_WIDTH, width));
 }
 
+/**
+ * Tracks the current max-width derived from `window.innerWidth`. Gutenberg
+ * doesn't ship a useViewportWidth hook (`useViewportMatch` is
+ * breakpoint-only, `useResizeObserver` targets a specific element), so we
+ * subscribe to `window.resize` directly.
+ */
+function useViewportMaxWidth(): number {
+	const [maxWidth, setMaxWidth] = useState<number>(() => getMaxWidth());
+	useEffect(() => {
+		function handleResize(): void {
+			const next = getMaxWidth();
+			setMaxWidth((current) => (current === next ? current : next));
+		}
+		window.addEventListener('resize', handleResize);
+		return () => window.removeEventListener('resize', handleResize);
+	}, []);
+	return maxWidth;
+}
+
 function readStoredWidth(): number {
 	try {
 		const raw = window.localStorage.getItem(STORAGE_KEY);
@@ -122,12 +141,26 @@ export function useResizableSidebar(isActive: boolean): ResizableSidebar {
 		setContainerNode(node);
 	}, []);
 	const [width, setWidth] = useState<number>(() => readStoredWidth());
+	const maxWidth = useViewportMaxWidth();
 	// Portal target = a small wrapper we insert as `__sidebar`'s previous
 	// sibling inside `__body`. Putting it there means keyboard tab order
 	// reaches the handle before the sidebar content (otherwise it'd come
 	// last, after every control inside the panel).
 	const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
 	const wrapperRef = useRef<HTMLDivElement | null>(null);
+	// Stores the current drag's teardown so we can run it from any exit
+	// path (pointerup, pointercancel, lostpointercapture, or component
+	// unmount) without leaving `userSelect: none` stuck on the body.
+	const dragCleanupRef = useRef<(() => void) | null>(null);
+
+	// If the viewport shrinks below the stored width, clamp down so we
+	// never display a sidebar wider than the allowed maximum.
+	useEffect(() => {
+		setWidth((current) => {
+			const clamped = clampWidth(current, maxWidth);
+			return clamped === current ? current : clamped;
+		});
+	}, [maxWidth]);
 
 	useLayoutEffect(() => {
 		const { complementary, skeleton, body } =
@@ -172,10 +205,12 @@ export function useResizableSidebar(isActive: boolean): ResizableSidebar {
 		};
 	}, [containerNode, isActive, width]);
 
-	// Tear down the wrapper on final unmount; width-change re-runs of the
-	// main effect leave it in place.
+	// Tear down the wrapper and any in-progress drag on final unmount.
+	// The drag cleanup restores `userSelect` if we never received a
+	// pointerup/cancel (e.g. the sidebar closed mid-drag).
 	useEffect(() => {
 		return () => {
+			dragCleanupRef.current?.();
 			wrapperRef.current?.remove();
 			wrapperRef.current = null;
 		};
@@ -203,8 +238,8 @@ export function useResizableSidebar(isActive: boolean): ResizableSidebar {
 
 			const startX = event.clientX;
 			const startWidth = width;
-			const maxWidth = getMaxWidth();
 			const capturedPointerId = event.pointerId;
+			const capturedMaxWidth = maxWidth;
 			let nextWidth = startWidth;
 
 			const handleMove = (moveEvent: PointerEvent) => {
@@ -214,7 +249,7 @@ export function useResizableSidebar(isActive: boolean): ResizableSidebar {
 				// Sidebar is on the right: dragging left (negative delta)
 				// grows the width.
 				const delta = moveEvent.clientX - startX;
-				nextWidth = clampWidth(startWidth - delta, maxWidth);
+				nextWidth = clampWidth(startWidth - delta, capturedMaxWidth);
 				applyWidth(targets, nextWidth);
 				handleEl.style.right = `${nextWidth - HANDLE_HALF_WIDTH}px`;
 			};
@@ -222,26 +257,46 @@ export function useResizableSidebar(isActive: boolean): ResizableSidebar {
 			const prevUserSelect = document.body.style.userSelect;
 			document.body.style.userSelect = 'none';
 
-			const handleUp = (upEvent: PointerEvent) => {
-				if (upEvent.pointerId !== capturedPointerId) {
-					return;
-				}
+			// One teardown fn shared by pointerup, pointercancel,
+			// lostpointercapture, and the unmount path. The ref lets the
+			// unmount effect restore `userSelect` if we never got a
+			// pointerup/cancel (e.g. sidebar closes mid-drag). All event
+			// listeners are removed atomically, so there's no valid path
+			// to a second call.
+			const dispose = (commit: boolean) => {
 				handleEl.removeEventListener('pointermove', handleMove);
 				handleEl.removeEventListener('pointerup', handleUp);
 				handleEl.removeEventListener('pointercancel', handleUp);
+				handleEl.removeEventListener(
+					'lostpointercapture',
+					handleLostCapture
+				);
 				if (handleEl.hasPointerCapture(capturedPointerId)) {
 					handleEl.releasePointerCapture(capturedPointerId);
 				}
 				document.body.style.userSelect = prevUserSelect;
-				setWidth(nextWidth);
-				writeStoredWidth(nextWidth);
+				if (commit) {
+					setWidth(nextWidth);
+					writeStoredWidth(nextWidth);
+				}
+				dragCleanupRef.current = null;
 			};
 
+			const handleUp = (upEvent: PointerEvent) => {
+				if (upEvent.pointerId !== capturedPointerId) {
+					return;
+				}
+				dispose(true);
+			};
+			const handleLostCapture = () => dispose(false);
+
+			dragCleanupRef.current = () => dispose(false);
 			handleEl.addEventListener('pointermove', handleMove);
 			handleEl.addEventListener('pointerup', handleUp);
 			handleEl.addEventListener('pointercancel', handleUp);
+			handleEl.addEventListener('lostpointercapture', handleLostCapture);
 		},
-		[containerNode, width]
+		[containerNode, width, maxWidth]
 	);
 
 	const onKeyDown = useCallback(
@@ -261,18 +316,18 @@ export function useResizableSidebar(isActive: boolean): ResizableSidebar {
 					next = MIN_WIDTH;
 					break;
 				case 'End':
-					next = getMaxWidth();
+					next = maxWidth;
 					break;
 			}
 			if (next === null) {
 				return;
 			}
 			event.preventDefault();
-			const clamped = clampWidth(next);
+			const clamped = clampWidth(next, maxWidth);
 			setWidth(clamped);
 			writeStoredWidth(clamped);
 		},
-		[width]
+		[width, maxWidth]
 	);
 
 	const handle =
@@ -291,7 +346,7 @@ export function useResizableSidebar(isActive: boolean): ResizableSidebar {
 						)}
 						aria-valuenow={width}
 						aria-valuemin={MIN_WIDTH}
-						aria-valuemax={getMaxWidth()}
+						aria-valuemax={maxWidth}
 						tabIndex={0}
 						className="wpce-conversation-panel__resize-handle"
 						style={{ right: `${width - HANDLE_HALF_WIDTH}px` }}

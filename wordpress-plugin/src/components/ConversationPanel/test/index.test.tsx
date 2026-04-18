@@ -1589,6 +1589,131 @@ describe('ConversationPanel', () => {
 			expect(window.localStorage.getItem(STORAGE_KEY)).toBe('300');
 		});
 
+		it('ignores viewport resize events that do not change the max width', () => {
+			mountWithAwaitingInput();
+
+			const handle = screen.getByRole('separator');
+			const maxBefore = handle.getAttribute('aria-valuemax');
+
+			// innerWidth unchanged — the functional setState bails via the
+			// identity check and no re-render should be needed.
+			act(() => {
+				window.dispatchEvent(new Event('resize'));
+			});
+
+			expect(handle.getAttribute('aria-valuemax')).toBe(maxBefore);
+		});
+
+		it('reacts to viewport resizes by clamping width and updating aria-valuemax', () => {
+			window.localStorage.setItem(STORAGE_KEY, '800');
+
+			mountWithAwaitingInput();
+
+			const handle = screen.getByRole('separator');
+			const ancestor = getAncestor();
+			// jsdom default innerWidth is 1024 → max = floor(1024*0.8) = 819.
+			expect(handle.getAttribute('aria-valuemax')).toBe('819');
+			expect(ancestor.style.width).toBe('800px');
+
+			// Shrink the window so the new max drops below 800.
+			const originalInnerWidth = window.innerWidth;
+			Object.defineProperty(window, 'innerWidth', {
+				value: 500,
+				configurable: true,
+				writable: true,
+			});
+			act(() => {
+				window.dispatchEvent(new Event('resize'));
+			});
+
+			// Max recomputed: floor(500*0.8) = 400.
+			expect(handle.getAttribute('aria-valuemax')).toBe('400');
+			// Stored width (800) clamped down to the new max.
+			expect(ancestor.style.width).toBe('400px');
+
+			Object.defineProperty(window, 'innerWidth', {
+				value: originalInnerWidth,
+				configurable: true,
+				writable: true,
+			});
+		});
+
+		it('restores document.body.userSelect on lostpointercapture without committing the width', () => {
+			mountWithAwaitingInput();
+
+			const handle = screen.getByRole('separator');
+			const ancestor = getAncestor();
+
+			dispatchPointerEventWithId(handle, 'pointerdown', {
+				clientX: 500,
+				button: 0,
+				pointerId: 1,
+			});
+			expect(document.body.style.userSelect).toBe('none');
+			dispatchPointerEventWithId(handle, 'pointermove', {
+				clientX: 400,
+				pointerId: 1,
+			});
+			expect(ancestor.style.width).toBe('380px');
+
+			// Browser loses capture mid-drag — should restore userSelect
+			// without persisting the in-progress width.
+			act(() => {
+				handle.dispatchEvent(
+					new Event('lostpointercapture', { bubbles: true })
+				);
+			});
+			expect(document.body.style.userSelect).toBe('');
+			expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
+		});
+
+		it('does not run cleanup twice if pointerup arrives after lostpointercapture', () => {
+			mountWithAwaitingInput();
+
+			const handle = screen.getByRole('separator');
+
+			dispatchPointerEventWithId(handle, 'pointerdown', {
+				clientX: 500,
+				button: 0,
+				pointerId: 1,
+			});
+			dispatchPointerEventWithId(handle, 'pointermove', {
+				clientX: 400,
+				pointerId: 1,
+			});
+			act(() => {
+				handle.dispatchEvent(
+					new Event('lostpointercapture', { bubbles: true })
+				);
+			});
+			// Second teardown (stale pointerup) must not throw nor commit.
+			act(() => {
+				dispatchPointerEventWithId(handle, 'pointerup', {
+					clientX: 400,
+					pointerId: 1,
+				});
+			});
+			expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
+		});
+
+		it('restores document.body.userSelect when the panel unmounts mid-drag', () => {
+			const { unmount } = mountWithAwaitingInput();
+
+			const handle = screen.getByRole('separator');
+			dispatchPointerEventWithId(handle, 'pointerdown', {
+				clientX: 500,
+				button: 0,
+				pointerId: 1,
+			});
+			expect(document.body.style.userSelect).toBe('none');
+
+			act(() => {
+				unmount();
+			});
+
+			expect(document.body.style.userSelect).toBe('');
+		});
+
 		it('releases pointer capture on drag end when the browser reports it captured', () => {
 			const releaseSpy = jest.fn();
 			const protoHas = Element.prototype.hasPointerCapture;
