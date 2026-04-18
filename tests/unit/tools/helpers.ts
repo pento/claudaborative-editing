@@ -176,6 +176,7 @@ export function createMockSession(
 		closePost: vi.fn().mockResolvedValue(undefined),
 		readPost: vi.fn().mockReturnValue(postContent),
 		readBlock: vi.fn().mockReturnValue(blockContent),
+		viewPost: vi.fn().mockResolvedValue(postContent),
 		updateBlock: vi.fn().mockResolvedValue(undefined),
 		editBlockText: vi.fn().mockReturnValue(editBlockTextResult),
 		insertBlock: vi.fn().mockResolvedValue(undefined),

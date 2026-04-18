@@ -23,4 +23,16 @@ export const readTools: ToolDefinition[] = [
 		execute: (session, { index }: { index: string }) =>
 			session.readBlock(index),
 	},
+	{
+		name: 'wp_view_post',
+		description:
+			'Read any WordPress post by ID without opening it for editing. Returns the saved (committed) content as a block listing. Use this to research other posts while keeping the current post open.',
+		inputSchema: {
+			postId: z.number().describe('The post ID to read'),
+		},
+		availableIn: ['connected', 'editing'],
+		tags: ['reading', 'posts'],
+		execute: (session, { postId }: { postId: number }) =>
+			session.viewPost(postId),
+	},
 ];

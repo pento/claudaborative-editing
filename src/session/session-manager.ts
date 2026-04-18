@@ -983,6 +983,61 @@ export class SessionManager {
 		return renderBlock(block, index);
 	}
 
+	/**
+	 * Render any post by ID as Claude-friendly text. Read-only via REST —
+	 * does not touch the Y.Doc, so the currently-open post (if any) is
+	 * undisturbed. Use for research while keeping an editing session open.
+	 */
+	async viewPost(postId: number): Promise<string> {
+		this.requireState('connected', 'editing');
+
+		const post = await this.apiClient.getPost(postId);
+
+		const title = post.title.raw ?? post.title.rendered;
+		const blocks = parseBlocks(post.content.raw ?? '').map(
+			parsedBlockToBlock
+		);
+
+		// Resolve category/tag IDs to names. Best-effort: if the lookup
+		// fails the metadata is shown without them rather than the whole
+		// call failing.
+		let categoryNames: string[] | undefined;
+		let tagNames: string[] | undefined;
+		if (post.categories && post.categories.length > 0) {
+			try {
+				const cats = await this.apiClient.getTerms(
+					'categories',
+					post.categories
+				);
+				categoryNames = cats.map((t) => t.name);
+			} catch {
+				// Non-critical
+			}
+		}
+		if (post.tags && post.tags.length > 0) {
+			try {
+				const tags = await this.apiClient.getTerms('tags', post.tags);
+				tagNames = tags.map((t) => t.name);
+			} catch {
+				// Non-critical
+			}
+		}
+
+		const metadata: PostMetadata = {
+			status: post.status,
+			date: post.date ?? undefined,
+			slug: post.slug,
+			sticky: post.sticky,
+			commentStatus: post.comment_status,
+			excerpt: post.excerpt.raw || undefined,
+			categories: categoryNames,
+			tags: tagNames,
+			featuredImage: post.featured_media,
+		};
+
+		return renderPost(title, blocks, metadata);
+	}
+
 	// --- Editing ---
 
 	/**

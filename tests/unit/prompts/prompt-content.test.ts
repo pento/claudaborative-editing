@@ -84,6 +84,11 @@ describe('buildEditContent', () => {
 		expect(result).toContain('wp_insert_block');
 		expect(result).toContain('wp_save');
 	});
+
+	it('mentions wp_view_post for cross-post research', () => {
+		const result = buildEditContent('Hello world', 'improve clarity');
+		expect(result).toContain('wp_view_post');
+	});
 });
 
 describe('buildReviewContent', () => {
@@ -167,6 +172,12 @@ describe('buildComposeContent', () => {
 		const result = buildComposeContent('Hello world', true);
 		expect(result).toContain('wp_update_command_status');
 		expect(result).toContain('planReady');
+	});
+
+	it('mentions cross-post research tools in discovery', () => {
+		const result = buildComposeContent('Hello world', true);
+		expect(result).toContain('wp_list_posts');
+		expect(result).toContain('wp_view_post');
 	});
 });
 
