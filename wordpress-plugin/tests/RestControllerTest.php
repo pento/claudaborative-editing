@@ -615,7 +615,10 @@ class RestControllerTest extends \WP_UnitTestCase {
 
 	/**
 	 * Free-form documentLanguage values (descriptive notes rather than
-	 * language tags) are preserved verbatim.
+	 * language tags) are persisted as sanitized free-form strings.
+	 * sanitize_text_field may strip line breaks / tags from exotic
+	 * inputs, but plain descriptive text (like the note below) passes
+	 * through unchanged.
 	 */
 	public function test_complete_persists_free_form_document_language() {
 		$command_id = $this->create_command_directly( [ 'status' => 'running' ] );
@@ -695,9 +698,13 @@ class RestControllerTest extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Malformed resultData (not JSON, or non-string documentLanguage, or
-	 * blank after trim) is ignored silently — the command still succeeds,
-	 * the post meta is left alone.
+	 * A non-string documentLanguage value is ignored silently — the
+	 * command still succeeds, the post meta is left alone. Other
+	 * malformed variants are covered separately: fully invalid JSON is
+	 * rejected by the route's validate_callback before reaching the
+	 * helper (see test_result_data_rejects_invalid_json), and a
+	 * whitespace-only string trims to empty (see
+	 * test_whitespace_only_document_language_is_ignored).
 	 */
 	public function test_malformed_document_language_is_ignored() {
 		$command_id = $this->create_command_directly( [ 'status' => 'running' ] );
@@ -751,6 +758,64 @@ class RestControllerTest extends \WP_UnitTestCase {
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame(
 			'Original',
+			get_post_meta( self::$target_post_id, 'wpce_document_language', true )
+		);
+	}
+
+	/**
+	 * If the command author has lost edit_post access to the target
+	 * (e.g. the post was moved to a restricted type or the user's role
+	 * changed) we must not let them write post meta on it through a
+	 * command completion — even though update_command's own permission
+	 * check (edit_posts + command ownership) still passes. Verify the
+	 * command completes successfully but the meta write is skipped.
+	 */
+	public function test_document_language_persistence_requires_edit_post_on_target() {
+		$command_id = $this->create_command_directly( [ 'status' => 'running' ] );
+		update_post_meta(
+			self::$target_post_id,
+			'wpce_document_language',
+			'Before'
+		);
+
+		// Deny edit_post on the target post for the current user for
+		// the duration of this test. update_command still passes
+		// because it only gates on edit_posts + command ownership.
+		$deny = function ( $allcaps, $caps, $args ) {
+			if (
+				isset( $args[0], $args[2] )
+				&& 'edit_post' === $args[0]
+				&& (int) $args[2] === (int) self::$target_post_id
+			) {
+				foreach ( $caps as $cap ) {
+					$allcaps[ $cap ] = false;
+				}
+			}
+			return $allcaps;
+		};
+		add_filter( 'user_has_cap', $deny, 10, 3 );
+
+		try {
+			$request = new \WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
+			$request->set_body_params(
+				[
+					'status'      => 'completed',
+					'result_data' => wp_json_encode(
+						[ 'documentLanguage' => 'Attacker-controlled' ]
+					),
+				]
+			);
+			$response = rest_get_server()->dispatch( $request );
+
+			// Command completion itself is still allowed.
+			$this->assertSame( 200, $response->get_status() );
+		} finally {
+			remove_filter( 'user_has_cap', $deny, 10 );
+		}
+
+		// The target-post meta must NOT have been overwritten.
+		$this->assertSame(
+			'Before',
 			get_post_meta( self::$target_post_id, 'wpce_document_language', true )
 		);
 	}

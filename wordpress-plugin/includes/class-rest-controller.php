@@ -1141,8 +1141,21 @@ class REST_Controller extends \WP_REST_Controller {
 			return;
 		}
 
+		$parent_post_id = (int) $command->post_parent;
+
+		// update_command only checks edit_posts + command ownership, so
+		// we must re-gate on edit_post for the specific target post
+		// before writing its meta. This prevents a user who still owns
+		// the command — but has since lost edit access to the target
+		// post (e.g. it was moved or locked down) — from side-channeling
+		// post meta through a completion payload. No-op silently when
+		// unauthorized so the command itself still completes.
+		if ( ! current_user_can( 'edit_post', $parent_post_id ) ) {
+			return;
+		}
+
 		update_post_meta(
-			(int) $command->post_parent,
+			$parent_post_id,
 			'wpce_document_language',
 			sanitize_text_field( $language )
 		);
