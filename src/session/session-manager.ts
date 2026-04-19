@@ -606,28 +606,51 @@ export class SessionManager {
 		this.postRoom = room;
 		const initialUpdates = [createSyncStep1(doc)];
 
-		syncClient.addRoom(room, doc.clientID, initialUpdates, {
-			onUpdate: (update) => {
-				try {
-					return processIncomingUpdate(doc, update);
-				} catch {
-					return null;
-				}
-			},
-			onAwareness: (awarenessState) => {
-				this.collaborators = parseCollaborators(
-					awarenessState,
-					doc.clientID
-				);
-			},
-			onCompactionRequested: () => {
-				return createCompactionUpdate(doc);
-			},
-			getAwarenessState: () => {
-				return this.awarenessState;
-			},
-		});
+		try {
+			syncClient.addRoom(room, doc.clientID, initialUpdates, {
+				onUpdate: (update) => {
+					try {
+						return processIncomingUpdate(doc, update);
+					} catch {
+						return null;
+					}
+				},
+				onAwareness: (awarenessState) => {
+					this.collaborators = parseCollaborators(
+						awarenessState,
+						doc.clientID
+					);
+				},
+				onCompactionRequested: () => {
+					return createCompactionUpdate(doc);
+				},
+				getAwarenessState: () => {
+					return this.awarenessState;
+				},
+			});
 
+			await this._finishOpenPost(post, doc, syncClient, room);
+		} catch (error) {
+			// Roll back every piece of state allocated so far so the session
+			// stays on 'connected' and the next openPost call can succeed.
+			// removeRoom is a no-op for an unregistered room, so this is
+			// safe even when addRoom itself threw.
+			await this._tearDownPost();
+			throw error;
+		}
+	}
+
+	/**
+	 * Finish opening the post after the post room has been added to the
+	 * SyncClient. Split out from openPost() so the error path can restore
+	 * state without duplicating the setup code.
+	 */
+	private async _finishOpenPost(
+		post: WPPost,
+		doc: Y.Doc,
+		syncClient: SyncClient,
+		room: string
+	): Promise<void> {
 		// Wait for the sync handshake to populate the doc with remote content.
 		// The handshake takes multiple poll cycles:
 		//   Poll 1: We send sync_step1 → receive peer's sync_step1
@@ -854,7 +877,21 @@ export class SessionManager {
 	async closePost(): Promise<void> {
 		this.requireState('editing');
 		await this.drainStreamQueue();
+		await this._tearDownPost();
+		this.state = 'connected';
+	}
 
+	/**
+	 * Tear down all post-scoped state. Shared by closePost() and the
+	 * openPost() error-recovery path.
+	 *
+	 * Does NOT drain the streaming queue (closePost does that first) and
+	 * does NOT change this.state — callers are responsible for transitioning
+	 * state appropriately. Safe to call when only some of the state has
+	 * been established (removeRoom is a no-op for unregistered rooms, and
+	 * handlers are only detached when both the doc and handler are set).
+	 */
+	private async _tearDownPost(): Promise<void> {
 		// Remove post and comment rooms from the SyncClient (it stays alive
 		// with the command room for the duration of the connection).
 		if (this._syncClient && this.postRoom) {
@@ -866,13 +903,13 @@ export class SessionManager {
 
 		if (this._doc && this.updateHandler) {
 			this._doc.off('updateV2', this.updateHandler);
-			this.updateHandler = null;
 		}
+		this.updateHandler = null;
 
 		if (this.commentDoc && this.commentUpdateHandler) {
 			this.commentDoc.off('updateV2', this.commentUpdateHandler);
-			this.commentUpdateHandler = null;
 		}
+		this.commentUpdateHandler = null;
 
 		if (this.postHealthCheckTimer !== null) {
 			clearInterval(this.postHealthCheckTimer);
@@ -896,7 +933,6 @@ export class SessionManager {
 		this.postGone = false;
 		this.postGoneReason = null;
 		this.postGoneCheck = null;
-		this.state = 'connected';
 	}
 
 	// --- Reading ---
@@ -1895,10 +1931,18 @@ export class SessionManager {
 		// sentinel and the next caller checking it).
 		const previous = this._preOpenInProgress;
 		const current = (async () => {
-			if (previous) await previous;
-			await this._doPreOpenPost(postId).catch(() => {
-				// Errors are best-effort — the command handler already catches them.
-			});
+			// Swallow errors from the previous call so they don't cascade
+			// into this one, but surface errors from _this_ call to the
+			// caller — the command handler retries and the cloud
+			// orchestrator treats open-failures as command failures.
+			if (previous) {
+				try {
+					await previous;
+				} catch {
+					// Previous caller already observed (or swallowed) this.
+				}
+			}
+			await this._doPreOpenPost(postId);
 		})();
 		this._preOpenInProgress = current;
 		await current;
