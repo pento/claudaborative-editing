@@ -52,6 +52,13 @@ export interface ContentSnapshot {
 	postContent: string;
 	notes?: { notes: WPNote[]; noteBlockMap: Partial<Record<number, string>> };
 	notesSupported: boolean;
+	/**
+	 * Confirmed document language for this post, if the agent has
+	 * previously clarified it (either this session or a prior one —
+	 * the value lives in post meta). Injected into prompt content so
+	 * the agent can skip language clarification on repeat commands.
+	 */
+	confirmedLanguage?: string;
 }
 
 /**
@@ -265,10 +272,14 @@ export class CommandHandler {
 
 	/**
 	 * Extract the universal locale metadata that the WP plugin merges into
-	 * every command's arguments. Returns an empty object if the fields are
-	 * missing or malformed — prompt builders tolerate that.
+	 * every command's arguments, plus the snapshot's confirmed language
+	 * if the agent has already clarified it. Returns an empty object if
+	 * nothing is known — prompt builders tolerate that.
 	 */
-	private extractLanguageContext(command: Command): LanguageContext {
+	private extractLanguageContext(
+		command: Command,
+		snapshot: ContentSnapshot
+	): LanguageContext {
 		const lang: LanguageContext = {};
 		const userLocale = command.arguments.userLocale;
 		const siteLocale = command.arguments.siteLocale;
@@ -277,6 +288,9 @@ export class CommandHandler {
 		}
 		if (typeof siteLocale === 'string' && siteLocale) {
 			lang.siteLocale = siteLocale;
+		}
+		if (snapshot.confirmedLanguage) {
+			lang.confirmedLanguage = snapshot.confirmedLanguage;
 		}
 		return lang;
 	}
@@ -297,7 +311,7 @@ export class CommandHandler {
 		if (snapshot.postId !== command.post_id) return null;
 
 		const { postContent, notes, notesSupported } = snapshot;
-		const lang = this.extractLanguageContext(command);
+		const lang = this.extractLanguageContext(command, snapshot);
 
 		switch (command.prompt) {
 			case 'proofread':

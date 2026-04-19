@@ -209,12 +209,16 @@ test.describe('Language clarification flow', () => {
 		// so a subsequent status message lands in the correct language.
 		expect(response.params.meta.user_locale).toBeTruthy();
 
-		// --- Step 7: Finalise the command ---
+		// --- Step 7: Finalise the command, persisting the confirmed language ---
 
+		// Including documentLanguage in resultData tells the WP side to
+		// write it to post meta, so future commands on this post skip
+		// the clarification step entirely.
 		await callToolOrThrow(mcpClient.client, 'wp_update_command_status', {
 			commandId,
 			status: 'completed',
 			message: 'Proofread complete.',
+			resultData: JSON.stringify({ documentLanguage: 'English' }),
 		});
 
 		await expect
@@ -226,5 +230,73 @@ test.describe('Language clarification flow', () => {
 				{ timeout: 15_000, intervals: [500] }
 			)
 			.toBe('completed');
+
+		// --- Step 8: Second command on the same post sees the confirmed language ---
+
+		// Fire another Proofread. The embedded content should now carry
+		// "Confirmed document language: English" so the agent skips the
+		// detection / clarification path on this and all future commands.
+		const notificationsBefore = notifications.length;
+
+		await toggle.click();
+		await page.getByRole('menuitem', { name: /Proofread/ }).click();
+
+		await expect
+			.poll(
+				() =>
+					notifications
+						.slice(notificationsBefore)
+						.find(
+							(n) =>
+								n.params.meta.prompt === 'proofread' &&
+								n.params.meta.content_embedded === 'true'
+						) ?? null,
+				{ timeout: 30_000, intervals: [500] }
+			)
+			.not.toBeNull();
+
+		const secondEmbedded = notifications
+			.slice(notificationsBefore)
+			.find(
+				(n) =>
+					n.params.meta.prompt === 'proofread' &&
+					n.params.meta.content_embedded === 'true'
+			);
+		if (!secondEmbedded) {
+			throw new Error('second proofread notification not captured');
+		}
+		expect(secondEmbedded.params.content).toContain(
+			'Confirmed document language: English'
+		);
+
+		// Clean up the second command so the fixture teardown doesn't
+		// trip over a lingering pending/running command.
+		const secondCommandId = Number(secondEmbedded.params.meta.command_id);
+		if (secondCommandId > 0) {
+			const cmds = await listCommands(draftPost);
+			const second = cmds.find((c) => c.id === secondCommandId);
+			if (second && second.status === 'pending') {
+				try {
+					await callToolOrThrow(
+						mcpClient.client,
+						'wp_update_command_status',
+						{ commandId: secondCommandId, status: 'running' }
+					);
+				} catch (e) {
+					if (!(e instanceof Error) || !e.message.includes('409')) {
+						throw e;
+					}
+				}
+			}
+			await callToolOrThrow(
+				mcpClient.client,
+				'wp_update_command_status',
+				{
+					commandId: secondCommandId,
+					status: 'completed',
+					message: 'done',
+				}
+			);
+		}
 	});
 });

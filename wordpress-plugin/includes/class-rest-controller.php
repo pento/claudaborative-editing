@@ -626,6 +626,10 @@ class REST_Controller extends \WP_REST_Controller {
 		// conversation history — append the message as an assistant entry.
 		// Any non-messages fields from client result_data (e.g., planReady)
 		// are merged into the existing result_data.
+		//
+		// Either branch may also carry a documentLanguage field, which
+		// gets lifted to post meta on the target post so subsequent
+		// commands skip language clarification.
 		if ( 'awaiting_input' === $new_status ) {
 			if ( null !== $message ) {
 				$this->append_conversation_message( $command->ID, 'assistant', $message );
@@ -634,11 +638,13 @@ class REST_Controller extends \WP_REST_Controller {
 			$result_data = $request->get_param( 'result_data' );
 			if ( null !== $result_data ) {
 				$this->merge_result_data_flags( $command->ID, $result_data );
+				$this->persist_document_language_from_result_data( $command->ID, $result_data );
 			}
 		} else {
 			$result_data = $request->get_param( 'result_data' );
 			if ( null !== $result_data ) {
 				update_post_meta( $command->ID, 'wpce_result_data', $result_data );
+				$this->persist_document_language_from_result_data( $command->ID, $result_data );
 			}
 		}
 
@@ -1091,6 +1097,54 @@ class REST_Controller extends \WP_REST_Controller {
 
 		// Update the object cache to match.
 		wp_cache_delete( $post_id, 'post_meta' );
+	}
+
+	/**
+	 * If the client's resultData carries a `documentLanguage` field, lift
+	 * it out of the command's per-invocation payload and persist it as
+	 * post meta on the command's target post. Future commands on that
+	 * post will pick it up and skip language clarification.
+	 *
+	 * The value is a free-form string — the agent decides what's useful
+	 * (a language name, a BCP-47 tag, or a descriptive note).
+	 *
+	 * @param int    $command_id  The command post ID.
+	 * @param string $client_json JSON string from the client's resultData parameter.
+	 * @return void
+	 */
+	private function persist_document_language_from_result_data( $command_id, $client_json ) {
+		$client_data = json_decode( $client_json, true );
+
+		if ( ! is_array( $client_data ) ) {
+			return;
+		}
+
+		if ( ! isset( $client_data['documentLanguage'] ) ) {
+			return;
+		}
+
+		$language = $client_data['documentLanguage'];
+
+		if ( ! is_string( $language ) ) {
+			return;
+		}
+
+		$language = trim( $language );
+
+		if ( '' === $language ) {
+			return;
+		}
+
+		$command = get_post( $command_id );
+		if ( ! $command || 0 === (int) $command->post_parent ) {
+			return;
+		}
+
+		update_post_meta(
+			(int) $command->post_parent,
+			'wpce_document_language',
+			sanitize_text_field( $language )
+		);
 	}
 
 	/**

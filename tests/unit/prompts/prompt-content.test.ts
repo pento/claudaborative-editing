@@ -343,6 +343,25 @@ describe('segment builders embed language rules in the static prefix', () => {
 		);
 		expect(DOCUMENT_LANGUAGE_RULE).toContain('fallback');
 	});
+
+	it('document-language rule treats a prior confirmed language as authoritative', () => {
+		// Without this line the agent would re-detect (or worse,
+		// re-ask) even though the WP side has already persisted a
+		// confirmed language from a prior command.
+		expect(DOCUMENT_LANGUAGE_RULE).toContain(
+			'"Confirmed document language"'
+		);
+		expect(DOCUMENT_LANGUAGE_RULE).toContain('authoritative');
+	});
+
+	it('document-language rule documents the documentLanguage resultData convention', () => {
+		// The persistence loop closes only if the agent actually writes
+		// documentLanguage back in resultData after a clarification,
+		// so the prompt has to spell this out.
+		expect(DOCUMENT_LANGUAGE_RULE).toContain('"documentLanguage"');
+		expect(DOCUMENT_LANGUAGE_RULE).toContain('resultData');
+		expect(DOCUMENT_LANGUAGE_RULE).toContain('free-form string');
+	});
 });
 
 // --- Segment builders: locale context flows into dynamic segment ---
@@ -370,6 +389,53 @@ describe('segment builders inject locale context into dynamic segment', () => {
 		});
 		expect(segments.dynamicContext).toContain('User locale: unknown');
 		expect(segments.dynamicContext).toContain('Site locale hint: unknown');
+	});
+
+	it('injects the confirmed document language when supplied', () => {
+		const segments = buildProofreadSegments('Hello', {
+			userLocale: 'fr_FR',
+			siteLocale: 'en_US',
+			confirmedLanguage: 'Japanese',
+		});
+		expect(segments.dynamicContext).toContain(
+			'Confirmed document language: Japanese'
+		);
+	});
+
+	it('preserves free-form confirmed-language values', () => {
+		const note =
+			'Primary language is English, but reviews should cover all languages';
+		const segments = buildProofreadSegments('Hello', {
+			confirmedLanguage: note,
+		});
+		expect(segments.dynamicContext).toContain(
+			`Confirmed document language: ${note}`
+		);
+	});
+
+	it('omits the Confirmed document language line when the value is absent or blank', () => {
+		const absent = buildProofreadSegments('Hello', { userLocale: 'en_US' });
+		const blank = buildProofreadSegments('Hello', {
+			userLocale: 'en_US',
+			confirmedLanguage: '   ',
+		});
+		expect(absent.dynamicContext).not.toContain(
+			'Confirmed document language'
+		);
+		expect(blank.dynamicContext).not.toContain(
+			'Confirmed document language'
+		);
+	});
+
+	it('still keeps the static prefix stable when confirmed-language is added', () => {
+		// Cache guarantee: only dynamicContext varies across invocations.
+		const without = buildProofreadSegments('Hello');
+		const withConfirmed = buildProofreadSegments('Hello', {
+			confirmedLanguage: 'Spanish',
+		});
+		expect(without.staticInstructions).toBe(
+			withConfirmed.staticInstructions
+		);
 	});
 });
 

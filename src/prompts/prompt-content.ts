@@ -38,6 +38,13 @@ export interface PromptSegments {
 export interface LanguageContext {
 	userLocale?: string;
 	siteLocale?: string;
+	/**
+	 * Free-form confirmed document language for this post, set by the
+	 * agent on a prior command (via `documentLanguage` in resultData).
+	 * When present, the content-language rule tells the model to use
+	 * this value instead of re-running the detection flow.
+	 */
+	confirmedLanguage?: string;
 }
 
 // --- Note formatting (shared by review prompts) ---
@@ -100,7 +107,13 @@ export function formatNotes(
  */
 export const DOCUMENT_LANGUAGE_RULE = `## Language for content
 
-Before producing any content (edits, new text, notes, or suggestions), detect the post's language from the existing content. The "Site locale hint" provided below is a weak signal only — the post's actual language always wins. If the post is empty, very short, or mixes languages and you are not confident, use wp_update_command_status with status "awaiting_input" to ask the user to confirm the language before proceeding. Write that clarification question in the user's locale (meta.user_locale); if the user locale is unknown, use the site locale hint as a fallback. All content edits, new text, and editorial notes MUST be written in the post's language.`;
+Before producing any content (edits, new text, notes, or suggestions), determine the post's language:
+- If the dynamic context below includes "Confirmed document language", treat that as authoritative. Use it directly — do not re-detect, do not re-ask, and do not overwrite it unless the user explicitly tells you to in this request.
+- Otherwise, detect the post's language from the existing content. The "Site locale hint" provided below is a weak signal only — the post's actual language always wins. If the post is empty, very short, or mixes languages and you are not confident, use wp_update_command_status with status "awaiting_input" to ask the user to confirm before proceeding. Write that clarification question in the user's locale (meta.user_locale); if the user locale is unknown, use the site locale hint as a fallback.
+
+If you had to clarify or negotiate the document language during this request (either via awaiting_input or because the user corrected you), include a "documentLanguage" field in the resultData you pass to wp_update_command_status when completing the command. The value is a free-form string — use whatever is most useful for future commands: a language name ("Japanese"), a tag ("ja-JP"), or a descriptive note ("Primary language is English; include all languages in reviews"). The WordPress side persists it as post meta so subsequent commands on this post see it and skip the clarification step. Do NOT include "documentLanguage" if the language was already confirmed going in and you did not change it.
+
+All content edits, new text, and editorial notes MUST be written in the post's language.`;
 
 // --- Helpers ---
 
@@ -110,11 +123,15 @@ function buildLocaleBlock(
 ): string {
 	const userLocale = lang?.userLocale?.trim() || 'unknown';
 	const siteLocale = lang?.siteLocale?.trim() || 'unknown';
+	const confirmed = lang?.confirmedLanguage?.trim();
 	const lines: string[] = [];
 	if (includeUser) {
 		lines.push(`User locale: ${userLocale}`);
 	}
 	lines.push(`Site locale hint: ${siteLocale}`);
+	if (confirmed) {
+		lines.push(`Confirmed document language: ${confirmed}`);
+	}
 	return lines.join('\n');
 }
 

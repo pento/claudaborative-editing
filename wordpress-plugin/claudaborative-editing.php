@@ -61,6 +61,24 @@ class Claudaborative_Editing {
 				'sanitize_callback' => 'sanitize_text_field',
 			]
 		);
+
+		// Confirmed document language, set once the agent has clarified
+		// the post's language during a command. Persisted across sessions
+		// so future commands on the same post skip the clarification flow.
+		// Stored as a free-form string — the agent decides whether to
+		// write a language name ("Japanese"), a tag ("ja-JP"), or a
+		// descriptive note ("Primary English, reviews cover all languages").
+		register_meta(
+			'post',
+			'wpce_document_language',
+			[
+				'type'              => 'string',
+				'single'            => true,
+				'default'           => '',
+				'show_in_rest'      => true,
+				'sanitize_callback' => 'sanitize_text_field',
+			]
+		);
 	}
 
 	/**

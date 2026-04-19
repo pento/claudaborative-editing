@@ -2213,6 +2213,47 @@ describe('CommandHandler', () => {
 			const notification = notifier.mock.calls[0][0];
 			expect(notification.meta).not.toHaveProperty('user_locale');
 		});
+
+		it('threads the snapshot confirmedLanguage into embedded prompt content', async () => {
+			// When the session has a confirmed document language for the
+			// post (either from prior clarification or seeded from post
+			// meta), the embedded prompt must carry it so the agent skips
+			// the re-detection / re-ask path.
+			const { dispatchCommand } = setupMockCommandClient({
+				resolve: makePluginStatus(),
+			});
+
+			const notifier = vi
+				.fn<ChannelNotifier>()
+				.mockResolvedValue(undefined);
+			handler.setNotifier(notifier);
+
+			const contentProvider: ContentProvider = vi
+				.fn<ContentProvider>()
+				.mockResolvedValue({
+					postId: 84,
+					postContent: 'Hola mundo',
+					notesSupported: false,
+					confirmedLanguage: 'Spanish',
+				});
+			handler.setContentProvider(contentProvider);
+
+			await handler.start(createMockApiClient(), createCommandMap());
+
+			await dispatchCommand(
+				makeCommand({
+					id: 44,
+					post_id: 84,
+					prompt: 'proofread',
+					arguments: { userLocale: 'en_US', siteLocale: 'en_US' },
+				})
+			);
+
+			const notification = notifier.mock.calls[0][0];
+			expect(notification.content).toContain(
+				'Confirmed document language: Spanish'
+			);
+		});
 	});
 
 	// ---------------------------------------------------------------

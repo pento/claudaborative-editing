@@ -583,6 +583,149 @@ class RestControllerTest extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Completing with result_data.documentLanguage lifts the value into
+	 * the target post's wpce_document_language meta so subsequent
+	 * commands skip language clarification.
+	 */
+	public function test_complete_persists_document_language_to_target_post() {
+		$command_id = $this->create_command_directly( [ 'status' => 'running' ] );
+		delete_post_meta( self::$target_post_id, 'wpce_document_language' );
+
+		$request = new \WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
+		$request->set_body_params(
+			[
+				'status'      => 'completed',
+				'message'     => 'Proofread complete.',
+				'result_data' => wp_json_encode(
+					[
+						'documentLanguage' => 'Japanese',
+						'summary'          => 'Fixed 3 typos.',
+					]
+				),
+			]
+		);
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame(
+			'Japanese',
+			get_post_meta( self::$target_post_id, 'wpce_document_language', true )
+		);
+	}
+
+	/**
+	 * Free-form documentLanguage values (descriptive notes rather than
+	 * language tags) are preserved verbatim.
+	 */
+	public function test_complete_persists_free_form_document_language() {
+		$command_id = $this->create_command_directly( [ 'status' => 'running' ] );
+		delete_post_meta( self::$target_post_id, 'wpce_document_language' );
+		$note = 'Primary language is English; include all languages in reviews.';
+
+		$request = new \WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
+		$request->set_body_params(
+			[
+				'status'      => 'completed',
+				'result_data' => wp_json_encode(
+					[ 'documentLanguage' => $note ]
+				),
+			]
+		);
+		rest_get_server()->dispatch( $request );
+
+		$this->assertSame(
+			$note,
+			get_post_meta( self::$target_post_id, 'wpce_document_language', true )
+		);
+	}
+
+	/**
+	 * Completing without a documentLanguage field leaves an existing
+	 * value on the target post untouched.
+	 */
+	public function test_complete_without_document_language_preserves_existing_meta() {
+		$command_id = $this->create_command_directly( [ 'status' => 'running' ] );
+		update_post_meta(
+			self::$target_post_id,
+			'wpce_document_language',
+			'Spanish'
+		);
+
+		$request = new \WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
+		$request->set_body_params(
+			[
+				'status'      => 'completed',
+				'result_data' => wp_json_encode(
+					[ 'summary' => 'Review complete.' ]
+				),
+			]
+		);
+		rest_get_server()->dispatch( $request );
+
+		$this->assertSame(
+			'Spanish',
+			get_post_meta( self::$target_post_id, 'wpce_document_language', true )
+		);
+	}
+
+	/**
+	 * An awaiting_input transition can also carry documentLanguage (for
+	 * example, right after the user answered the clarification question).
+	 */
+	public function test_awaiting_input_persists_document_language() {
+		$command_id = $this->create_command_directly( [ 'status' => 'running' ] );
+		delete_post_meta( self::$target_post_id, 'wpce_document_language' );
+
+		$request = new \WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
+		$request->set_body_params(
+			[
+				'status'      => 'awaiting_input',
+				'message'     => '<p>Proceeding with Spanish. Any last notes?</p>',
+				'result_data' => wp_json_encode(
+					[ 'documentLanguage' => 'Spanish' ]
+				),
+			]
+		);
+		rest_get_server()->dispatch( $request );
+
+		$this->assertSame(
+			'Spanish',
+			get_post_meta( self::$target_post_id, 'wpce_document_language', true )
+		);
+	}
+
+	/**
+	 * Malformed resultData (not JSON, or non-string documentLanguage, or
+	 * blank after trim) is ignored silently — the command still succeeds,
+	 * the post meta is left alone.
+	 */
+	public function test_malformed_document_language_is_ignored() {
+		$command_id = $this->create_command_directly( [ 'status' => 'running' ] );
+		update_post_meta(
+			self::$target_post_id,
+			'wpce_document_language',
+			'Original'
+		);
+
+		// Non-string value.
+		$request = new \WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
+		$request->set_body_params(
+			[
+				'status'      => 'completed',
+				'result_data' => wp_json_encode(
+					[ 'documentLanguage' => 42 ]
+				),
+			]
+		);
+		$response = rest_get_server()->dispatch( $request );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame(
+			'Original',
+			get_post_meta( self::$target_post_id, 'wpce_document_language', true )
+		);
+	}
+
+	/**
 	 * The pre-publish-check prompt should be accepted.
 	 */
 	public function test_create_command_with_pre_publish_check_prompt() {
