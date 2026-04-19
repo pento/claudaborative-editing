@@ -1,5 +1,5 @@
 import type { PromptDefinition } from './definitions.js';
-import { buildComposeContent } from './prompt-content.js';
+import { buildComposeSegments, joinSegments } from './prompt-content.js';
 
 export const composePrompts: PromptDefinition[] = [
 	{
@@ -38,18 +38,17 @@ export const composePrompts: PromptDefinition[] = [
 			// state === 'editing'
 			const postContent = session.readPost();
 			const notesSupported = session.getNotesSupported();
+			const segments = buildComposeSegments(postContent, notesSupported);
 
 			return {
 				description: `Compose outline for "${session.getTitle()}"`,
 				messages: [
 					{
 						role: 'user',
-						content: buildComposeContent(
-							postContent,
-							notesSupported
-						),
+						content: joinSegments(segments),
 					},
 				],
+				segments,
 			};
 		},
 	},

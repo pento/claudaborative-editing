@@ -61,6 +61,31 @@ class Claudaborative_Editing {
 				'sanitize_callback' => 'sanitize_text_field',
 			]
 		);
+
+		// Confirmed document language, set once the agent has clarified
+		// the post's language during a command. Persisted across sessions
+		// so future commands on the same post skip the clarification flow.
+		// Stored as a free-form string — the agent decides whether to
+		// write a language name ("Japanese"), a tag ("ja-JP"), or a
+		// descriptive note ("Primary English, reviews cover all languages").
+		//
+		// The auth_callback gates REST read/write on edit_post for the
+		// target post so anonymous consumers of /wp/v2/posts/{id} don't
+		// see this internal agent hint on published posts.
+		register_meta(
+			'post',
+			'wpce_document_language',
+			[
+				'type'              => 'string',
+				'single'            => true,
+				'default'           => '',
+				'show_in_rest'      => true,
+				'sanitize_callback' => 'sanitize_text_field',
+				'auth_callback'     => function ( $allowed, $meta_key, $object_id ) {
+					return current_user_can( 'edit_post', $object_id );
+				},
+			]
+		);
 	}
 
 	/**
@@ -110,6 +135,8 @@ class Claudaborative_Editing {
 					'mcpConnected' => $mcp_connected,
 					'cloudUrl'     => $cloud_url,
 					'cloudApiKey'  => $cloud_api_key,
+					'userLocale'   => get_user_locale(),
+					'siteLocale'   => get_locale(),
 				)
 			) . ';' .
 			( $mcp_connected

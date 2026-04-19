@@ -3,12 +3,49 @@
  * text for each command type. Used by both the MCP prompt handlers (for manual
  * invocation) and the command handler (for channel notification embedding).
  *
- * Each builder returns the text that goes into the prompt's user message.
- * The prompt handlers wrap this in the MCP prompt response structure;
- * the command handler embeds it directly in the channel notification.
+ * Each builder exposes two shapes:
+ *
+ *  - build*Segments(...) returns `{ staticInstructions, dynamicContext }`.
+ *    `staticInstructions` is byte-identical across invocations, so the
+ *    hosted Anthropic orchestrator can attach a cache_control marker to
+ *    it and benefit from prompt caching.
+ *  - build*Content(...) is a thin wrapper that concatenates the two
+ *    segments into a single string — used by the MCP prompt path and
+ *    the channel-embedded notification path where a single blob is
+ *    expected.
+ *
+ * The universal language rules (post language for content edits / notes,
+ * user locale for status messages) live inside the static instruction
+ * constants, so they stay part of the cacheable prefix. Only the locale
+ * *values* appear in `dynamicContext`.
  */
 
 import type { WPNote } from '../wordpress/types.js';
+
+// --- Segment shape ---
+
+/**
+ * A prompt body split into a stable, cacheable prefix and a per-invocation
+ * suffix. MCP callers concatenate the two; the hosted Anthropic orchestrator
+ * keeps them separate and applies cache_control on `staticInstructions`.
+ */
+export interface PromptSegments {
+	staticInstructions: string;
+	dynamicContext: string;
+}
+
+/** Optional language context injected into `dynamicContext`. */
+export interface LanguageContext {
+	userLocale?: string;
+	siteLocale?: string;
+	/**
+	 * Free-form confirmed document language for this post, set by the
+	 * agent on a prior command (via `documentLanguage` in resultData).
+	 * When present, the content-language rule tells the model to use
+	 * this value instead of re-running the detection flow.
+	 */
+	confirmedLanguage?: string;
+}
 
 // --- Note formatting (shared by review prompts) ---
 
@@ -61,14 +98,56 @@ export function formatNotes(
 	return lines.join('\n').trim();
 }
 
-// --- Prompt content builders ---
+// --- Shared static-instruction fragments ---
 
-export function buildProofreadContent(postContent: string): string {
-	return `Proofread the following WordPress post. Fix any grammar, spelling, punctuation, and style issues directly.
+/**
+ * Rule for prompts that produce user-facing content (edits, new text,
+ * editorial notes, suggestions). Lives inside each prompt's static
+ * instruction block so it stays part of the cacheable prefix.
+ */
+export const DOCUMENT_LANGUAGE_RULE = `## Language for content
 
-Here is the current post content:
+Before producing any content (edits, new text, notes, or suggestions), determine the post's language:
+- If the dynamic context below includes "Confirmed document language", treat that as authoritative. Use it directly — do not re-detect, do not re-ask, and do not overwrite it unless the user explicitly tells you to in this request.
+- Otherwise, detect the post's language from the existing content. The "Site locale hint" provided below is a weak signal only — the post's actual language always wins. If the post is empty, very short, or mixes languages and you are not confident, use wp_update_command_status with status "awaiting_input" to ask the user to confirm before proceeding. Write that clarification question in the user's locale (meta.user_locale); if the user locale is unknown, use the site locale hint as a fallback.
 
-${postContent}
+If you had to clarify or negotiate the document language during this request (either via awaiting_input or because the user corrected you), include a "documentLanguage" field in the resultData you pass to wp_update_command_status when completing the command. The value is a free-form string — use whatever is most useful for future commands: a language name ("Japanese"), a tag ("ja-JP"), or a descriptive note ("Primary language is English; include all languages in reviews"). The WordPress side persists it as post meta so subsequent commands on this post see it and skip the clarification step. Do NOT include "documentLanguage" if the language was already confirmed going in and you did not change it.
+
+All content edits, new text, and editorial notes MUST be written in the post's language.`;
+
+// --- Helpers ---
+
+function buildLocaleBlock(
+	lang: LanguageContext | undefined,
+	{ includeUser }: { includeUser: boolean }
+): string {
+	const userLocale = lang?.userLocale?.trim() || 'unknown';
+	const siteLocale = lang?.siteLocale?.trim() || 'unknown';
+	const confirmed = lang?.confirmedLanguage?.trim();
+	const lines: string[] = [];
+	if (includeUser) {
+		lines.push(`User locale: ${userLocale}`);
+	}
+	lines.push(`Site locale hint: ${siteLocale}`);
+	if (confirmed) {
+		lines.push(`Confirmed document language: ${confirmed}`);
+	}
+	return lines.join('\n');
+}
+
+/**
+ * Concatenate a static/dynamic segment pair into the single-string form
+ * used by the MCP prompt path and channel-embedded notifications.
+ * Exported so prompt handlers and tests can share the exact separator
+ * semantics and don't drift by rebuilding the template literal inline.
+ */
+export function joinSegments(segments: PromptSegments): string {
+	return `${segments.staticInstructions}\n\n${segments.dynamicContext}`;
+}
+
+// --- Static instruction constants ---
+
+export const PROOFREAD_INSTRUCTIONS = `Proofread a WordPress post. Fix any grammar, spelling, punctuation, and style issues directly.
 
 Instructions:
 - Use wp_edit_block_text for targeted corrections (typos, spelling, grammar fixes). This is faster and safer for concurrent editing than replacing the full block text.
@@ -81,20 +160,11 @@ Instructions:
 - Do NOT add or remove blocks — only update existing text.
 - Do NOT change the title unless it has a clear error.
 - Work through every block systematically — do not skip any.
-- After completing all fixes, use wp_save to save the post.`;
-}
+- After completing all fixes, use wp_save to save the post.
 
-export function buildEditContent(
-	postContent: string,
-	editingFocus: string
-): string {
-	const focusInstruction = `Focus on: ${editingFocus}`;
+${DOCUMENT_LANGUAGE_RULE}`;
 
-	return `Edit the following WordPress post. ${focusInstruction}
-
-Here is the current post content:
-
-${postContent}
+export const EDIT_INSTRUCTIONS = `Edit a WordPress post according to the editing focus provided in the dynamic context.
 
 Available tools:
 - wp_edit_block_text — make targeted find-and-replace corrections within a block (preferred for small edits)
@@ -109,21 +179,13 @@ Available tools:
 - wp_read_post — re-read the post after making changes
 - wp_view_post — read another post on the site for reference, without closing the current one
 
-Work block by block. Do not try to replace the entire post at once. Preserve the overall structure unless restructuring was requested. After completing edits, use wp_save to save the post.`;
-}
+Work block by block. Do not try to replace the entire post at once. Preserve the overall structure unless restructuring was requested. After completing edits, use wp_save to save the post.
 
-export function buildReviewContent(
-	postContent: string,
-	notesSupported: boolean
-): string {
-	if (!notesSupported) {
-		return `Review the following WordPress post and provide editorial feedback.
+${DOCUMENT_LANGUAGE_RULE}`;
+
+export const REVIEW_INSTRUCTIONS_NO_NOTES = `Review a WordPress post and provide editorial feedback.
 
 Note: This WordPress site does not support notes (requires WordPress 6.9+). Please provide your feedback as a text summary instead.
-
-Here is the current post content:
-
-${postContent}
 
 Please review for:
 - Clarity and readability
@@ -134,14 +196,11 @@ Please review for:
 - Heading hierarchy and paragraph length
 - Post metadata: are categories, tags, and excerpt set appropriately?
 
-Provide your feedback as a structured summary, written in the same language as the post content.`;
-	}
+Provide your feedback as a structured summary.
 
-	return `Review the following WordPress post and leave editorial notes on individual blocks.
+${DOCUMENT_LANGUAGE_RULE}`;
 
-Here is the current post content:
-
-${postContent}
+export const REVIEW_INSTRUCTIONS_WITH_NOTES = `Review a WordPress post and leave editorial notes on individual blocks.
 
 Instructions:
 - Use wp_add_note to attach feedback to specific blocks by their index.
@@ -150,23 +209,11 @@ Instructions:
 - Also review post metadata: are categories, tags, and excerpt set appropriately?
 - Be specific and actionable in your notes — explain what should change and why.
 - Not every block needs a note — only flag issues worth addressing.
-- Write all notes in the same language as the post content.
-- After leaving all notes, provide a brief summary of your overall assessment.`;
-}
+- After leaving all notes, provide a brief summary of your overall assessment.
 
-export function buildRespondToNotesContent(
-	postContent: string,
-	formattedNotes: string
-): string {
-	return `Address the editorial notes on this WordPress post. Read each note, make the requested changes, and resolve notes when done.
+${DOCUMENT_LANGUAGE_RULE}`;
 
-Here is the current post content:
-
-${postContent}
-
-Here are the editorial notes:
-
-${formattedNotes}
+export const RESPOND_TO_NOTES_INSTRUCTIONS = `Address the editorial notes on a WordPress post. Read each note, make the requested changes, and resolve notes when done.
 
 Instructions:
 - Work through each note one at a time.
@@ -176,24 +223,12 @@ Instructions:
   3. If the note requires a response or clarification, use wp_reply_to_note.
   4. Once the note is fully addressed, use wp_resolve_note to mark it done.
 - If a note's feedback doesn't apply or you disagree, use wp_reply_to_note to explain why, then move on without resolving.
-- Write all replies in the same language as the post content.
 - Use wp_read_post to verify your changes after editing.
-- After addressing all notes, use wp_save to save the post.`;
-}
+- After addressing all notes, use wp_save to save the post.
 
-export function buildRespondToNoteContent(
-	postContent: string,
-	formattedNote: string
-): string {
-	return `Address this specific editorial note on the WordPress post.
+${DOCUMENT_LANGUAGE_RULE}`;
 
-Here is the current post content:
-
-${postContent}
-
-Here is the note to address:
-
-${formattedNote}
+export const RESPOND_TO_NOTE_INSTRUCTIONS = `Address a specific editorial note on a WordPress post.
 
 Instructions:
 1. Read the feedback carefully.
@@ -201,20 +236,12 @@ Instructions:
 3. If the note requires a response or clarification, use wp_reply_to_note.
 4. Once the note is fully addressed, use wp_resolve_note to mark it done.
 - If the feedback doesn't apply or you disagree, use wp_reply_to_note to explain why, then move on without resolving.
-- Write all replies in the same language as the post content.
 - Use wp_read_post to verify your changes after editing.
-- After addressing the note, use wp_save to save the post.`;
-}
+- After addressing the note, use wp_save to save the post.
 
-export function buildTranslateContent(
-	postContent: string,
-	language: string
-): string {
-	return `Translate the following WordPress post into ${language}.
+${DOCUMENT_LANGUAGE_RULE}`;
 
-Here is the current post content:
-
-${postContent}
+export const TRANSLATE_INSTRUCTIONS = `Translate a WordPress post into the target language provided in the dynamic context.
 
 Instructions:
 - Translate the title using wp_set_title.
@@ -224,15 +251,39 @@ Instructions:
 - Do NOT add, remove, or reorder blocks.
 - Do NOT change non-text attributes (images, URLs, etc.) unless they contain translatable alt text or captions.
 - Adapt idioms and cultural references naturally rather than translating literally.
-- After completing the translation, use wp_read_post to verify, then wp_save to save.`;
-}
+- After completing the translation, use wp_read_post to verify, then wp_save to save.
 
-export function buildComposeContent(
-	postContent: string,
-	notesSupported: boolean
-): string {
-	const scaffoldingInstructions = notesSupported
-		? `When the user approves the outline, scaffold the post:
+## Language for content
+
+If the post's source language isn't obvious from reading the content, use wp_update_command_status with status "awaiting_input" to confirm the source language with the user before translating. The target language is specified in the dynamic context and is authoritative.`;
+
+export const COMPOSE_INSTRUCTIONS_WITH_NOTES = `Help the user plan and outline a WordPress post through a guided conversation. You are an assistant helping the user organize their ideas — you will NOT write the actual post content. Your job is to help the user clarify their thinking and produce a structured outline with writing notes.
+
+## Process
+
+### Phase 1: Discovery
+Ask the user 2-3 focused questions to understand what they want to write about. Ask one question at a time using wp_update_command_status with status "awaiting_input". Topics to explore:
+- What is the main purpose or thesis of this post?
+- Who is the target audience?
+- What are the key points or ideas to cover?
+- What tone or style should it have?
+
+Do NOT ask all questions at once — ask one, wait for the user's response, then ask the next based on what they said. Skip questions if the answer is already obvious from context or prior answers.
+
+If it would help inform your questions or the outline, you can research existing posts on this site without leaving the current draft: use wp_list_posts to browse and wp_view_post to read any post by ID. The current post stays open and unaffected.
+
+### Phase 2: Outlining
+Based on the user's answers, propose an outline with 4-8 sections. For each section, include:
+- A clear section title
+- 2-4 bullet points describing what should be covered
+
+Present the outline in your message and set status to "awaiting_input". Also send resultData with {"planReady": true} — this adds an "Approve outline" button in the editor sidebar so the user doesn't have to type "approve" manually.
+
+### Phase 3: Refining
+If the user requests changes (instead of approving), update the outline and re-propose with planReady: true again. If the user asks a question that needs clarification before you can update the outline, respond WITHOUT planReady (omit resultData) until the outline is ready again.
+
+### Phase 4: Scaffolding
+When the user approves the outline, scaffold the post:
 1. Set the post title with wp_set_title.
 2. Insert a core/heading block (level 2) for each section with wp_insert_block.
 3. Insert an empty core/paragraph block after each heading as a writing placeholder.
@@ -242,50 +293,7 @@ export function buildComposeContent(
 
 Important: You MUST save (step 4) between inserting blocks and adding notes. Notes reference blocks by index, so the blocks must be synced to the browser first.
 
-The author will then write each section in their own voice, guided by the notes.`
-		: `When the user approves the outline, scaffold the post:
-- Set the post title with wp_set_title.
-- Insert a core/heading block (level 2) for each section with wp_insert_block.
-- Insert a core/paragraph block after each heading containing writing guidance in italics — key points, suggested angle, relevant details from the conversation, and approximate length guidance. The author will replace this with their own writing.
-- Save the post with wp_save.
-
-Note: This WordPress site does not support editorial notes (requires WordPress 6.9+), so writing guidance is included as placeholder paragraphs instead.`;
-
-	return `Help me plan and outline a WordPress post through a guided conversation. You are an assistant helping me organize my ideas — you will NOT write the actual post content. Your job is to help me clarify my thinking and produce a structured outline with writing notes.
-
-${postContent.trim() ? `Here is the current post content (which may be empty or a rough starting point):\n\n${postContent}\n` : 'This is a new/empty post.'}
-
-## Process
-
-### Phase 1: Discovery
-Ask me 2-3 focused questions to understand what I want to write about. Ask one question at a time using wp_update_command_status with status "awaiting_input". Topics to explore:
-- What is the main purpose or thesis of this post?
-- Who is the target audience?
-- What are the key points or ideas to cover?
-- What tone or style should it have?
-
-Do NOT ask all questions at once — ask one, wait for my response, then ask the next based on what I said. Skip questions if the answer is already obvious from context or prior answers.
-
-If it would help inform your questions or the outline, you can research existing posts on this site without leaving the current draft: use wp_list_posts to browse and wp_view_post to read any post by ID. The current post stays open and unaffected.
-
-### Phase 2: Outlining
-Based on my answers, propose an outline with 4-8 sections. For each section, include:
-- A clear section title
-- 2-4 bullet points describing what should be covered
-
-Present the outline in your message and set status to "awaiting_input". Also send resultData with {"planReady": true} — this adds an "Approve outline" button in the editor sidebar so the user doesn't have to type "approve" manually.
-
-### Phase 3: Refining
-If I request changes (instead of approving), update the outline and re-propose with planReady: true again. If I ask a question that needs clarification before you can update the outline, respond WITHOUT planReady (omit resultData) until the outline is ready again.
-
-### Phase 4: Scaffolding
-${scaffoldingInstructions}
-
-## Two-way communication
-
-To ask me a question during any phase:
-1. Call wp_update_command_status with status "awaiting_input" and your question as the message. WordPress automatically tracks the conversation history — you do NOT need to send resultData.
-2. Wait for a channel notification with event_type "response" — this contains my answer. The full conversation history is in the notification's meta.messages field.
+The author will then write each section in their own voice, guided by the notes.
 
 ## Message formatting
 
@@ -293,15 +301,55 @@ Your messages are displayed in a WordPress sidebar panel. Format them as simple 
 - Use <p> tags for paragraphs (not literal newline characters).
 - Use <strong> for emphasis, <ol>/<ul>/<li> for lists.
 - Use plain colons instead of em dashes for labels (e.g., "Audience: ..." not "Audience — ...").
-- Do NOT use markdown syntax — it will not be rendered.`;
-}
+- Do NOT use markdown syntax — it will not be rendered.
 
-export function buildPrePublishCheckContent(postContent: string): string {
-	return `The author is about to publish this WordPress post. Review the metadata and suggest improvements for the fields listed below. Do NOT comment on the post content, title, structure, or quality — assume the author is happy with those.
+${DOCUMENT_LANGUAGE_RULE}`;
 
-Here is the current post content:
+export const COMPOSE_INSTRUCTIONS_NO_NOTES = `Help the user plan and outline a WordPress post through a guided conversation. You are an assistant helping the user organize their ideas — you will NOT write the actual post content. Your job is to help the user clarify their thinking and produce a structured outline with writing notes.
 
-${postContent}
+## Process
+
+### Phase 1: Discovery
+Ask the user 2-3 focused questions to understand what they want to write about. Ask one question at a time using wp_update_command_status with status "awaiting_input". Topics to explore:
+- What is the main purpose or thesis of this post?
+- Who is the target audience?
+- What are the key points or ideas to cover?
+- What tone or style should it have?
+
+Do NOT ask all questions at once — ask one, wait for the user's response, then ask the next based on what they said. Skip questions if the answer is already obvious from context or prior answers.
+
+If it would help inform your questions or the outline, you can research existing posts on this site without leaving the current draft: use wp_list_posts to browse and wp_view_post to read any post by ID. The current post stays open and unaffected.
+
+### Phase 2: Outlining
+Based on the user's answers, propose an outline with 4-8 sections. For each section, include:
+- A clear section title
+- 2-4 bullet points describing what should be covered
+
+Present the outline in your message and set status to "awaiting_input". Also send resultData with {"planReady": true} — this adds an "Approve outline" button in the editor sidebar so the user doesn't have to type "approve" manually.
+
+### Phase 3: Refining
+If the user requests changes (instead of approving), update the outline and re-propose with planReady: true again. If the user asks a question that needs clarification before you can update the outline, respond WITHOUT planReady (omit resultData) until the outline is ready again.
+
+### Phase 4: Scaffolding
+When the user approves the outline, scaffold the post:
+- Set the post title with wp_set_title.
+- Insert a core/heading block (level 2) for each section with wp_insert_block.
+- Insert a core/paragraph block after each heading containing writing guidance in italics — key points, suggested angle, relevant details from the conversation, and approximate length guidance. The author will replace this with their own writing.
+- Save the post with wp_save.
+
+Note: This WordPress site does not support editorial notes (requires WordPress 6.9+), so writing guidance is included as placeholder paragraphs instead.
+
+## Message formatting
+
+Your messages are displayed in a WordPress sidebar panel. Format them as simple HTML:
+- Use <p> tags for paragraphs (not literal newline characters).
+- Use <strong> for emphasis, <ol>/<ul>/<li> for lists.
+- Use plain colons instead of em dashes for labels (e.g., "Audience: ..." not "Audience — ...").
+- Do NOT use markdown syntax — it will not be rendered.
+
+${DOCUMENT_LANGUAGE_RULE}`;
+
+export const PRE_PUBLISH_INSTRUCTIONS = `The author is about to publish a WordPress post. Review the metadata and suggest improvements for the fields listed below. Do NOT comment on the post content, title, structure, or quality — assume the author is happy with those.
 
 ## What to suggest
 
@@ -342,7 +390,216 @@ Example when everything looks good (empty object):
 Important:
 - This is a READ-ONLY check. Do NOT call any tool except wp_update_command_status. Do NOT add notes, edit blocks, update metadata, or make any changes to the post.
 - Your ONLY output must be a single wp_update_command_status call with the structured resultData JSON.
-- Write suggestions in the same language as the post content.
 - For the excerpt, write actual excerpt text, not a description of what the excerpt should be.
-- For categories and tags, suggest specific names, not descriptions.`;
+- For categories and tags, suggest specific names, not descriptions.
+
+${DOCUMENT_LANGUAGE_RULE}`;
+
+// --- Segment builders ---
+
+export function buildProofreadSegments(
+	postContent: string,
+	lang?: LanguageContext
+): PromptSegments {
+	return {
+		staticInstructions: PROOFREAD_INSTRUCTIONS,
+		dynamicContext: `${buildLocaleBlock(lang, { includeUser: true })}
+
+Here is the current post content:
+
+${postContent}`,
+	};
+}
+
+export function buildEditSegments(
+	postContent: string,
+	editingFocus: string,
+	lang?: LanguageContext
+): PromptSegments {
+	return {
+		staticInstructions: EDIT_INSTRUCTIONS,
+		dynamicContext: `Focus on: ${editingFocus}
+
+${buildLocaleBlock(lang, { includeUser: true })}
+
+Here is the current post content:
+
+${postContent}`,
+	};
+}
+
+export function buildReviewSegments(
+	postContent: string,
+	notesSupported: boolean,
+	lang?: LanguageContext
+): PromptSegments {
+	return {
+		staticInstructions: notesSupported
+			? REVIEW_INSTRUCTIONS_WITH_NOTES
+			: REVIEW_INSTRUCTIONS_NO_NOTES,
+		dynamicContext: `${buildLocaleBlock(lang, { includeUser: true })}
+
+Here is the current post content:
+
+${postContent}`,
+	};
+}
+
+export function buildRespondToNotesSegments(
+	postContent: string,
+	formattedNotes: string,
+	lang?: LanguageContext
+): PromptSegments {
+	return {
+		staticInstructions: RESPOND_TO_NOTES_INSTRUCTIONS,
+		dynamicContext: `${buildLocaleBlock(lang, { includeUser: true })}
+
+Here is the current post content:
+
+${postContent}
+
+Here are the editorial notes:
+
+${formattedNotes}`,
+	};
+}
+
+export function buildRespondToNoteSegments(
+	postContent: string,
+	formattedNote: string,
+	lang?: LanguageContext
+): PromptSegments {
+	return {
+		staticInstructions: RESPOND_TO_NOTE_INSTRUCTIONS,
+		dynamicContext: `${buildLocaleBlock(lang, { includeUser: true })}
+
+Here is the current post content:
+
+${postContent}
+
+Here is the note to address:
+
+${formattedNote}`,
+	};
+}
+
+export function buildTranslateSegments(
+	postContent: string,
+	language: string,
+	lang?: LanguageContext
+): PromptSegments {
+	return {
+		staticInstructions: TRANSLATE_INSTRUCTIONS,
+		dynamicContext: `Target language: ${language}
+
+${buildLocaleBlock(lang, { includeUser: true })}
+
+Here is the current post content:
+
+${postContent}`,
+	};
+}
+
+export function buildComposeSegments(
+	postContent: string,
+	notesSupported: boolean,
+	lang?: LanguageContext
+): PromptSegments {
+	const trimmed = postContent.trim();
+	const postBlock = trimmed
+		? `Here is the current post content (which may be empty or a rough starting point):\n\n${postContent}`
+		: 'This is a new/empty post.';
+
+	return {
+		staticInstructions: notesSupported
+			? COMPOSE_INSTRUCTIONS_WITH_NOTES
+			: COMPOSE_INSTRUCTIONS_NO_NOTES,
+		dynamicContext: `${buildLocaleBlock(lang, { includeUser: true })}
+
+${postBlock}`,
+	};
+}
+
+export function buildPrePublishCheckSegments(
+	postContent: string,
+	lang?: LanguageContext
+): PromptSegments {
+	return {
+		staticInstructions: PRE_PUBLISH_INSTRUCTIONS,
+		dynamicContext: `${buildLocaleBlock(lang, { includeUser: true })}
+
+Here is the current post content:
+
+${postContent}`,
+	};
+}
+
+// --- Backwards-compatible string builders ---
+
+export function buildProofreadContent(
+	postContent: string,
+	lang?: LanguageContext
+): string {
+	return joinSegments(buildProofreadSegments(postContent, lang));
+}
+
+export function buildEditContent(
+	postContent: string,
+	editingFocus: string,
+	lang?: LanguageContext
+): string {
+	return joinSegments(buildEditSegments(postContent, editingFocus, lang));
+}
+
+export function buildReviewContent(
+	postContent: string,
+	notesSupported: boolean,
+	lang?: LanguageContext
+): string {
+	return joinSegments(buildReviewSegments(postContent, notesSupported, lang));
+}
+
+export function buildRespondToNotesContent(
+	postContent: string,
+	formattedNotes: string,
+	lang?: LanguageContext
+): string {
+	return joinSegments(
+		buildRespondToNotesSegments(postContent, formattedNotes, lang)
+	);
+}
+
+export function buildRespondToNoteContent(
+	postContent: string,
+	formattedNote: string,
+	lang?: LanguageContext
+): string {
+	return joinSegments(
+		buildRespondToNoteSegments(postContent, formattedNote, lang)
+	);
+}
+
+export function buildTranslateContent(
+	postContent: string,
+	language: string,
+	lang?: LanguageContext
+): string {
+	return joinSegments(buildTranslateSegments(postContent, language, lang));
+}
+
+export function buildComposeContent(
+	postContent: string,
+	notesSupported: boolean,
+	lang?: LanguageContext
+): string {
+	return joinSegments(
+		buildComposeSegments(postContent, notesSupported, lang)
+	);
+}
+
+export function buildPrePublishCheckContent(
+	postContent: string,
+	lang?: LanguageContext
+): string {
+	return joinSegments(buildPrePublishCheckSegments(postContent, lang));
 }

@@ -3993,6 +3993,123 @@ describe('SessionManager', () => {
 					session.updateCommandStatus(123, 'completed')
 				).rejects.toThrow(/not connected/i);
 			});
+
+			it('caches a documentLanguage override from resultData', async () => {
+				// The REST controller persists documentLanguage to post
+				// meta; the session caches it in memory so the next
+				// command sees the new value without a REST round-trip.
+				mockCommandHandlerStart.mockResolvedValue(true);
+				mockCommandHandlerGetPluginStatus.mockReturnValue({
+					version: '1.0.0',
+					protocol_version: 1,
+					mcp_connected: false,
+					mcp_last_seen_at: null,
+				});
+				mockCommandHandlerGetTransport.mockReturnValue('sse');
+				mockCommandHandlerUpdateCommandStatus.mockResolvedValue(
+					undefined
+				);
+
+				await connectAndOpen(session);
+				expect(session.getConfirmedDocumentLanguage()).toBeNull();
+
+				await session.updateCommandStatus(
+					123,
+					'completed',
+					'Done',
+					JSON.stringify({ documentLanguage: 'Japanese' })
+				);
+
+				expect(session.getConfirmedDocumentLanguage()).toBe('Japanese');
+			});
+
+			it('ignores documentLanguage overrides that are blank or non-string', async () => {
+				mockCommandHandlerStart.mockResolvedValue(true);
+				mockCommandHandlerGetPluginStatus.mockReturnValue({
+					version: '1.0.0',
+					protocol_version: 1,
+					mcp_connected: false,
+					mcp_last_seen_at: null,
+				});
+				mockCommandHandlerGetTransport.mockReturnValue('sse');
+				mockCommandHandlerUpdateCommandStatus.mockResolvedValue(
+					undefined
+				);
+
+				await connectAndOpen(session);
+
+				await session.updateCommandStatus(
+					1,
+					'completed',
+					undefined,
+					JSON.stringify({ documentLanguage: '   ' })
+				);
+				expect(session.getConfirmedDocumentLanguage()).toBeNull();
+
+				await session.updateCommandStatus(
+					2,
+					'completed',
+					undefined,
+					JSON.stringify({ documentLanguage: 42 })
+				);
+				expect(session.getConfirmedDocumentLanguage()).toBeNull();
+
+				// Malformed JSON: swallowed, no crash, no cache change.
+				await session.updateCommandStatus(
+					3,
+					'completed',
+					undefined,
+					'not-json'
+				);
+				expect(session.getConfirmedDocumentLanguage()).toBeNull();
+			});
+		});
+
+		describe('getConfirmedDocumentLanguage()', () => {
+			it('seeds from wpce_document_language post meta on openPost', async () => {
+				await connectSession(session);
+				mockGetPost.mockResolvedValue({
+					...fakePost,
+					meta: { wpce_document_language: 'French' },
+				});
+				await session.openPost(42);
+				expect(session.getConfirmedDocumentLanguage()).toBe('French');
+			});
+
+			it('returns null when the meta is absent or blank', async () => {
+				await connectSession(session);
+				mockGetPost.mockResolvedValue({
+					...fakePost,
+					meta: { wpce_document_language: '   ' },
+				});
+				await session.openPost(42);
+				expect(session.getConfirmedDocumentLanguage()).toBeNull();
+			});
+
+			it('clears when the post is closed', async () => {
+				mockCommandHandlerStart.mockResolvedValue(true);
+				mockCommandHandlerGetPluginStatus.mockReturnValue({
+					version: '1.0.0',
+					protocol_version: 1,
+					mcp_connected: false,
+					mcp_last_seen_at: null,
+				});
+				mockCommandHandlerGetTransport.mockReturnValue('sse');
+				mockCommandHandlerUpdateCommandStatus.mockResolvedValue(
+					undefined
+				);
+
+				await connectSession(session);
+				mockGetPost.mockResolvedValue({
+					...fakePost,
+					meta: { wpce_document_language: 'Spanish' },
+				});
+				await session.openPost(42);
+				expect(session.getConfirmedDocumentLanguage()).toBe('Spanish');
+
+				await session.closePost();
+				expect(session.getConfirmedDocumentLanguage()).toBeNull();
+			});
 		});
 
 		describe('getPluginInfo()', () => {

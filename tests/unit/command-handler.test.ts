@@ -2075,6 +2075,188 @@ describe('CommandHandler', () => {
 	});
 
 	// ---------------------------------------------------------------
+	// Locale plumbing — userLocale/siteLocale flow from command
+	// arguments into both the embedded content and notification meta.
+	// ---------------------------------------------------------------
+	describe('locale plumbing', () => {
+		it('threads userLocale / siteLocale from command arguments into embedded content', async () => {
+			const { dispatchCommand } = setupMockCommandClient({
+				resolve: makePluginStatus(),
+			});
+
+			const notifier = vi
+				.fn<ChannelNotifier>()
+				.mockResolvedValue(undefined);
+			handler.setNotifier(notifier);
+
+			const contentProvider: ContentProvider = vi
+				.fn<ContentProvider>()
+				.mockResolvedValue({
+					postId: 80,
+					postContent: 'Bonjour',
+					notesSupported: false,
+				});
+			handler.setContentProvider(contentProvider);
+
+			await handler.start(createMockApiClient(), createCommandMap());
+
+			await dispatchCommand(
+				makeCommand({
+					id: 40,
+					post_id: 80,
+					prompt: 'proofread',
+					arguments: {
+						userLocale: 'fr_FR',
+						siteLocale: 'en_US',
+					},
+				})
+			);
+
+			expect(notifier).toHaveBeenCalledOnce();
+			const notification = notifier.mock.calls[0][0];
+			expect(notification.content).toContain('User locale: fr_FR');
+			expect(notification.content).toContain('Site locale hint: en_US');
+		});
+
+		it('copies userLocale to notification meta.user_locale for command events', async () => {
+			const { dispatchCommand } = setupMockCommandClient({
+				resolve: makePluginStatus(),
+			});
+
+			const notifier = vi
+				.fn<ChannelNotifier>()
+				.mockResolvedValue(undefined);
+			handler.setNotifier(notifier);
+
+			const contentProvider: ContentProvider = vi
+				.fn<ContentProvider>()
+				.mockResolvedValue({
+					postId: 81,
+					postContent: 'Hola',
+					notesSupported: false,
+				});
+			handler.setContentProvider(contentProvider);
+
+			await handler.start(createMockApiClient(), createCommandMap());
+
+			await dispatchCommand(
+				makeCommand({
+					id: 41,
+					post_id: 81,
+					prompt: 'proofread',
+					arguments: { userLocale: 'es_ES' },
+				})
+			);
+
+			const notification = notifier.mock.calls[0][0];
+			expect(notification.meta.user_locale).toBe('es_ES');
+		});
+
+		it('copies userLocale to notification meta.user_locale for response events', async () => {
+			const { dispatchResponse } = setupMockCommandClient({
+				resolve: makePluginStatus(),
+			});
+
+			const notifier = vi
+				.fn<ChannelNotifier>()
+				.mockResolvedValue(undefined);
+			handler.setNotifier(notifier);
+
+			await handler.start(createMockApiClient(), createCommandMap());
+
+			await dispatchResponse(
+				makeCommand({
+					id: 42,
+					post_id: 82,
+					prompt: 'compose',
+					status: 'awaiting_input',
+					arguments: { userLocale: 'de_DE' },
+					message: 'user answered',
+				})
+			);
+
+			const notification = notifier.mock.calls[0][0];
+			expect(notification.meta.event_type).toBe('response');
+			expect(notification.meta.user_locale).toBe('de_DE');
+		});
+
+		it('omits meta.user_locale when userLocale is absent', async () => {
+			const { dispatchCommand } = setupMockCommandClient({
+				resolve: makePluginStatus(),
+			});
+
+			const notifier = vi
+				.fn<ChannelNotifier>()
+				.mockResolvedValue(undefined);
+			handler.setNotifier(notifier);
+
+			const contentProvider: ContentProvider = vi
+				.fn<ContentProvider>()
+				.mockResolvedValue({
+					postId: 83,
+					postContent: 'Hello',
+					notesSupported: false,
+				});
+			handler.setContentProvider(contentProvider);
+
+			await handler.start(createMockApiClient(), createCommandMap());
+
+			await dispatchCommand(
+				makeCommand({
+					id: 43,
+					post_id: 83,
+					prompt: 'proofread',
+					arguments: {},
+				})
+			);
+
+			const notification = notifier.mock.calls[0][0];
+			expect(notification.meta).not.toHaveProperty('user_locale');
+		});
+
+		it('threads the snapshot confirmedLanguage into embedded prompt content', async () => {
+			// When the session has a confirmed document language for the
+			// post (either from prior clarification or seeded from post
+			// meta), the embedded prompt must carry it so the agent skips
+			// the re-detection / re-ask path.
+			const { dispatchCommand } = setupMockCommandClient({
+				resolve: makePluginStatus(),
+			});
+
+			const notifier = vi
+				.fn<ChannelNotifier>()
+				.mockResolvedValue(undefined);
+			handler.setNotifier(notifier);
+
+			const contentProvider: ContentProvider = vi
+				.fn<ContentProvider>()
+				.mockResolvedValue({
+					postId: 84,
+					postContent: 'Hola mundo',
+					notesSupported: false,
+					confirmedLanguage: 'Spanish',
+				});
+			handler.setContentProvider(contentProvider);
+
+			await handler.start(createMockApiClient(), createCommandMap());
+
+			await dispatchCommand(
+				makeCommand({
+					id: 44,
+					post_id: 84,
+					prompt: 'proofread',
+					arguments: { userLocale: 'en_US', siteLocale: 'en_US' },
+				})
+			);
+
+			const notification = notifier.mock.calls[0][0];
+			expect(notification.content).toContain(
+				'Confirmed document language: Spanish'
+			);
+		});
+	});
+
+	// ---------------------------------------------------------------
 	// Pre-open handler in handleCommand
 	// ---------------------------------------------------------------
 	describe('open-post pre-open handler', () => {

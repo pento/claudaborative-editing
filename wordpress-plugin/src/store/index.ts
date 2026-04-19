@@ -31,6 +31,7 @@ import type {
 	StatusApiResponse,
 } from './types';
 import { writeCommandToSync } from '../sync/command-sync';
+import { getCommandLocaleArgs } from '../utils/locale';
 
 /**
  * Thunk arguments provided by @wordpress/data to thunk action creators.
@@ -281,6 +282,14 @@ const actions = {
 				dispatch({ type: 'SUBMIT_COMMAND_START' });
 			}
 
+			// Merge universal locale metadata into every command's arguments
+			// so the MCP server can thread it into prompts without each
+			// command having to declare locale fields individually.
+			const argumentsWithLocale = {
+				...getCommandLocaleArgs(),
+				...args,
+			};
+
 			try {
 				const command = await apiFetch<Command>({
 					path: '/wpce/v1/commands',
@@ -288,7 +297,7 @@ const actions = {
 					data: {
 						prompt,
 						post_id: postId,
-						arguments: args,
+						arguments: argumentsWithLocale,
 					},
 				});
 

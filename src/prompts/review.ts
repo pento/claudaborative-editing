@@ -2,9 +2,10 @@ import { z } from 'zod';
 import type { PromptDefinition } from './definitions.js';
 import {
 	formatNotes,
-	buildReviewContent,
-	buildRespondToNotesContent,
-	buildRespondToNoteContent,
+	buildReviewSegments,
+	buildRespondToNotesSegments,
+	buildRespondToNoteSegments,
+	joinSegments,
 } from './prompt-content.js';
 
 export const reviewPrompts: PromptDefinition[] = [
@@ -44,18 +45,17 @@ export const reviewPrompts: PromptDefinition[] = [
 			// state === 'editing'
 			const postContent = session.readPost();
 			const notesSupported = session.getNotesSupported();
+			const segments = buildReviewSegments(postContent, notesSupported);
 
 			return {
 				description: `Review "${session.getTitle()}"`,
 				messages: [
 					{
 						role: 'user',
-						content: buildReviewContent(
-							postContent,
-							notesSupported
-						),
+						content: joinSegments(segments),
 					},
 				],
+				segments,
 			};
 		},
 	},
@@ -125,18 +125,20 @@ export const reviewPrompts: PromptDefinition[] = [
 			}
 
 			const formattedNotes = formatNotes(notes, noteBlockMap);
+			const segments = buildRespondToNotesSegments(
+				postContent,
+				formattedNotes
+			);
 
 			return {
 				description: `Respond to notes on "${session.getTitle()}"`,
 				messages: [
 					{
 						role: 'user',
-						content: buildRespondToNotesContent(
-							postContent,
-							formattedNotes
-						),
+						content: joinSegments(segments),
 					},
 				],
+				segments,
 			};
 		},
 	},
@@ -235,18 +237,20 @@ export const reviewPrompts: PromptDefinition[] = [
 			}
 
 			const formattedNote = formatNotes(relevantNotes, relevantMap);
+			const segments = buildRespondToNoteSegments(
+				postContent,
+				formattedNote
+			);
 
 			return {
 				description: `Respond to note #${noteId} on "${session.getTitle()}"`,
 				messages: [
 					{
 						role: 'user',
-						content: buildRespondToNoteContent(
-							postContent,
-							formattedNote
-						),
+						content: joinSegments(segments),
 					},
 				],
+				segments,
 			};
 		},
 	},

@@ -134,7 +134,8 @@ describe('review', () => {
 			const result = await prompt.handler({});
 
 			const text = result.messages[0].content.text;
-			expect(text).toContain('same language as the post content');
+			expect(text).toContain('Language for content');
+			expect(text).toContain("post's language");
 		});
 	});
 });

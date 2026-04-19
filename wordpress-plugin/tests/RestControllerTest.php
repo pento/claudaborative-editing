@@ -583,6 +583,298 @@ class RestControllerTest extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Completing with result_data.documentLanguage lifts the value into
+	 * the target post's wpce_document_language meta so subsequent
+	 * commands skip language clarification.
+	 */
+	public function test_complete_persists_document_language_to_target_post() {
+		$command_id = $this->create_command_directly( [ 'status' => 'running' ] );
+		delete_post_meta( self::$target_post_id, 'wpce_document_language' );
+
+		$request = new \WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
+		$request->set_body_params(
+			[
+				'status'      => 'completed',
+				'message'     => 'Proofread complete.',
+				'result_data' => wp_json_encode(
+					[
+						'documentLanguage' => 'Japanese',
+						'summary'          => 'Fixed 3 typos.',
+					]
+				),
+			]
+		);
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame(
+			'Japanese',
+			get_post_meta( self::$target_post_id, 'wpce_document_language', true )
+		);
+	}
+
+	/**
+	 * Free-form documentLanguage values (descriptive notes rather than
+	 * language tags) are persisted as sanitized free-form strings.
+	 * sanitize_text_field may strip line breaks / tags from exotic
+	 * inputs, but plain descriptive text (like the note below) passes
+	 * through unchanged.
+	 */
+	public function test_complete_persists_free_form_document_language() {
+		$command_id = $this->create_command_directly( [ 'status' => 'running' ] );
+		delete_post_meta( self::$target_post_id, 'wpce_document_language' );
+		$note = 'Primary language is English; include all languages in reviews.';
+
+		$request = new \WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
+		$request->set_body_params(
+			[
+				'status'      => 'completed',
+				'result_data' => wp_json_encode(
+					[ 'documentLanguage' => $note ]
+				),
+			]
+		);
+		rest_get_server()->dispatch( $request );
+
+		$this->assertSame(
+			$note,
+			get_post_meta( self::$target_post_id, 'wpce_document_language', true )
+		);
+	}
+
+	/**
+	 * Completing without a documentLanguage field leaves an existing
+	 * value on the target post untouched.
+	 */
+	public function test_complete_without_document_language_preserves_existing_meta() {
+		$command_id = $this->create_command_directly( [ 'status' => 'running' ] );
+		update_post_meta(
+			self::$target_post_id,
+			'wpce_document_language',
+			'Spanish'
+		);
+
+		$request = new \WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
+		$request->set_body_params(
+			[
+				'status'      => 'completed',
+				'result_data' => wp_json_encode(
+					[ 'summary' => 'Review complete.' ]
+				),
+			]
+		);
+		rest_get_server()->dispatch( $request );
+
+		$this->assertSame(
+			'Spanish',
+			get_post_meta( self::$target_post_id, 'wpce_document_language', true )
+		);
+	}
+
+	/**
+	 * An awaiting_input transition can also carry documentLanguage (for
+	 * example, right after the user answered the clarification question).
+	 */
+	public function test_awaiting_input_persists_document_language() {
+		$command_id = $this->create_command_directly( [ 'status' => 'running' ] );
+		delete_post_meta( self::$target_post_id, 'wpce_document_language' );
+
+		$request = new \WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
+		$request->set_body_params(
+			[
+				'status'      => 'awaiting_input',
+				'message'     => '<p>Proceeding with Spanish. Any last notes?</p>',
+				'result_data' => wp_json_encode(
+					[ 'documentLanguage' => 'Spanish' ]
+				),
+			]
+		);
+		rest_get_server()->dispatch( $request );
+
+		$this->assertSame(
+			'Spanish',
+			get_post_meta( self::$target_post_id, 'wpce_document_language', true )
+		);
+	}
+
+	/**
+	 * A non-string documentLanguage value is ignored silently — the
+	 * command still succeeds, the post meta is left alone. Other
+	 * malformed variants are covered separately: fully invalid JSON is
+	 * rejected by the route's validate_callback before reaching the
+	 * helper (see test_result_data_rejects_invalid_json), and a
+	 * whitespace-only string trims to empty (see
+	 * test_whitespace_only_document_language_is_ignored).
+	 */
+	public function test_malformed_document_language_is_ignored() {
+		$command_id = $this->create_command_directly( [ 'status' => 'running' ] );
+		update_post_meta(
+			self::$target_post_id,
+			'wpce_document_language',
+			'Original'
+		);
+
+		// Non-string value.
+		$request = new \WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
+		$request->set_body_params(
+			[
+				'status'      => 'completed',
+				'result_data' => wp_json_encode(
+					[ 'documentLanguage' => 42 ]
+				),
+			]
+		);
+		$response = rest_get_server()->dispatch( $request );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame(
+			'Original',
+			get_post_meta( self::$target_post_id, 'wpce_document_language', true )
+		);
+	}
+
+	/**
+	 * A whitespace-only documentLanguage value trims to empty and is
+	 * ignored, so an existing post-meta value is preserved. This covers
+	 * the `'' === $language` guard after trim.
+	 */
+	public function test_whitespace_only_document_language_is_ignored() {
+		$command_id = $this->create_command_directly( [ 'status' => 'running' ] );
+		update_post_meta(
+			self::$target_post_id,
+			'wpce_document_language',
+			'Original'
+		);
+
+		$request = new \WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
+		$request->set_body_params(
+			[
+				'status'      => 'completed',
+				'result_data' => wp_json_encode(
+					[ 'documentLanguage' => "  \t\n  " ]
+				),
+			]
+		);
+		$response = rest_get_server()->dispatch( $request );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame(
+			'Original',
+			get_post_meta( self::$target_post_id, 'wpce_document_language', true )
+		);
+	}
+
+	/**
+	 * If the command author has lost edit_post access to the target
+	 * (e.g. the post was moved to a restricted type or the user's role
+	 * changed) we must not let them write post meta on it through a
+	 * command completion — even though update_command's own permission
+	 * check (edit_posts + command ownership) still passes. Verify the
+	 * command completes successfully but the meta write is skipped.
+	 */
+	public function test_document_language_persistence_requires_edit_post_on_target() {
+		$command_id = $this->create_command_directly( [ 'status' => 'running' ] );
+		update_post_meta(
+			self::$target_post_id,
+			'wpce_document_language',
+			'Before'
+		);
+
+		// Deny edit_post on the target post for the current user for
+		// the duration of this test. update_command still passes
+		// because it only gates on edit_posts + command ownership.
+		$deny = function ( $allcaps, $caps, $args ) {
+			if (
+				isset( $args[0], $args[2] )
+				&& 'edit_post' === $args[0]
+				&& (int) $args[2] === (int) self::$target_post_id
+			) {
+				foreach ( $caps as $cap ) {
+					$allcaps[ $cap ] = false;
+				}
+			}
+			return $allcaps;
+		};
+		add_filter( 'user_has_cap', $deny, 10, 3 );
+
+		try {
+			$request = new \WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
+			$request->set_body_params(
+				[
+					'status'      => 'completed',
+					'result_data' => wp_json_encode(
+						[ 'documentLanguage' => 'Attacker-controlled' ]
+					),
+				]
+			);
+			$response = rest_get_server()->dispatch( $request );
+
+			// Command completion itself is still allowed.
+			$this->assertSame( 200, $response->get_status() );
+		} finally {
+			remove_filter( 'user_has_cap', $deny, 10 );
+		}
+
+		// The target-post meta must NOT have been overwritten.
+		$this->assertSame(
+			'Before',
+			get_post_meta( self::$target_post_id, 'wpce_document_language', true )
+		);
+	}
+
+	/**
+	 * An orphan command (no post_parent pointing at a target post) is
+	 * a no-op for language persistence — there's nowhere to write the
+	 * meta. The command itself still completes successfully. Covers the
+	 * `0 === $command->post_parent` guard.
+	 */
+	public function test_orphan_command_skips_document_language_persistence() {
+		// Create a command without going through create_command_directly
+		// so we can force post_parent = 0 (the fixture sets it to the
+		// default target post).
+		/** @var int $command_id */
+		$command_id = self::factory()->post->create(
+			[
+				'post_type'   => Command_Store::POST_TYPE,
+				'post_status' => 'publish',
+				'post_author' => self::$editor_id,
+				'post_parent' => 0,
+			]
+		);
+		update_post_meta( $command_id, 'wpce_prompt', 'review' );
+		update_post_meta( $command_id, 'wpce_arguments', '{}' );
+		update_post_meta( $command_id, 'wpce_command_status', 'running' );
+		update_post_meta(
+			$command_id,
+			'wpce_expires_at',
+			gmdate( 'Y-m-d\TH:i:s\Z', time() + HOUR_IN_SECONDS )
+		);
+
+		// Pre-seed the target post meta so we can assert it doesn't move.
+		update_post_meta(
+			self::$target_post_id,
+			'wpce_document_language',
+			'Untouched'
+		);
+
+		$request = new \WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
+		$request->set_body_params(
+			[
+				'status'      => 'completed',
+				'result_data' => wp_json_encode(
+					[ 'documentLanguage' => 'French' ]
+				),
+			]
+		);
+		$response = rest_get_server()->dispatch( $request );
+		$this->assertSame( 200, $response->get_status() );
+
+		// The unrelated target post's meta must NOT be touched.
+		$this->assertSame(
+			'Untouched',
+			get_post_meta( self::$target_post_id, 'wpce_document_language', true )
+		);
+	}
+
+	/**
 	 * The pre-publish-check prompt should be accepted.
 	 */
 	public function test_create_command_with_pre_publish_check_prompt() {
@@ -1661,6 +1953,40 @@ class RestControllerTest extends \WP_UnitTestCase {
 		$joined = implode( "\n", $inline );
 		$this->assertStringContainsString( '"cloudUrl":""', $joined );
 		$this->assertStringContainsString( '"cloudApiKey":""', $joined );
+	}
+
+	/**
+	 * enqueue_editor_assets injects the user and site locale into
+	 * wpceInitialState so the editor bundle can forward them with
+	 * every MCP command for prompt-level language handling.
+	 */
+	public function test_enqueue_editor_assets_includes_locale() {
+		$this->ensure_asset_file();
+		delete_transient( 'wpce_mcp_last_seen_' . self::$editor_id );
+
+		$GLOBALS['wp_scripts'] = null;
+		wp_default_scripts( wp_scripts() );
+
+		\Claudaborative_Editing::enqueue_editor_assets();
+
+		$scripts = wp_scripts();
+		$inline  = $scripts->get_data( 'wp-hooks', 'after' );
+
+		$this->assertIsArray( $inline );
+
+		$joined = implode( "\n", $inline );
+		$this->assertStringContainsString( '"userLocale":', $joined );
+		$this->assertStringContainsString( '"siteLocale":', $joined );
+		// Locale values should be non-empty strings (get_locale() defaults
+		// to en_US in the test environment).
+		$this->assertMatchesRegularExpression(
+			'/"userLocale":"[a-zA-Z_\-]+"/',
+			$joined
+		);
+		$this->assertMatchesRegularExpression(
+			'/"siteLocale":"[a-zA-Z_\-]+"/',
+			$joined
+		);
 	}
 
 	/**

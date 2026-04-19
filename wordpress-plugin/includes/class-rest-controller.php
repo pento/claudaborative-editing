@@ -626,6 +626,10 @@ class REST_Controller extends \WP_REST_Controller {
 		// conversation history — append the message as an assistant entry.
 		// Any non-messages fields from client result_data (e.g., planReady)
 		// are merged into the existing result_data.
+		//
+		// Either branch may also carry a documentLanguage field, which
+		// gets lifted to post meta on the target post so subsequent
+		// commands skip language clarification.
 		if ( 'awaiting_input' === $new_status ) {
 			if ( null !== $message ) {
 				$this->append_conversation_message( $command->ID, 'assistant', $message );
@@ -634,11 +638,13 @@ class REST_Controller extends \WP_REST_Controller {
 			$result_data = $request->get_param( 'result_data' );
 			if ( null !== $result_data ) {
 				$this->merge_result_data_flags( $command->ID, $result_data );
+				$this->persist_document_language_from_result_data( $command, $result_data );
 			}
 		} else {
 			$result_data = $request->get_param( 'result_data' );
 			if ( null !== $result_data ) {
 				update_post_meta( $command->ID, 'wpce_result_data', $result_data );
+				$this->persist_document_language_from_result_data( $command, $result_data );
 			}
 		}
 
@@ -1091,6 +1097,67 @@ class REST_Controller extends \WP_REST_Controller {
 
 		// Update the object cache to match.
 		wp_cache_delete( $post_id, 'post_meta' );
+	}
+
+	/**
+	 * If the client's resultData carries a `documentLanguage` field, lift
+	 * it out of the command's per-invocation payload and persist it as
+	 * post meta on the command's target post. Future commands on that
+	 * post will pick it up and skip language clarification.
+	 *
+	 * The value is a free-form string — the agent decides what's useful
+	 * (a language name, a BCP-47 tag, or a descriptive note).
+	 *
+	 * Callers must pass a JSON-object string; this is already guaranteed
+	 * by the endpoint's result_data sanitize_callback (Command_Store::sanitize_json)
+	 * and validate_callback, so json_decode to an associative array is
+	 * safe without an is_array guard.
+	 *
+	 * @param \WP_Post $command     The command post (already loaded by the caller).
+	 * @param string   $client_json JSON object string from the client's resultData parameter.
+	 * @return void
+	 */
+	private function persist_document_language_from_result_data( $command, $client_json ) {
+		$client_data = json_decode( $client_json, true );
+
+		if ( ! isset( $client_data['documentLanguage'] ) ) {
+			return;
+		}
+
+		$language = $client_data['documentLanguage'];
+
+		if ( ! is_string( $language ) ) {
+			return;
+		}
+
+		$language = trim( $language );
+
+		if ( '' === $language ) {
+			return;
+		}
+
+		if ( 0 === (int) $command->post_parent ) {
+			return;
+		}
+
+		$parent_post_id = (int) $command->post_parent;
+
+		// update_command only checks edit_posts + command ownership, so
+		// we must re-gate on edit_post for the specific target post
+		// before writing its meta. This prevents a user who still owns
+		// the command — but has since lost edit access to the target
+		// post (e.g. it was moved or locked down) — from side-channeling
+		// post meta through a completion payload. No-op silently when
+		// unauthorized so the command itself still completes.
+		if ( ! current_user_can( 'edit_post', $parent_post_id ) ) {
+			return;
+		}
+
+		update_post_meta(
+			$parent_post_id,
+			'wpce_document_language',
+			sanitize_text_field( $language )
+		);
 	}
 
 	/**

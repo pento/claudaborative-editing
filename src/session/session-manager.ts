@@ -77,6 +77,39 @@ const STREAM_CHUNK_DELAY_MS = 100;
 /** Minimum text length to trigger streaming (short text is applied atomically). */
 const STREAM_THRESHOLD = 20;
 
+/**
+ * Pull the confirmed document language (if any) from a post's REST
+ * payload. The PHP side exposes `wpce_document_language` under `meta`.
+ */
+function readDocumentLanguageMeta(post: WPPost): string | null {
+	const raw = post.meta?.wpce_document_language;
+	if (typeof raw !== 'string') return null;
+	const trimmed = raw.trim();
+	return trimmed ? trimmed : null;
+}
+
+/**
+ * Extract a `documentLanguage` override from the JSON resultData blob
+ * the agent passes into wp_update_command_status, or return null if the
+ * blob is malformed, missing the field, or carries a non-string value.
+ */
+function extractDocumentLanguageOverride(
+	resultData: string | undefined
+): string | null {
+	if (!resultData) return null;
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(resultData);
+	} catch {
+		return null;
+	}
+	if (!parsed || typeof parsed !== 'object') return null;
+	const value = (parsed as Record<string, unknown>).documentLanguage;
+	if (typeof value !== 'string') return null;
+	const trimmed = value.trim();
+	return trimmed ? trimmed : null;
+}
+
 /** Input shape for blocks with optional recursive inner blocks. */
 export interface BlockInput {
 	name: string;
@@ -327,6 +360,14 @@ export class SessionManager {
 	private _cachedCategories: string[] = [];
 	/** Cached resolved tag names (populated in openPost, updated in setTags). */
 	private _cachedTags: string[] = [];
+	/**
+	 * Cached document language confirmation for the currently-open post.
+	 * Seeded from `wpce_document_language` post meta on openPost; updated
+	 * in-memory whenever the agent writes `documentLanguage` via
+	 * wp_update_command_status so subsequent commands see the new value
+	 * without a REST round-trip.
+	 */
+	private _confirmedDocumentLanguage: string | null = null;
 
 	/** True when the post has been deleted or trashed externally. */
 	private postGone = false;
@@ -592,6 +633,7 @@ export class SessionManager {
 		// Fetch post from API
 		const post = await this.apiClient.getPost(postId);
 		this._currentPost = post;
+		this._confirmedDocumentLanguage = readDocumentLanguageMeta(post);
 
 		// Create an EMPTY Y.Doc — don't load content yet.
 		// We first sync with the server to receive any existing CRDT state.
@@ -926,6 +968,7 @@ export class SessionManager {
 		this.commentDoc = null;
 		this.postRoom = null;
 		this._currentPost = null;
+		this._confirmedDocumentLanguage = null;
 		this.collaborators = [];
 		this._cachedCategories = [];
 		this._cachedTags = [];
@@ -1888,10 +1931,30 @@ export class SessionManager {
 			resultData
 		);
 
+		// Mirror the PHP-side lift-to-post-meta: if the agent is telling
+		// us the confirmed document language, update the in-memory cache
+		// so the very next command on this post sees it without having
+		// to refetch the post from REST.
+		const override = extractDocumentLanguageOverride(resultData);
+		if (override) {
+			this._confirmedDocumentLanguage = override;
+		}
+
 		// Without this, the browser can lag 250-500ms behind the REST
 		// PATCH — long enough for stale cleanup or subsequent writes to
 		// mask the transition.
 		this._syncClient?.flushQueue();
+	}
+
+	/**
+	 * Return the confirmed document language for the currently-open
+	 * post, if the agent has clarified it during this or a prior
+	 * session. Prompt builders consume this to skip the language
+	 * clarification path and land content in the right language from
+	 * the start.
+	 */
+	getConfirmedDocumentLanguage(): string | null {
+		return this._confirmedDocumentLanguage;
 	}
 
 	/**
@@ -2041,7 +2104,13 @@ export class SessionManager {
 					// Notes unavailable — proceed without them.
 				}
 			}
-			return { postId, postContent, notes, notesSupported };
+			return {
+				postId,
+				postContent,
+				notes,
+				notesSupported,
+				confirmedLanguage: this._confirmedDocumentLanguage ?? undefined,
+			};
 		});
 		try {
 			// Collection sync uses the 'state' map (not 'document').

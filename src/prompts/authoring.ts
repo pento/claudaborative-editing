@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { PromptDefinition } from './definitions.js';
-import { buildTranslateContent } from './prompt-content.js';
+import { buildTranslateSegments, joinSegments } from './prompt-content.js';
 
 export const authoringPrompts: PromptDefinition[] = [
 	{
@@ -46,15 +46,17 @@ export const authoringPrompts: PromptDefinition[] = [
 
 			// state === 'editing'
 			const postContent = session.readPost();
+			const segments = buildTranslateSegments(postContent, language);
 
 			return {
 				description: `Translate "${session.getTitle()}" into ${language}`,
 				messages: [
 					{
 						role: 'user',
-						content: buildTranslateContent(postContent, language),
+						content: joinSegments(segments),
 					},
 				],
+				segments,
 			};
 		},
 	},
