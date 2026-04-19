@@ -53,5 +53,8 @@ To ask the user a follow-up question during command execution:
 1. Call wp_update_command_status with status "awaiting_input" and your question as the message. WordPress automatically tracks the conversation history, so resultData is optional. If you include resultData, use it only for non-message workflow flags (for example, state such as planReady) and do NOT duplicate conversation messages/history there.
 2. Format messages as simple HTML: use <p> tags for paragraphs, <strong> for emphasis, <ol>/<ul>/<li> for lists.
 3. Wait for a <channel source="wpce"> notification with event_type "response". Do not proceed until you receive it.
-4. The awaiting_input status does not expire — the user can take their time responding.`;
+4. The awaiting_input status does not expire — the user can take their time responding.
+
+**Language for status messages and questions:**
+Text sent to wp_update_command_status — the "message" field for every status, and the question text on awaiting_input — is displayed in the WordPress editor UI and must be written in the user's locale. The user's locale is provided as meta.user_locale on the channel notification (e.g. "fr_FR", "ja_JP"). If meta.user_locale is missing or unknown, fall back to the document's language. This rule applies to all status messages regardless of the language the post content is written in.`;
 }

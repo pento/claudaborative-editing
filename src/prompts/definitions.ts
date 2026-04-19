@@ -1,5 +1,6 @@
 import type { z } from 'zod';
 import type { SessionManager } from '../session/session-manager.js';
+import type { PromptSegments } from './prompt-content.js';
 
 /**
  * A single message in a prompt response.
@@ -13,10 +14,19 @@ export interface PromptMessage {
 
 /**
  * Result returned by a prompt's buildMessages function.
+ *
+ * `messages` is authoritative for the MCP prompt path.
+ *
+ * `segments`, when present, exposes the same prompt body split into a stable
+ * `staticInstructions` prefix and a per-invocation `dynamicContext` suffix.
+ * A hosted Anthropic orchestrator consumes these segments directly and
+ * applies cache_control on the static prefix to enable prompt caching.
+ * MCP callers can ignore it.
  */
 export interface PromptResult {
 	description: string;
 	messages: PromptMessage[];
+	segments?: PromptSegments;
 }
 
 /**

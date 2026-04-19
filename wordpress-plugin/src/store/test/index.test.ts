@@ -527,6 +527,21 @@ describe('AI Actions store', () => {
 		});
 
 		describe('submitCommand', () => {
+			let originalState: unknown;
+
+			beforeEach(() => {
+				originalState = (window as any).wpceInitialState;
+				delete (window as any).wpceInitialState;
+			});
+
+			afterEach(() => {
+				if (originalState === undefined) {
+					delete (window as any).wpceInitialState;
+				} else {
+					(window as any).wpceInitialState = originalState;
+				}
+			});
+
 			it('submits command and dispatches success', async () => {
 				mockedApiFetch.mockResolvedValueOnce(MOCK_COMMAND);
 
@@ -548,6 +563,54 @@ describe('AI Actions store', () => {
 					type: 'SUBMIT_COMMAND_SUCCESS',
 					command: MOCK_COMMAND,
 				});
+			});
+
+			it('merges userLocale and siteLocale from wpceInitialState into arguments', async () => {
+				(window as any).wpceInitialState = {
+					userLocale: 'fr_FR',
+					siteLocale: 'en_US',
+				};
+				mockedApiFetch.mockResolvedValueOnce(MOCK_COMMAND);
+
+				await actions.submitCommand('edit', 123, {
+					editingFocus: 'improve clarity',
+				})({ dispatch });
+
+				expect(apiFetch).toHaveBeenCalledWith({
+					path: '/wpce/v1/commands',
+					method: 'POST',
+					data: {
+						prompt: 'edit',
+						post_id: 123,
+						arguments: {
+							userLocale: 'fr_FR',
+							siteLocale: 'en_US',
+							editingFocus: 'improve clarity',
+						},
+					},
+				});
+			});
+
+			it('does not let locale fields override caller-provided arguments of the same name', async () => {
+				// Caller arguments win over the locale defaults. This
+				// guards against future callers who might want to
+				// override userLocale explicitly per command.
+				(window as any).wpceInitialState = { userLocale: 'fr_FR' };
+				mockedApiFetch.mockResolvedValueOnce(MOCK_COMMAND);
+
+				await actions.submitCommand('proofread', 10, {
+					userLocale: 'ja_JP',
+				})({ dispatch });
+
+				expect(apiFetch).toHaveBeenCalledWith(
+					expect.objectContaining({
+						data: expect.objectContaining({
+							arguments: expect.objectContaining({
+								userLocale: 'ja_JP',
+							}),
+						}),
+					})
+				);
 			});
 
 			it('dispatches error on failure', async () => {

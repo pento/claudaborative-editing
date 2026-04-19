@@ -1,5 +1,5 @@
 import type { PromptDefinition } from './definitions.js';
-import { buildPrePublishCheckContent } from './prompt-content.js';
+import { buildPrePublishCheckSegments } from './prompt-content.js';
 
 export const prePublishPrompts: PromptDefinition[] = [
 	{
@@ -37,15 +37,17 @@ export const prePublishPrompts: PromptDefinition[] = [
 
 			// state === 'editing'
 			const postContent = session.readPost();
+			const segments = buildPrePublishCheckSegments(postContent);
 
 			return {
 				description: `Pre-publish check for "${session.getTitle()}"`,
 				messages: [
 					{
 						role: 'user',
-						content: buildPrePublishCheckContent(postContent),
+						content: `${segments.staticInstructions}\n\n${segments.dynamicContext}`,
 					},
 				],
+				segments,
 			};
 		},
 	},

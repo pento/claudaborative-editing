@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { PromptDefinition } from './definitions.js';
-import { buildEditContent, buildProofreadContent } from './prompt-content.js';
+import { buildEditSegments, buildProofreadSegments } from './prompt-content.js';
 
 export const editingPrompts: PromptDefinition[] = [
 	{
@@ -49,15 +49,17 @@ export const editingPrompts: PromptDefinition[] = [
 
 			// state === 'editing'
 			const postContent = session.readPost();
+			const segments = buildEditSegments(postContent, editingFocus);
 
 			return {
 				description: `Edit "${session.getTitle()}"`,
 				messages: [
 					{
 						role: 'user',
-						content: buildEditContent(postContent, editingFocus),
+						content: `${segments.staticInstructions}\n\n${segments.dynamicContext}`,
 					},
 				],
+				segments,
 			};
 		},
 	},
@@ -96,15 +98,17 @@ export const editingPrompts: PromptDefinition[] = [
 
 			// state === 'editing'
 			const postContent = session.readPost();
+			const segments = buildProofreadSegments(postContent);
 
 			return {
 				description: `Proofread "${session.getTitle()}"`,
 				messages: [
 					{
 						role: 'user',
-						content: buildProofreadContent(postContent),
+						content: `${segments.staticInstructions}\n\n${segments.dynamicContext}`,
 					},
 				],
+				segments,
 			};
 		},
 	},

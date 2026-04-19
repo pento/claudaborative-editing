@@ -110,6 +110,8 @@ class Claudaborative_Editing {
 					'mcpConnected' => $mcp_connected,
 					'cloudUrl'     => $cloud_url,
 					'cloudApiKey'  => $cloud_api_key,
+					'userLocale'   => get_user_locale(),
+					'siteLocale'   => get_locale(),
 				)
 			) . ';' .
 			( $mcp_connected

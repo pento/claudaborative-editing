@@ -34,6 +34,7 @@ import {
 	buildTranslateContent,
 	buildComposeContent,
 	buildPrePublishCheckContent,
+	type LanguageContext,
 } from '../prompts/prompt-content.js';
 
 /** Callback for sending channel notifications to Claude Code. */
@@ -263,6 +264,24 @@ export class CommandHandler {
 	// --- Internal ---
 
 	/**
+	 * Extract the universal locale metadata that the WP plugin merges into
+	 * every command's arguments. Returns an empty object if the fields are
+	 * missing or malformed — prompt builders tolerate that.
+	 */
+	private extractLanguageContext(command: Command): LanguageContext {
+		const lang: LanguageContext = {};
+		const userLocale = command.arguments.userLocale;
+		const siteLocale = command.arguments.siteLocale;
+		if (typeof userLocale === 'string' && userLocale) {
+			lang.userLocale = userLocale;
+		}
+		if (typeof siteLocale === 'string' && siteLocale) {
+			lang.siteLocale = siteLocale;
+		}
+		return lang;
+	}
+
+	/**
 	 * Build embedded notification content for a command, or return null
 	 * if the content provider is not available or the post isn't ready.
 	 */
@@ -278,23 +297,24 @@ export class CommandHandler {
 		if (snapshot.postId !== command.post_id) return null;
 
 		const { postContent, notes, notesSupported } = snapshot;
+		const lang = this.extractLanguageContext(command);
 
 		switch (command.prompt) {
 			case 'proofread':
-				return buildProofreadContent(postContent);
+				return buildProofreadContent(postContent, lang);
 			case 'edit': {
 				const editingFocus = command.arguments.editingFocus;
 				if (typeof editingFocus !== 'string' || !editingFocus) {
 					return null; // Required argument missing — fall back to non-embedded.
 				}
-				return buildEditContent(postContent, editingFocus);
+				return buildEditContent(postContent, editingFocus, lang);
 			}
 			case 'review':
-				return buildReviewContent(postContent, notesSupported);
+				return buildReviewContent(postContent, notesSupported, lang);
 			case 'respond-to-notes': {
 				if (!notes || notes.notes.length === 0) return null;
 				const formatted = formatNotes(notes.notes, notes.noteBlockMap);
-				return buildRespondToNotesContent(postContent, formatted);
+				return buildRespondToNotesContent(postContent, formatted, lang);
 			}
 			case 'respond-to-note': {
 				if (!notes) return null;
@@ -326,19 +346,19 @@ export class CommandHandler {
 					relevantMap[noteId] = blockIdx;
 				}
 				const formatted = formatNotes(relevantNotes, relevantMap);
-				return buildRespondToNoteContent(postContent, formatted);
+				return buildRespondToNoteContent(postContent, formatted, lang);
 			}
 			case 'translate': {
 				const language = command.arguments.language;
 				if (typeof language !== 'string' || !language) {
 					return null; // Required argument missing — fall back to non-embedded.
 				}
-				return buildTranslateContent(postContent, language);
+				return buildTranslateContent(postContent, language, lang);
 			}
 			case 'compose':
-				return buildComposeContent(postContent, notesSupported);
+				return buildComposeContent(postContent, notesSupported, lang);
 			case 'pre-publish-check':
-				return buildPrePublishCheckContent(postContent);
+				return buildPrePublishCheckContent(postContent, lang);
 			default:
 				return null;
 		}
@@ -381,6 +401,11 @@ export class CommandHandler {
 			post_id: String(command.post_id),
 			event_type: 'response',
 		};
+
+		const userLocale = command.arguments.userLocale;
+		if (typeof userLocale === 'string' && userLocale) {
+			meta.user_locale = userLocale;
+		}
 
 		if (messages) {
 			meta.messages = JSON.stringify(messages);
@@ -467,6 +492,11 @@ export class CommandHandler {
 			prompt: command.prompt,
 			post_id: String(command.post_id),
 		};
+
+		const userLocale = command.arguments.userLocale;
+		if (typeof userLocale === 'string' && userLocale) {
+			meta.user_locale = userLocale;
+		}
 
 		if (argsEntries.length > 0) {
 			meta.arguments = JSON.stringify(command.arguments);
