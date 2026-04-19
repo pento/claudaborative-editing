@@ -28,7 +28,13 @@ describe('getChannelInstructions', () => {
 		expect(channel).toContain("user's locale");
 	});
 
-	it('says to fall back to the document language when user locale is absent', () => {
+	it('specifies the full fallback chain (user → document → site locale)', () => {
+		// The fallback chain has to carve out the case where the
+		// document language is itself what's being asked about — a
+		// clarification question can't sensibly be written in the
+		// language we're asking the user to confirm.
 		expect(channel).toContain("document's language");
+		expect(channel).toContain('site locale hint');
+		expect(channel).toMatch(/document.{0,40}(unknown|clarify)/i);
 	});
 });

@@ -56,5 +56,5 @@ To ask the user a follow-up question during command execution:
 4. The awaiting_input status does not expire — the user can take their time responding.
 
 **Language for status messages and questions:**
-Text sent to wp_update_command_status — the "message" field for every status, and the question text on awaiting_input — is displayed in the WordPress editor UI and must be written in the user's locale. The user's locale is provided as meta.user_locale on the channel notification (e.g. "fr_FR", "ja_JP"). If meta.user_locale is missing or unknown, fall back to the document's language. This rule applies to all status messages regardless of the language the post content is written in.`;
+Text sent to wp_update_command_status — the "message" field for every status, and the question text on awaiting_input — is displayed in the WordPress editor UI and must be written in the user's locale. The user's locale is provided as meta.user_locale on the channel notification (e.g. "fr_FR", "ja_JP"). If meta.user_locale is missing or unknown, fall back to the document's language; if the document's language is also unknown or is itself what you're asking the user to clarify, fall back to the site locale hint in the embedded prompt. This rule applies to all status messages regardless of the language the post content is written in.`;
 }

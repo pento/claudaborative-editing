@@ -638,13 +638,13 @@ class REST_Controller extends \WP_REST_Controller {
 			$result_data = $request->get_param( 'result_data' );
 			if ( null !== $result_data ) {
 				$this->merge_result_data_flags( $command->ID, $result_data );
-				$this->persist_document_language_from_result_data( $command->ID, $result_data );
+				$this->persist_document_language_from_result_data( $command, $result_data );
 			}
 		} else {
 			$result_data = $request->get_param( 'result_data' );
 			if ( null !== $result_data ) {
 				update_post_meta( $command->ID, 'wpce_result_data', $result_data );
-				$this->persist_document_language_from_result_data( $command->ID, $result_data );
+				$this->persist_document_language_from_result_data( $command, $result_data );
 			}
 		}
 
@@ -1113,11 +1113,11 @@ class REST_Controller extends \WP_REST_Controller {
 	 * and validate_callback, so json_decode to an associative array is
 	 * safe without an is_array guard.
 	 *
-	 * @param int    $command_id  The command post ID.
-	 * @param string $client_json JSON object string from the client's resultData parameter.
+	 * @param \WP_Post $command     The command post (already loaded by the caller).
+	 * @param string   $client_json JSON object string from the client's resultData parameter.
 	 * @return void
 	 */
-	private function persist_document_language_from_result_data( $command_id, $client_json ) {
+	private function persist_document_language_from_result_data( $command, $client_json ) {
 		$client_data = json_decode( $client_json, true );
 
 		if ( ! isset( $client_data['documentLanguage'] ) ) {
@@ -1136,8 +1136,7 @@ class REST_Controller extends \WP_REST_Controller {
 			return;
 		}
 
-		$command = get_post( $command_id );
-		if ( ! $command || 0 === (int) $command->post_parent ) {
+		if ( 0 === (int) $command->post_parent ) {
 			return;
 		}
 

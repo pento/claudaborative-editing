@@ -68,6 +68,10 @@ class Claudaborative_Editing {
 		// Stored as a free-form string — the agent decides whether to
 		// write a language name ("Japanese"), a tag ("ja-JP"), or a
 		// descriptive note ("Primary English, reviews cover all languages").
+		//
+		// The auth_callback gates REST read/write on edit_post for the
+		// target post so anonymous consumers of /wp/v2/posts/{id} don't
+		// see this internal agent hint on published posts.
 		register_meta(
 			'post',
 			'wpce_document_language',
@@ -77,6 +81,9 @@ class Claudaborative_Editing {
 				'default'           => '',
 				'show_in_rest'      => true,
 				'sanitize_callback' => 'sanitize_text_field',
+				'auth_callback'     => function ( $allowed, $meta_key, $object_id ) {
+					return current_user_can( 'edit_post', $object_id );
+				},
 			]
 		);
 	}
