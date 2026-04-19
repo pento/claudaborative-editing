@@ -1664,6 +1664,40 @@ class RestControllerTest extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * enqueue_editor_assets injects the user and site locale into
+	 * wpceInitialState so the editor bundle can forward them with
+	 * every MCP command for prompt-level language handling.
+	 */
+	public function test_enqueue_editor_assets_includes_locale() {
+		$this->ensure_asset_file();
+		delete_transient( 'wpce_mcp_last_seen_' . self::$editor_id );
+
+		$GLOBALS['wp_scripts'] = null;
+		wp_default_scripts( wp_scripts() );
+
+		\Claudaborative_Editing::enqueue_editor_assets();
+
+		$scripts = wp_scripts();
+		$inline  = $scripts->get_data( 'wp-hooks', 'after' );
+
+		$this->assertIsArray( $inline );
+
+		$joined = implode( "\n", $inline );
+		$this->assertStringContainsString( '"userLocale":', $joined );
+		$this->assertStringContainsString( '"siteLocale":', $joined );
+		// Locale values should be non-empty strings (get_locale() defaults
+		// to en_US in the test environment).
+		$this->assertMatchesRegularExpression(
+			'/"userLocale":"[a-zA-Z_\-]+"/',
+			$joined
+		);
+		$this->assertMatchesRegularExpression(
+			'/"siteLocale":"[a-zA-Z_\-]+"/',
+			$joined
+		);
+	}
+
+	/**
 	 * enqueue_editor_assets sets mcpConnected: true and adds the polling
 	 * interval filter when MCP IS connected.
 	 */

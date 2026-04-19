@@ -5,6 +5,7 @@ import {
 	buildReviewSegments,
 	buildRespondToNotesSegments,
 	buildRespondToNoteSegments,
+	joinSegments,
 } from './prompt-content.js';
 
 export const reviewPrompts: PromptDefinition[] = [
@@ -51,7 +52,7 @@ export const reviewPrompts: PromptDefinition[] = [
 				messages: [
 					{
 						role: 'user',
-						content: `${segments.staticInstructions}\n\n${segments.dynamicContext}`,
+						content: joinSegments(segments),
 					},
 				],
 				segments,
@@ -134,7 +135,7 @@ export const reviewPrompts: PromptDefinition[] = [
 				messages: [
 					{
 						role: 'user',
-						content: `${segments.staticInstructions}\n\n${segments.dynamicContext}`,
+						content: joinSegments(segments),
 					},
 				],
 				segments,
@@ -246,7 +247,7 @@ export const reviewPrompts: PromptDefinition[] = [
 				messages: [
 					{
 						role: 'user',
-						content: `${segments.staticInstructions}\n\n${segments.dynamicContext}`,
+						content: joinSegments(segments),
 					},
 				],
 				segments,

@@ -1,5 +1,8 @@
 import type { PromptDefinition } from './definitions.js';
-import { buildPrePublishCheckSegments } from './prompt-content.js';
+import {
+	buildPrePublishCheckSegments,
+	joinSegments,
+} from './prompt-content.js';
 
 export const prePublishPrompts: PromptDefinition[] = [
 	{
@@ -44,7 +47,7 @@ export const prePublishPrompts: PromptDefinition[] = [
 				messages: [
 					{
 						role: 'user',
-						content: `${segments.staticInstructions}\n\n${segments.dynamicContext}`,
+						content: joinSegments(segments),
 					},
 				],
 				segments,

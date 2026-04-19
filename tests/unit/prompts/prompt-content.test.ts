@@ -19,6 +19,7 @@ import {
 	buildComposeSegments,
 	buildPrePublishCheckSegments,
 	DOCUMENT_LANGUAGE_RULE,
+	joinSegments,
 } from '../../../src/prompts/prompt-content.js';
 
 // --- formatNotes ---
@@ -331,6 +332,17 @@ describe('segment builders embed language rules in the static prefix', () => {
 			"source language isn't obvious"
 		);
 	});
+
+	it('document-language rule tells the model to ask in the user locale', () => {
+		// The clarification question is a status-message — it must follow
+		// the same locale rule as other wp_update_command_status output.
+		// Without this guidance the model might ask in the post's (possibly
+		// unknown) language, which defeats the point of asking.
+		expect(DOCUMENT_LANGUAGE_RULE).toContain(
+			"in the user's locale (meta.user_locale)"
+		);
+		expect(DOCUMENT_LANGUAGE_RULE).toContain('fallback');
+	});
 });
 
 // --- Segment builders: locale context flows into dynamic segment ---
@@ -364,7 +376,7 @@ describe('segment builders inject locale context into dynamic segment', () => {
 // --- Content builders concatenate segments deterministically ---
 
 describe('string builders concatenate segments deterministically', () => {
-	it('buildProofreadContent equals segments joined with a blank line', () => {
+	it('buildProofreadContent equals segments joined via joinSegments', () => {
 		const segments = buildProofreadSegments('Hello', {
 			userLocale: 'fr_FR',
 			siteLocale: 'en_US',
@@ -373,8 +385,18 @@ describe('string builders concatenate segments deterministically', () => {
 			userLocale: 'fr_FR',
 			siteLocale: 'en_US',
 		});
-		expect(content).toBe(
-			`${segments.staticInstructions}\n\n${segments.dynamicContext}`
-		);
+		expect(content).toBe(joinSegments(segments));
+	});
+});
+
+// --- joinSegments ---
+
+describe('joinSegments', () => {
+	it('joins the static prefix and dynamic suffix with a blank line', () => {
+		const result = joinSegments({
+			staticInstructions: 'STATIC',
+			dynamicContext: 'DYNAMIC',
+		});
+		expect(result).toBe('STATIC\n\nDYNAMIC');
 	});
 });

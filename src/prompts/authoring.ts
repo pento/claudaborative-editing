@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { PromptDefinition } from './definitions.js';
-import { buildTranslateSegments } from './prompt-content.js';
+import { buildTranslateSegments, joinSegments } from './prompt-content.js';
 
 export const authoringPrompts: PromptDefinition[] = [
 	{
@@ -53,7 +53,7 @@ export const authoringPrompts: PromptDefinition[] = [
 				messages: [
 					{
 						role: 'user',
-						content: `${segments.staticInstructions}\n\n${segments.dynamicContext}`,
+						content: joinSegments(segments),
 					},
 				],
 				segments,

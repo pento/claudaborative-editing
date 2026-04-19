@@ -100,7 +100,7 @@ export function formatNotes(
  */
 export const DOCUMENT_LANGUAGE_RULE = `## Language for content
 
-Before producing any content (edits, new text, notes, or suggestions), detect the post's language from the existing content. The "Site locale hint" provided below is a weak signal only — the post's actual language always wins. If the post is empty, very short, or mixes languages and you are not confident, use wp_update_command_status with status "awaiting_input" to ask the user to confirm the language before proceeding. All content edits, new text, and editorial notes MUST be written in the post's language.`;
+Before producing any content (edits, new text, notes, or suggestions), detect the post's language from the existing content. The "Site locale hint" provided below is a weak signal only — the post's actual language always wins. If the post is empty, very short, or mixes languages and you are not confident, use wp_update_command_status with status "awaiting_input" to ask the user to confirm the language before proceeding. Write that clarification question in the user's locale (meta.user_locale); if the user locale is unknown, use the site locale hint as a fallback. All content edits, new text, and editorial notes MUST be written in the post's language.`;
 
 // --- Helpers ---
 
@@ -118,7 +118,13 @@ function buildLocaleBlock(
 	return lines.join('\n');
 }
 
-function joinSegments(segments: PromptSegments): string {
+/**
+ * Concatenate a static/dynamic segment pair into the single-string form
+ * used by the MCP prompt path and channel-embedded notifications.
+ * Exported so prompt handlers and tests can share the exact separator
+ * semantics and don't drift by rebuilding the template literal inline.
+ */
+export function joinSegments(segments: PromptSegments): string {
 	return `${segments.staticInstructions}\n\n${segments.dynamicContext}`;
 }
 

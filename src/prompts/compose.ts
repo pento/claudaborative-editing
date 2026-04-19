@@ -1,5 +1,5 @@
 import type { PromptDefinition } from './definitions.js';
-import { buildComposeSegments } from './prompt-content.js';
+import { buildComposeSegments, joinSegments } from './prompt-content.js';
 
 export const composePrompts: PromptDefinition[] = [
 	{
@@ -45,7 +45,7 @@ export const composePrompts: PromptDefinition[] = [
 				messages: [
 					{
 						role: 'user',
-						content: `${segments.staticInstructions}\n\n${segments.dynamicContext}`,
+						content: joinSegments(segments),
 					},
 				],
 				segments,

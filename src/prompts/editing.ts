@@ -1,6 +1,10 @@
 import { z } from 'zod';
 import type { PromptDefinition } from './definitions.js';
-import { buildEditSegments, buildProofreadSegments } from './prompt-content.js';
+import {
+	buildEditSegments,
+	buildProofreadSegments,
+	joinSegments,
+} from './prompt-content.js';
 
 export const editingPrompts: PromptDefinition[] = [
 	{
@@ -56,7 +60,7 @@ export const editingPrompts: PromptDefinition[] = [
 				messages: [
 					{
 						role: 'user',
-						content: `${segments.staticInstructions}\n\n${segments.dynamicContext}`,
+						content: joinSegments(segments),
 					},
 				],
 				segments,
@@ -105,7 +109,7 @@ export const editingPrompts: PromptDefinition[] = [
 				messages: [
 					{
 						role: 'user',
-						content: `${segments.staticInstructions}\n\n${segments.dynamicContext}`,
+						content: joinSegments(segments),
 					},
 				],
 				segments,
