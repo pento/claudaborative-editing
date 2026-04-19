@@ -1108,16 +1108,17 @@ class REST_Controller extends \WP_REST_Controller {
 	 * The value is a free-form string — the agent decides what's useful
 	 * (a language name, a BCP-47 tag, or a descriptive note).
 	 *
+	 * Callers must pass a JSON-object string; this is already guaranteed
+	 * by the endpoint's result_data sanitize_callback (Command_Store::sanitize_json)
+	 * and validate_callback, so json_decode to an associative array is
+	 * safe without an is_array guard.
+	 *
 	 * @param int    $command_id  The command post ID.
-	 * @param string $client_json JSON string from the client's resultData parameter.
+	 * @param string $client_json JSON object string from the client's resultData parameter.
 	 * @return void
 	 */
 	private function persist_document_language_from_result_data( $command_id, $client_json ) {
 		$client_data = json_decode( $client_json, true );
-
-		if ( ! is_array( $client_data ) ) {
-			return;
-		}
 
 		if ( ! isset( $client_data['documentLanguage'] ) ) {
 			return;

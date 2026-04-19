@@ -726,6 +726,90 @@ class RestControllerTest extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A whitespace-only documentLanguage value trims to empty and is
+	 * ignored, so an existing post-meta value is preserved. This covers
+	 * the `'' === $language` guard after trim.
+	 */
+	public function test_whitespace_only_document_language_is_ignored() {
+		$command_id = $this->create_command_directly( [ 'status' => 'running' ] );
+		update_post_meta(
+			self::$target_post_id,
+			'wpce_document_language',
+			'Original'
+		);
+
+		$request = new \WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
+		$request->set_body_params(
+			[
+				'status'      => 'completed',
+				'result_data' => wp_json_encode(
+					[ 'documentLanguage' => "  \t\n  " ]
+				),
+			]
+		);
+		$response = rest_get_server()->dispatch( $request );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame(
+			'Original',
+			get_post_meta( self::$target_post_id, 'wpce_document_language', true )
+		);
+	}
+
+	/**
+	 * An orphan command (no post_parent pointing at a target post) is
+	 * a no-op for language persistence — there's nowhere to write the
+	 * meta. The command itself still completes successfully. Covers the
+	 * `0 === $command->post_parent` guard.
+	 */
+	public function test_orphan_command_skips_document_language_persistence() {
+		// Create a command without going through create_command_directly
+		// so we can force post_parent = 0 (the fixture sets it to the
+		// default target post).
+		/** @var int $command_id */
+		$command_id = self::factory()->post->create(
+			[
+				'post_type'   => Command_Store::POST_TYPE,
+				'post_status' => 'publish',
+				'post_author' => self::$editor_id,
+				'post_parent' => 0,
+			]
+		);
+		update_post_meta( $command_id, 'wpce_prompt', 'review' );
+		update_post_meta( $command_id, 'wpce_arguments', '{}' );
+		update_post_meta( $command_id, 'wpce_command_status', 'running' );
+		update_post_meta(
+			$command_id,
+			'wpce_expires_at',
+			gmdate( 'Y-m-d\TH:i:s\Z', time() + HOUR_IN_SECONDS )
+		);
+
+		// Pre-seed the target post meta so we can assert it doesn't move.
+		update_post_meta(
+			self::$target_post_id,
+			'wpce_document_language',
+			'Untouched'
+		);
+
+		$request = new \WP_REST_Request( 'PATCH', '/wpce/v1/commands/' . $command_id );
+		$request->set_body_params(
+			[
+				'status'      => 'completed',
+				'result_data' => wp_json_encode(
+					[ 'documentLanguage' => 'French' ]
+				),
+			]
+		);
+		$response = rest_get_server()->dispatch( $request );
+		$this->assertSame( 200, $response->get_status() );
+
+		// The unrelated target post's meta must NOT be touched.
+		$this->assertSame(
+			'Untouched',
+			get_post_meta( self::$target_post_id, 'wpce_document_language', true )
+		);
+	}
+
+	/**
 	 * The pre-publish-check prompt should be accepted.
 	 */
 	public function test_create_command_with_pre_publish_check_prompt() {
