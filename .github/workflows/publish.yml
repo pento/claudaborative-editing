@@ -90,8 +90,15 @@ jobs:
                   cache: npm
                   cache-dependency-path: wordpress-plugin/package-lock.json
 
+            - name: Install root npm dependencies
+              run: npm ci
+
             - name: Install npm dependencies
               run: npm ci
+              working-directory: wordpress-plugin
+
+            - name: Install Composer dependencies
+              run: composer install --no-interaction --prefer-dist
               working-directory: wordpress-plugin
 
             - name: Build
