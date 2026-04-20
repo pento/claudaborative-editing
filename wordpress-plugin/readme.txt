@@ -67,6 +67,13 @@ Source files are in the `wordpress-plugin/` directory. See the repository `READM
 
 == Changelog ==
 
+= 0.5.0 =
+* Added Claudaborative Cloud as a connection option, with onboarding help shown when disconnected.
+* Added a resizable Compose sidebar so the conversation panel can be widened for longer drafts.
+* Made prompts language-aware so translations and editorial actions respect the post's language.
+* Discover the WordPress REST API URL from the site instead of assuming `/wp-json`, for compatibility with custom REST prefixes.
+* Fixed commands being clobbered when multiple ran concurrently by storing each under its own key.
+
 = 0.4.1 =
 * Added missing autoload handling.
 
