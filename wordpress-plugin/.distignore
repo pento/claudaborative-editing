@@ -2,6 +2,7 @@
 /.github
 /.wordpress-org
 /bin
+/coverage
 /node_modules
 /vendor
 /src
@@ -12,6 +13,7 @@
 .gitignore
 .phpcs-cache
 .phpstan-cache
+.phpunit.result.cache
 .prettierrc
 .stylelintrc.json
 .wp-tests-lib

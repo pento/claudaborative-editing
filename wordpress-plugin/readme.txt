@@ -67,7 +67,7 @@ Source files are in the `wordpress-plugin/` directory. See the repository `READM
 
 == Changelog ==
 
-= 0.5.1 =
+= 0.5.2 =
 * Added Claudaborative Cloud as a connection option, with onboarding help shown when disconnected.
 * Added a resizable Compose sidebar so the conversation panel can be widened for longer drafts.
 * Made prompts language-aware so translations and editorial actions respect the post's language.

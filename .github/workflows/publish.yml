@@ -105,12 +105,18 @@ jobs:
               run: npm run build
               working-directory: wordpress-plugin
 
+            - name: Stage plugin files for deploy
+              run: |
+                  mkdir -p "${RUNNER_TEMP}/plugin-staging"
+                  rsync -rc --exclude-from=wordpress-plugin/.distignore \
+                      wordpress-plugin/ "${RUNNER_TEMP}/plugin-staging/"
+
             - name: Deploy to WordPress.org
               uses: 10up/action-wordpress-plugin-deploy@stable
               env:
                   SVN_USERNAME: ${{ secrets.SVN_USERNAME }}
                   SVN_PASSWORD: ${{ secrets.SVN_PASSWORD }}
-                  BUILD_DIR: wordpress-plugin
+                  BUILD_DIR: ${{ runner.temp }}/plugin-staging
                   ASSETS_DIR: wordpress-plugin/.wordpress-org
                   SLUG: claudaborative-editing
 
