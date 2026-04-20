@@ -52,9 +52,10 @@ Then start Claude Code with channels enabled:
 
 == Screenshots ==
 
-1. The toolbar dropdown menu with AI actions (Proofread, Review) in the block editor.
-2. The connection status indicator in the editor footer bar.
-3. Notes integration in the collaboration sidebar with per-note action buttons.
+1. The Compose panel, a two-way conversation sidebar for planning and outlining a post.
+2. The block toolbar dropdown with AI actions: Proofread, Review, Translate, and Edit.
+3. Notes integration in the collaboration sidebar, with per-note action buttons and an address-all-notes control.
+4. The pre-publish checks panel, with AI-suggested excerpt, categories, tags, and slug.
 
 == Development ==
 
