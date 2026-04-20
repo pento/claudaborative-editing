@@ -76,6 +76,7 @@ jobs:
                   path: claudaborative-editing-*.tgz
 
     wporg-deploy:
+        if: github.ref_type == 'tag'
         name: Deploy to WordPress.org
         runs-on: ubuntu-latest
         needs: [publish]
