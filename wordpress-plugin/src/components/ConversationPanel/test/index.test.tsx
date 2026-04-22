@@ -57,6 +57,10 @@ jest.mock('@wordpress/editor', () => {
 	};
 });
 
+jest.mock('@wordpress/compose', () => ({
+	useViewportMatch: jest.fn(() => true),
+}));
+
 jest.mock('@wordpress/data', () => ({
 	useSelect: jest.fn(),
 	useDispatch: jest.fn(() => ({})),
@@ -127,6 +131,7 @@ jest.mock('../../../utils/command-i18n', () => ({
 }));
 
 import { render, screen, fireEvent, act } from '@testing-library/react';
+import { useViewportMatch } from '@wordpress/compose';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { useCommands } from '../../../hooks/use-commands';
 import ConversationPanel from '..';
@@ -134,6 +139,7 @@ import ConversationPanel from '..';
 const mockedUseSelect = useSelect as jest.Mock;
 const mockedUseDispatch = useDispatch as jest.Mock;
 const mockedUseCommands = useCommands as jest.Mock;
+const mockedUseViewportMatch = useViewportMatch as unknown as jest.Mock;
 
 import aiActionsStore from '../../../store';
 
@@ -150,6 +156,7 @@ describe('ConversationPanel', () => {
 	beforeEach(() => {
 		jest.clearAllMocks();
 		window.localStorage.clear();
+		mockedUseViewportMatch.mockReturnValue(true);
 
 		mockedUseDispatch.mockImplementation((storeNameOrDescriptor?: any) => {
 			if (
@@ -253,6 +260,94 @@ describe('ConversationPanel', () => {
 		expect(screen.getByText('Reading\u2026')).toBeTruthy();
 		// No awaiting-input input area yet.
 		expect(screen.queryByTestId('conversation-textarea')).toBeNull();
+	});
+
+	it('auto-opens the conversation sidebar on mount when recovering an awaiting_input command', () => {
+		const enableComplementaryArea = jest.fn();
+		mockedUseDispatch.mockImplementation((storeNameOrDescriptor?: any) => {
+			if (
+				storeNameOrDescriptor === 'core/interface' ||
+				storeNameOrDescriptor?.name === 'core/interface'
+			) {
+				return {
+					enableComplementaryArea,
+					disableComplementaryArea: jest.fn(),
+				};
+			}
+			return { createNotice: jest.fn() };
+		});
+
+		// Simulates a page reload mid-conversation: fetchActiveCommand
+		// populates activeCommand from REST before the ConversationPanel
+		// mounts, so prevStatus (null on first render) → awaiting_input
+		// must still trigger the auto-open.
+		mockedUseCommands.mockReturnValue({
+			activeCommand: {
+				id: 1,
+				prompt: 'compose',
+				status: 'awaiting_input',
+				post_id: 100,
+				result_data: {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'What is the topic?',
+							timestamp: '2026-04-06T10:00:00Z',
+						},
+					],
+					input_prompt: 'Tell me more…',
+				},
+			},
+			isResponding: false,
+			respondToCommand: jest.fn(),
+			cancel: jest.fn(),
+		});
+
+		render(<ConversationPanel />);
+
+		expect(enableComplementaryArea).toHaveBeenCalledWith(
+			'core',
+			'claudaborative-editing-conversation/conversation'
+		);
+	});
+
+	it('auto-opens the conversation sidebar on mount when recovering a running compose command', () => {
+		const enableComplementaryArea = jest.fn();
+		mockedUseDispatch.mockImplementation((storeNameOrDescriptor?: any) => {
+			if (
+				storeNameOrDescriptor === 'core/interface' ||
+				storeNameOrDescriptor?.name === 'core/interface'
+			) {
+				return {
+					enableComplementaryArea,
+					disableComplementaryArea: jest.fn(),
+				};
+			}
+			return { createNotice: jest.fn() };
+		});
+
+		// A refresh that lands in a running state (the MCP is actively
+		// working) must still re-open the sidebar so the user sees the
+		// processing indicator instead of a blank editor.
+		mockedUseCommands.mockReturnValue({
+			activeCommand: {
+				id: 1,
+				prompt: 'compose',
+				status: 'running',
+				post_id: 100,
+				result_data: null,
+			},
+			isResponding: false,
+			respondToCommand: jest.fn(),
+			cancel: jest.fn(),
+		});
+
+		render(<ConversationPanel />);
+
+		expect(enableComplementaryArea).toHaveBeenCalledWith(
+			'core',
+			'claudaborative-editing-conversation/conversation'
+		);
 	});
 
 	it('renders message history when command is awaiting_input with messages', () => {
@@ -943,6 +1038,395 @@ describe('ConversationPanel', () => {
 		fireEvent.click(screen.getByText('Approve outline'));
 
 		expect(respondToCommand).toHaveBeenCalledWith(1, 'approve');
+	});
+
+	it('opens the Unresolved notes sidebar after a successful approve on large viewports', async () => {
+		const enableComplementaryArea = jest.fn();
+		mockedUseDispatch.mockImplementation((storeNameOrDescriptor?: any) => {
+			if (
+				storeNameOrDescriptor === 'core/interface' ||
+				storeNameOrDescriptor?.name === 'core/interface'
+			) {
+				return {
+					enableComplementaryArea,
+					disableComplementaryArea: jest.fn(),
+				};
+			}
+			return { createNotice: jest.fn() };
+		});
+
+		const respondToCommand = jest.fn().mockResolvedValue(undefined);
+		mockedUseCommands.mockReturnValue({
+			activeCommand: {
+				id: 1,
+				prompt: 'compose',
+				status: 'awaiting_input',
+				post_id: 100,
+				result_data: {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'Here is the outline.',
+							timestamp: '2026-04-06T10:00:00Z',
+						},
+					],
+					planReady: true,
+				},
+			},
+			isResponding: false,
+			respondToCommand,
+			cancel: jest.fn(),
+		});
+
+		render(<ConversationPanel />);
+		fireEvent.click(screen.getByText('Approve outline'));
+		await new Promise(process.nextTick);
+
+		expect(enableComplementaryArea).toHaveBeenCalledWith(
+			'core',
+			'edit-post/collab-sidebar'
+		);
+	});
+
+	it('opens the All notes sidebar after a successful approve on small viewports', async () => {
+		mockedUseViewportMatch.mockReturnValue(false);
+
+		const enableComplementaryArea = jest.fn();
+		mockedUseDispatch.mockImplementation((storeNameOrDescriptor?: any) => {
+			if (
+				storeNameOrDescriptor === 'core/interface' ||
+				storeNameOrDescriptor?.name === 'core/interface'
+			) {
+				return {
+					enableComplementaryArea,
+					disableComplementaryArea: jest.fn(),
+				};
+			}
+			return { createNotice: jest.fn() };
+		});
+
+		const respondToCommand = jest.fn().mockResolvedValue(undefined);
+		mockedUseCommands.mockReturnValue({
+			activeCommand: {
+				id: 1,
+				prompt: 'compose',
+				status: 'awaiting_input',
+				post_id: 100,
+				result_data: {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'Here is the outline.',
+							timestamp: '2026-04-06T10:00:00Z',
+						},
+					],
+					planReady: true,
+				},
+			},
+			isResponding: false,
+			respondToCommand,
+			cancel: jest.fn(),
+		});
+
+		render(<ConversationPanel />);
+		fireEvent.click(screen.getByText('Approve outline'));
+		await new Promise(process.nextTick);
+
+		expect(enableComplementaryArea).toHaveBeenCalledWith(
+			'core',
+			'edit-post/collab-history-sidebar'
+		);
+	});
+
+	it('does not switch sidebars when approve fails', async () => {
+		const enableComplementaryArea = jest.fn();
+		mockedUseDispatch.mockImplementation((storeNameOrDescriptor?: any) => {
+			if (
+				storeNameOrDescriptor === 'core/interface' ||
+				storeNameOrDescriptor?.name === 'core/interface'
+			) {
+				return {
+					enableComplementaryArea,
+					disableComplementaryArea: jest.fn(),
+				};
+			}
+			return { createNotice: jest.fn() };
+		});
+
+		const respondToCommand = jest.fn().mockRejectedValue(new Error('fail'));
+		mockedUseCommands.mockReturnValue({
+			activeCommand: {
+				id: 1,
+				prompt: 'compose',
+				status: 'awaiting_input',
+				post_id: 100,
+				result_data: {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'Here is the outline.',
+							timestamp: '2026-04-06T10:00:00Z',
+						},
+					],
+					planReady: true,
+				},
+			},
+			isResponding: false,
+			respondToCommand,
+			cancel: jest.fn(),
+		});
+
+		render(<ConversationPanel />);
+		fireEvent.click(screen.getByText('Approve outline'));
+		await new Promise(process.nextTick);
+
+		// The conversation panel's own auto-open may call enableComplementaryArea
+		// on mount with SIDEBAR_ID — the assertion here is specifically that
+		// neither notes sidebar got opened as a result of the failed approve.
+		const noteSidebarCalls = enableComplementaryArea.mock.calls.filter(
+			([, id]) =>
+				id === 'edit-post/collab-sidebar' ||
+				id === 'edit-post/collab-history-sidebar'
+		);
+		expect(noteSidebarCalls).toHaveLength(0);
+	});
+
+	it('does not cancel the command when the sidebar closes as a result of approve', async () => {
+		const cancel = jest.fn();
+		const enableComplementaryArea = jest.fn();
+		mockedUseDispatch.mockImplementation((storeNameOrDescriptor?: any) => {
+			if (
+				storeNameOrDescriptor === 'core/interface' ||
+				storeNameOrDescriptor?.name === 'core/interface'
+			) {
+				return {
+					enableComplementaryArea,
+					disableComplementaryArea: jest.fn(),
+				};
+			}
+			return { createNotice: jest.fn() };
+		});
+
+		const respondToCommand = jest.fn().mockResolvedValue(undefined);
+		mockedUseCommands.mockReturnValue({
+			activeCommand: {
+				id: 1,
+				prompt: 'compose',
+				status: 'awaiting_input',
+				post_id: 100,
+				result_data: {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'Here is the outline.',
+							timestamp: '2026-04-06T10:00:00Z',
+						},
+					],
+					planReady: true,
+				},
+			},
+			isResponding: false,
+			respondToCommand,
+			cancel,
+		});
+
+		// Start with the conversation sidebar active.
+		const getActiveComplementaryArea = jest
+			.fn()
+			.mockReturnValue(
+				'claudaborative-editing-conversation/conversation'
+			);
+		mockUseSelect(
+			new Map<unknown, Record<string, (...args: any[]) => any>>([
+				[aiActionsStore, { getCurrentPostId: () => 100 }],
+				['core/interface', { getActiveComplementaryArea }],
+			])
+		);
+
+		const { rerender } = render(<ConversationPanel />);
+		fireEvent.click(screen.getByText('Approve outline'));
+		await new Promise(process.nextTick);
+
+		// The sidebar is now the Unresolved notes panel; the command moved
+		// to `running` while MCP scaffolds. Re-select state to match.
+		getActiveComplementaryArea.mockReturnValue('edit-post/collab-sidebar');
+		mockedUseCommands.mockReturnValue({
+			activeCommand: {
+				id: 1,
+				prompt: 'compose',
+				status: 'running',
+				post_id: 100,
+				result_data: {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'Here is the outline.',
+							timestamp: '2026-04-06T10:00:00Z',
+						},
+					],
+					planReady: true,
+				},
+			},
+			isResponding: false,
+			respondToCommand,
+			cancel,
+		});
+
+		rerender(<ConversationPanel />);
+
+		expect(cancel).not.toHaveBeenCalled();
+	});
+
+	it('still cancels a different command whose sidebar closes after a prior approve', async () => {
+		const cancel = jest.fn();
+		const enableComplementaryArea = jest.fn();
+		mockedUseDispatch.mockImplementation((storeNameOrDescriptor?: any) => {
+			if (
+				storeNameOrDescriptor === 'core/interface' ||
+				storeNameOrDescriptor?.name === 'core/interface'
+			) {
+				return {
+					enableComplementaryArea,
+					disableComplementaryArea: jest.fn(),
+				};
+			}
+			return { createNotice: jest.fn() };
+		});
+
+		const respondToCommand = jest.fn().mockResolvedValue(undefined);
+		mockedUseCommands.mockReturnValue({
+			activeCommand: {
+				id: 1,
+				prompt: 'compose',
+				status: 'awaiting_input',
+				post_id: 100,
+				result_data: {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'Here is the outline.',
+							timestamp: '2026-04-06T10:00:00Z',
+						},
+					],
+					planReady: true,
+				},
+			},
+			isResponding: false,
+			respondToCommand,
+			cancel,
+		});
+
+		const getActiveComplementaryArea = jest
+			.fn()
+			.mockReturnValue(
+				'claudaborative-editing-conversation/conversation'
+			);
+		mockUseSelect(
+			new Map<unknown, Record<string, (...args: any[]) => any>>([
+				[aiActionsStore, { getCurrentPostId: () => 100 }],
+				['core/interface', { getActiveComplementaryArea }],
+			])
+		);
+
+		const { rerender } = render(<ConversationPanel />);
+		fireEvent.click(screen.getByText('Approve outline'));
+		await new Promise(process.nextTick);
+
+		// Simulates the edge case where command 1 completes before the
+		// close-watcher effect fires — the id-scoped signal is left
+		// uncleared. A *different* compose command (id 2) then opens,
+		// and the user manually cancels its sidebar. The id mismatch
+		// must let cancel() through for command 2.
+		mockedUseCommands.mockReturnValue({
+			activeCommand: {
+				id: 2,
+				prompt: 'compose',
+				status: 'awaiting_input',
+				post_id: 100,
+				result_data: {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'A new outline.',
+							timestamp: '2026-04-07T10:00:00Z',
+						},
+					],
+					planReady: true,
+				},
+			},
+			isResponding: false,
+			respondToCommand,
+			cancel,
+		});
+		rerender(<ConversationPanel />);
+
+		// User closes command 2's sidebar.
+		getActiveComplementaryArea.mockReturnValue(null);
+		rerender(<ConversationPanel />);
+
+		expect(cancel).toHaveBeenCalledWith(2);
+	});
+
+	it('does not re-open the conversation sidebar on awaiting_input → running', async () => {
+		const enableComplementaryArea = jest.fn();
+		mockedUseDispatch.mockImplementation((storeNameOrDescriptor?: any) => {
+			if (
+				storeNameOrDescriptor === 'core/interface' ||
+				storeNameOrDescriptor?.name === 'core/interface'
+			) {
+				return {
+					enableComplementaryArea,
+					disableComplementaryArea: jest.fn(),
+				};
+			}
+			return { createNotice: jest.fn() };
+		});
+
+		mockedUseCommands.mockReturnValue({
+			activeCommand: {
+				id: 1,
+				prompt: 'compose',
+				status: 'awaiting_input',
+				post_id: 100,
+				result_data: {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'Here is the outline.',
+							timestamp: '2026-04-06T10:00:00Z',
+						},
+					],
+					planReady: true,
+				},
+			},
+			isResponding: false,
+			respondToCommand: jest.fn().mockResolvedValue(undefined),
+			cancel: jest.fn(),
+		});
+
+		const { rerender } = render(<ConversationPanel />);
+		enableComplementaryArea.mockClear();
+
+		// /respond resolves and the command transitions to running.
+		// The auto-open effect must NOT re-fire for this transition —
+		// doing so would re-open the conversation sidebar and undo the
+		// approve-triggered switch to the notes sidebar.
+		mockedUseCommands.mockReturnValue({
+			activeCommand: {
+				id: 1,
+				prompt: 'compose',
+				status: 'running',
+				post_id: 100,
+				result_data: null,
+			},
+			isResponding: false,
+			respondToCommand: jest.fn().mockResolvedValue(undefined),
+			cancel: jest.fn(),
+		});
+
+		rerender(<ConversationPanel />);
+
+		expect(enableComplementaryArea).not.toHaveBeenCalled();
 	});
 
 	it('calls createNotice when respondToCommand rejects on approve', async () => {

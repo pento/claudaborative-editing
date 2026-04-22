@@ -9,6 +9,7 @@
 		"@types/jest": "^29.5.14",
 		"@wordpress/api-fetch": "^7.44.0",
 		"@wordpress/components": "^32.6.0",
+		"@wordpress/compose": "^7.44.0",
 		"@wordpress/core-data": "^7.44.0",
 		"@wordpress/data": "^10.44.0",
 		"@wordpress/editor": "^14.44.0",
