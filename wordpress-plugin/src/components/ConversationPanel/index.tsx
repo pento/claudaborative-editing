@@ -14,6 +14,7 @@
  */
 import { __ } from '@wordpress/i18n';
 import { Button, TextareaControl } from '@wordpress/components';
+import { useViewportMatch } from '@wordpress/compose';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { useState, useEffect, useRef, RawHTML } from '@wordpress/element';
 import { store as noticesStore } from '@wordpress/notices';
@@ -28,7 +29,11 @@ import { getCommandLabel } from '../../utils/command-i18n';
 import aiActionsStore from '../../store';
 import SparkleIcon from '../SparkleIcon';
 import { useResizableSidebar } from './use-resizable-sidebar';
-import { SIDEBAR_ID } from './constants';
+import {
+	SIDEBAR_ID,
+	FLOATING_NOTES_SIDEBAR,
+	ALL_NOTES_SIDEBAR,
+} from './constants';
 import { TERMINAL_STATUSES, type CommandSlug } from '#shared/commands';
 import type {
 	ConversationMessage,
@@ -94,6 +99,11 @@ export default function ConversationPanel() {
 	const messagesEndRef = useRef<HTMLDivElement>(null);
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 	const prevStatusRef = useRef<string | null>(null);
+	// Set when approve triggers a sidebar switch so the cancel-on-close
+	// watcher below skips cancelling the command that the user just approved.
+	const postApproveSwitchRef = useRef(false);
+
+	const isLargeViewport = useViewportMatch('medium');
 
 	// Single subscription to the interface store for our sidebar's active
 	// state; the hook below reuses this rather than subscribing separately.
@@ -164,15 +174,23 @@ export default function ConversationPanel() {
 			currentStatus === 'awaiting_input' &&
 			prevStatus !== 'awaiting_input';
 		// Fire once when a conversational command first enters an in-flight
-		// status; don't re-fire on pending → running transitions.
+		// status; don't re-fire on pending → running or awaiting_input →
+		// running. The latter matters because handleApprove switches the
+		// sidebar to the notes panel on approve, and an awaiting_input →
+		// running transition arriving on the /respond round-trip would
+		// otherwise re-open the conversation panel and undo the switch.
 		const inFlightStatuses: readonly (string | null)[] = [
 			'pending',
 			'running',
 		];
+		const alreadyInFlightStatuses: readonly (string | null)[] = [
+			...inFlightStatuses,
+			'awaiting_input',
+		];
 		const startedConversationalCommand =
 			isConversationalCommand &&
 			inFlightStatuses.includes(currentStatus) &&
-			!inFlightStatuses.includes(prevStatus);
+			!alreadyInFlightStatuses.includes(prevStatus);
 
 		if (enteredAwaitingInput || startedConversationalCommand) {
 			enableComplementaryArea?.('core', SIDEBAR_ID);
@@ -214,6 +232,13 @@ export default function ConversationPanel() {
 		const wasActive = prevSidebarActiveRef.current;
 		prevSidebarActiveRef.current = isSidebarActive;
 		if (wasActive && !isSidebarActive && activeCommand && isCommandActive) {
+			// Approve intentionally switches away to the notes sidebar while
+			// the command is still running the scaffold — don't treat that
+			// as a user-initiated close and cancel the command.
+			if (postApproveSwitchRef.current) {
+				postApproveSwitchRef.current = false;
+				return;
+			}
 			cancel(activeCommand.id);
 		}
 	}, [isSidebarActive, activeCommand, isCommandActive, cancel]);
@@ -262,13 +287,27 @@ export default function ConversationPanel() {
 		if (activeCommand && !isResponding) {
 			void Promise.resolve(
 				respondToCommand(activeCommand.id, 'approve')
-			).catch(() => {
-				createNotice(
-					'error',
-					__('Failed to approve outline.', 'claudaborative-editing'),
-					{ type: 'snackbar' }
-				);
-			});
+			).then(
+				() => {
+					postApproveSwitchRef.current = true;
+					enableComplementaryArea?.(
+						'core',
+						isLargeViewport
+							? FLOATING_NOTES_SIDEBAR
+							: ALL_NOTES_SIDEBAR
+					);
+				},
+				() => {
+					createNotice(
+						'error',
+						__(
+							'Failed to approve outline.',
+							'claudaborative-editing'
+						),
+						{ type: 'snackbar' }
+					);
+				}
+			);
 		}
 	};
 
