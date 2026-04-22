@@ -99,9 +99,14 @@ export default function ConversationPanel() {
 	const messagesEndRef = useRef<HTMLDivElement>(null);
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 	const prevStatusRef = useRef<string | null>(null);
-	// Set when approve triggers a sidebar switch so the cancel-on-close
-	// watcher below skips cancelling the command that the user just approved.
-	const postApproveSwitchRef = useRef(false);
+	// Holds the id of the command whose approval triggered a sidebar
+	// switch, so the cancel-on-close watcher below can skip cancelling
+	// that specific command. Scoping by id (rather than a boolean)
+	// ensures a stale signal can't leak into a future command's close
+	// event — if the approved command transitions to terminal before
+	// the watcher fires, the id simply won't match any subsequent
+	// active command.
+	const postApproveSwitchCommandIdRef = useRef<number | null>(null);
 
 	const isLargeViewport = useViewportMatch('medium');
 
@@ -234,9 +239,11 @@ export default function ConversationPanel() {
 		if (wasActive && !isSidebarActive && activeCommand && isCommandActive) {
 			// Approve intentionally switches away to the notes sidebar while
 			// the command is still running the scaffold — don't treat that
-			// as a user-initiated close and cancel the command.
-			if (postApproveSwitchRef.current) {
-				postApproveSwitchRef.current = false;
+			// as a user-initiated close and cancel the command. Match by
+			// id so an unconsumed signal from a prior approve can't cause
+			// an unrelated command's close to silently skip cancel.
+			if (postApproveSwitchCommandIdRef.current === activeCommand.id) {
+				postApproveSwitchCommandIdRef.current = null;
 				return;
 			}
 			cancel(activeCommand.id);
@@ -285,11 +292,12 @@ export default function ConversationPanel() {
 
 	const handleApprove = () => {
 		if (activeCommand && !isResponding) {
+			const approvedCommandId = activeCommand.id;
 			void Promise.resolve(
-				respondToCommand(activeCommand.id, 'approve')
+				respondToCommand(approvedCommandId, 'approve')
 			).then(
 				() => {
-					postApproveSwitchRef.current = true;
+					postApproveSwitchCommandIdRef.current = approvedCommandId;
 					enableComplementaryArea?.(
 						'core',
 						isLargeViewport
