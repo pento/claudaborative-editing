@@ -26,7 +26,7 @@ describe('buildAwarenessState', () => {
 		expect(state).toEqual({
 			collaboratorInfo: {
 				id: 1,
-				name: 'admin (Claude)',
+				name: 'admin (Claudaborator)',
 				slug: 'admin',
 				avatar_urls: { '96': 'https://example.com/avatar.jpg' },
 				browserType: 'Claudaborative Editing MCP',
@@ -38,9 +38,9 @@ describe('buildAwarenessState', () => {
 		});
 	});
 
-	it('appends " (Claude)" to user name', () => {
+	it('appends " (Claudaborator)" to user name', () => {
 		const state = buildAwarenessState({ ...fakeUser, name: 'Gary' });
-		expect(state.collaboratorInfo.name).toBe('Gary (Claude)');
+		expect(state.collaboratorInfo.name).toBe('Gary (Claudaborator)');
 	});
 
 	it('handles user with empty avatar_urls', () => {

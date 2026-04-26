@@ -2493,7 +2493,7 @@ export class SessionManager {
 		this.awarenessState = {
 			collaboratorInfo: {
 				id: this.user.id,
-				name: `${this.user.name ?? this.user.slug} (Claude)`,
+				name: `${this.user.name ?? this.user.slug} (Claudaborator)`,
 				slug: this.user.slug,
 				avatar_urls: this.user.avatar_urls ?? {},
 				browserType: 'Claudaborative Editing MCP',
