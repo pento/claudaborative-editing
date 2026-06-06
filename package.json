@@ -53,7 +53,7 @@
 		"prepublishOnly": "npm run typecheck && npm run lint && npm test",
 		"start": "node dist/index.js",
 		"test": "vitest run",
-		"pretest:e2e": "(cd wordpress-plugin && composer install --no-interaction --prefer-dist) && npm run build:all",
+		"pretest:e2e": "(cd wordpress-plugin && composer install --no-interaction --prefer-dist) && npm run build && npm --prefix wordpress-plugin run build:test",
 		"test:e2e": "playwright test",
 		"pretest:e2e:headed": "npm run pretest:e2e",
 		"test:e2e:headed": "playwright test --headed",
@@ -95,7 +95,7 @@
 		"@wordpress/e2e-test-utils-playwright": "^1.43.0",
 		"@wordpress/eslint-plugin": "^25.0.0",
 		"@wordpress/prettier-config": "^4.43.0",
-		"@wp-playground/cli": "file:./vendor/wp-playground-cli-3.1.19-pr3494.tgz",
+		"@wp-playground/cli": "^3.1.36",
 		"eslint": "^10.2.1",
 		"eslint-config-prettier": "^10.1.8",
 		"eslint-plugin-package-json": "^0.91.1",
@@ -110,7 +110,6 @@
 		"vitest": "^4.1.2"
 	},
 	"overrides": {
-		"@php-wasm/universal": "file:./vendor/php-wasm-universal-3.1.19-pr3494.tgz",
 		"@wordpress/e2e-test-utils-playwright": {
 			"@types/node": "$@types/node"
 		}
