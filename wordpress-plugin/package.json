@@ -27,6 +27,7 @@
 	"scripts": {
 		"prebuild": "node ../bin/generate-shared-defs.js",
 		"build": "wp-scripts build && node bin/build-icons.js",
+		"build:test": "WPCE_TEST_HATCH=1 wp-scripts build && node bin/build-icons.js",
 		"start": "wp-scripts start",
 		"test:php": "npm --prefix .. run test:plugin-php",
 		"test:php:coverage": "npm --prefix .. run test:plugin-php:coverage",
