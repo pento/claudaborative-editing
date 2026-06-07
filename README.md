@@ -94,7 +94,7 @@ npm install
 npm run build        # Build with tsup → dist/
 npm test             # Run vitest
 npm run typecheck    # TypeScript type check
-npm run lint         # ESLint + markdownlint + Prettier + knip check
+npm run lint         # ESLint + stylelint + markdownlint + Prettier + knip check
 npm run dev          # Watch mode build
 npm run dev:wp       # Start a local WordPress via wp-playground-cli (no Docker)
 ```
