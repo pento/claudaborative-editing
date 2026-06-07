@@ -310,9 +310,12 @@ describe('command-sync', () => {
 			expect(awareness).toBeDefined();
 			expect(typeof awareness.on).toBe('function');
 
-			// After createAwareness, the doc should be captured and commands readable.
-			doc.getMap('state').set('cmd_42', MOCK_COMMAND);
-			expect(mod.getCommandsFromSync()['42']).toEqual(MOCK_COMMAND);
+			// After createAwareness, the doc should be captured: a write via
+			// the production path lands in this doc's state map.
+			mod.writeCommandToSync(MOCK_COMMAND);
+			expect(doc.getMap('state').get('cmd_42')).toEqual(
+				expect.objectContaining({ id: 42 })
+			);
 		});
 	});
 
@@ -424,59 +427,6 @@ describe('command-sync', () => {
 			} finally {
 				jest.useRealTimers();
 			}
-		});
-	});
-
-	describe('getCommandsFromSync', () => {
-		it('reads from state map', async () => {
-			const mod = loadModule();
-			await mod.initCommandSync();
-
-			const syncConfig = mockAddEntities.mock.calls[0][0][0].syncConfig;
-			const doc = new MockYDoc();
-			syncConfig.createAwareness(doc);
-
-			// Write a command manually.
-			doc.getMap('state').set('cmd_42', MOCK_COMMAND);
-
-			const commands = mod.getCommandsFromSync();
-			expect(commands['42']).toEqual(MOCK_COMMAND);
-		});
-
-		it('returns empty object when state map has no commands', async () => {
-			const mod = loadModule();
-			await mod.initCommandSync();
-
-			const syncConfig = mockAddEntities.mock.calls[0][0][0].syncConfig;
-			const doc = new MockYDoc();
-			syncConfig.createAwareness(doc);
-
-			const commands = mod.getCommandsFromSync();
-			expect(commands).toEqual({});
-		});
-
-		it('returns empty object when commandDoc is not available', () => {
-			const mod = loadModule();
-			const commands = mod.getCommandsFromSync();
-			expect(commands).toEqual({});
-		});
-
-		it('drops entries whose stored id does not match the key suffix', async () => {
-			const mod = loadModule();
-			await mod.initCommandSync();
-
-			const syncConfig = mockAddEntities.mock.calls[0][0][0].syncConfig;
-			const doc = new MockYDoc();
-			syncConfig.createAwareness(doc);
-
-			// Good entry — key and stored id agree.
-			doc.getMap('state').set('cmd_42', { ...MOCK_COMMAND, id: 42 });
-			// Corrupt entry — stored under cmd_43 but carries id 99. Must
-			// not appear under either 43 or 99 in the collected record.
-			doc.getMap('state').set('cmd_43', { ...MOCK_COMMAND, id: 99 });
-
-			const commands = mod.getCommandsFromSync();
-			expect(commands).toEqual({ '42': { ...MOCK_COMMAND, id: 42 } });
 		});
 	});
 
@@ -726,35 +676,6 @@ describe('command-sync', () => {
 			expect(callback).toHaveBeenCalledWith(false);
 
 			jest.useRealTimers();
-		});
-	});
-
-	describe('removeCommandFromSync', () => {
-		it('removes a specific command from the state map', async () => {
-			const mod = loadModule();
-			await mod.initCommandSync();
-
-			const syncConfig = mockAddEntities.mock.calls[0][0][0].syncConfig;
-			const doc = new MockYDoc();
-			syncConfig.createAwareness(doc);
-
-			// Write two commands.
-			mod.writeCommandToSync(MOCK_COMMAND);
-			const secondCommand: Command = {
-				...MOCK_COMMAND,
-				id: 43,
-			};
-			mod.writeCommandToSync(secondCommand);
-
-			const stateMap = doc.getMap('state');
-			expect(stateMap.get('cmd_42')).toBeDefined();
-			expect(stateMap.get('cmd_43')).toBeDefined();
-
-			// Remove command 42.
-			mod.removeCommandFromSync(42);
-
-			expect(stateMap.get('cmd_42')).toBeUndefined();
-			expect(stateMap.get('cmd_43')).toBeDefined();
 		});
 	});
 
@@ -1246,6 +1167,34 @@ describe('command-sync', () => {
 			stateMap.set('cmd_42', MOCK_COMMAND);
 
 			expect(callback).toHaveBeenCalledWith({ '42': MOCK_COMMAND });
+
+			jest.useRealTimers();
+		});
+
+		it('drops entries whose stored id does not match the key suffix', async () => {
+			jest.useFakeTimers();
+			const mod = loadModule();
+			await mod.initCommandSync();
+
+			const syncConfig = mockAddEntities.mock.calls[0][0][0].syncConfig;
+			const doc = new MockYDoc();
+			syncConfig.createAwareness(doc);
+
+			const callback = jest.fn();
+			mod.subscribeToCommandSync(callback);
+
+			// Advance timers so the setInterval in subscribeToCommandSync fires.
+			jest.advanceTimersByTime(200);
+
+			// Good entry — key and stored id agree.
+			doc.getMap('state').set('cmd_42', { ...MOCK_COMMAND, id: 42 });
+			// Corrupt entry — stored under cmd_43 but carries id 99. Must not
+			// appear under either 43 or 99 in the rebuilt record.
+			doc.getMap('state').set('cmd_43', { ...MOCK_COMMAND, id: 99 });
+
+			expect(callback).toHaveBeenLastCalledWith({
+				'42': { ...MOCK_COMMAND, id: 42 },
+			});
 
 			jest.useRealTimers();
 		});

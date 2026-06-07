@@ -14,13 +14,17 @@
 		"@wordpress/data": "^10.44.0",
 		"@wordpress/editor": "^14.44.0",
 		"@wordpress/element": "^6.44.0",
+		"@wordpress/hooks": "^4.44.0",
 		"@wordpress/i18n": "^6.17.0",
 		"@wordpress/icons": "^12.2.0",
 		"@wordpress/interface": "^9.29.0",
 		"@wordpress/notices": "^5.44.0",
 		"@wordpress/plugins": "^7.44.0",
 		"@wordpress/scripts": "^32.0.0",
+		"@wordpress/stylelint-config": "^23.36.0",
+		"@wordpress/sync": "^1.44.0",
 		"react": "^18.3.1",
+		"stylelint": "^16.26.1",
 		"stylelint-config-prettier-scss": "^1.0.0",
 		"typescript": "^6.0.3",
 		"webpack": "^5.105.4",
@@ -38,5 +42,8 @@
 		"test": "wp-scripts test-unit-js",
 		"test:coverage": "wp-scripts test-unit-js --coverage",
 		"typecheck": "tsc --noEmit"
+	},
+	"overrides": {
+		"prettier": "^3.8.1"
 	}
 }

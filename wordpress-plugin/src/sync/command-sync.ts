@@ -19,9 +19,7 @@
  */
 import { dispatch, resolveSelect } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
-// eslint-disable-next-line import/no-extraneous-dependencies -- externalized by @wordpress/scripts
 import { Y, Awareness } from '@wordpress/sync';
-// eslint-disable-next-line import/no-extraneous-dependencies -- externalized by @wordpress/scripts
 import { addFilter } from '@wordpress/hooks';
 import {
 	TERMINAL_STATUSES,
@@ -427,23 +425,6 @@ export function writeCommandToSync(command: Command): void {
 }
 
 /**
- * Remove a specific command from the Y.Doc's state map.
- *
- * @param commandId The command ID to remove.
- */
-export function removeCommandFromSync(commandId: number): void {
-	const stateMap = getStateMap();
-	if (!stateMap) return;
-
-	commandDoc?.transact(() => {
-		stateMap.delete(commandKey(commandId));
-		stateMap.set('savedAt', Date.now());
-	});
-
-	commandDocDirty = true;
-}
-
-/**
  * Collect all commands stored as `cmd_${id}` entries in the state map.
  * Returns an ID-keyed record so callers can keep the previous shape.
  *
@@ -463,15 +444,6 @@ function collectCommandsFromStateMap(stateMap: YMap): Record<string, Command> {
 		result[String(id)] = cmd;
 	});
 	return result;
-}
-
-/**
- * Get the current commands from the Y.Doc's state map.
- */
-export function getCommandsFromSync(): Record<string, Command> {
-	const stateMap = getStateMap();
-	if (!stateMap) return {};
-	return collectCommandsFromStateMap(stateMap);
 }
 
 /**

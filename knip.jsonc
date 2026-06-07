@@ -1,0 +1,29 @@
+{
+	"$schema": "./node_modules/knip/schema-jsonc.json",
+	// System binaries invoked from scripts, not provided by any npm package:
+	// `composer` (PHP toolchain) and `claude` (the Claude Code CLI).
+	"ignoreBinaries": ["composer", "claude"],
+	"workspaces": {
+		".": {
+			"project": [
+				"src/**/*.ts",
+				"shared/**/*.ts",
+				"tests/**/*.ts",
+				"bin/**/*.js"
+			]
+		},
+		"wordpress-plugin": {
+			// `src/index.ts` registers the Gutenberg plugins (no package.json
+			// `main`/`exports` to infer it from); the shim is the webpack alias
+			// target for `@wordpress/interface`; the globs cover Jest tests,
+			// which live in `test/` folders the Jest plugin doesn't auto-detect.
+			"entry": [
+				"src/index.ts",
+				"src/shims/wordpress-interface.ts",
+				"src/**/test/**/*.{ts,tsx}",
+				"src/**/*.test.{ts,tsx}"
+			],
+			"project": ["src/**/*.{ts,tsx}"]
+		}
+	}
+}
