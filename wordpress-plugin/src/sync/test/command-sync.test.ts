@@ -1271,4 +1271,43 @@ describe('command-sync', () => {
 			jest.useRealTimers();
 		});
 	});
+
+	describe('__getInternals_UNSAFE_FOR_TESTS', () => {
+		const originalHatch = process.env.WPCE_TEST_HATCH;
+
+		afterEach(() => {
+			if (originalHatch === undefined) {
+				delete process.env.WPCE_TEST_HATCH;
+			} else {
+				process.env.WPCE_TEST_HATCH = originalHatch;
+			}
+		});
+
+		it('returns null internals in a normal (non-hatch) build', () => {
+			// The body is gated on the build-time WPCE_TEST_HATCH constant;
+			// without it the live Y.Doc / Awareness are never exposed.
+			delete process.env.WPCE_TEST_HATCH;
+			const mod = loadModule();
+
+			expect(mod.__getInternals_UNSAFE_FOR_TESTS()).toEqual({
+				commandDoc: null,
+				commandAwareness: null,
+			});
+		});
+
+		it('exposes the captured doc and awareness when the build hatch is enabled', async () => {
+			process.env.WPCE_TEST_HATCH = 'true';
+			const mod = loadModule();
+			await mod.initCommandSync();
+
+			const syncConfig = mockAddEntities.mock.calls[0][0][0].syncConfig;
+			const doc = new MockYDoc();
+			syncConfig.createAwareness(doc);
+
+			expect(mod.__getInternals_UNSAFE_FOR_TESTS()).toEqual({
+				commandDoc: doc,
+				commandAwareness: capturedAwareness,
+			});
+		});
+	});
 });
