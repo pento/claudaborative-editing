@@ -9,15 +9,18 @@ npm install
 npm run build        # Build with tsup → dist/
 npm test             # Run vitest
 npm run typecheck    # TypeScript type check
-npm run lint         # ESLint + markdownlint + Prettier check
+npm run lint         # ESLint + stylelint + markdownlint + Prettier + knip check
 npm run lint:fix     # Auto-fix all lint and formatting issues
+npm run knip         # Find unused files, dependencies & exports (knip.jsonc)
 npm run dev          # Watch mode build
 npm run dev:wp       # Start a local WordPress on http://127.0.0.1:9400 via wp-playground-cli (ephemeral, Gutenberg latest, collab enabled)
 ```
 
 ## Git Hooks
 
-Pre-commit hook (via husky + lint-staged) auto-formats with Prettier and lints with ESLint + markdownlint on staged files. Hooks are installed automatically by `npm install` (husky's `prepare` script).
+Pre-commit hook (via husky + lint-staged) auto-formats and lints staged files — Prettier, ESLint, and markdownlint on JS/TS/Markdown/JSON; stylelint on `wordpress-plugin/src/**/*.scss`; and phpcbf + PHPStan on `wordpress-plugin/**/*.php` — then runs `knip` (a full-project unused files/dependencies/exports check). Hooks are installed automatically by `npm install` (husky's `prepare` script).
+
+`knip` is configured in `knip.jsonc` (root + `wordpress-plugin` as separate workspaces) and runs as the last step of `npm run lint`, so CI covers it too.
 
 ## Architecture
 
@@ -148,4 +151,4 @@ path (which forks a PHP subprocess via `system()`) is skipped with
 `WP_TESTS_SKIP_INSTALL=1` because Playground already provides a fresh SQLite DB
 per boot.
 
-Run `npm run lint` from the repo root to lint everything (ESLint + stylelint + markdownlint + Prettier).
+Run `npm run lint` from the repo root to lint everything (ESLint + stylelint + markdownlint + Prettier + knip).

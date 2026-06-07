@@ -28,7 +28,7 @@ export type AwarenessState = Record<string, LocalAwarenessState>;
 
 // --- Client → Server ---
 
-export interface SyncEnvelopeFromClient {
+interface SyncEnvelopeFromClient {
 	room: string;
 	client_id: number;
 	after: number;
@@ -42,7 +42,7 @@ export interface SyncPayload {
 
 // --- Server → Client ---
 
-export interface SyncEnvelopeFromServer {
+interface SyncEnvelopeFromServer {
 	room: string;
 	end_cursor: number;
 	awareness: AwarenessState;

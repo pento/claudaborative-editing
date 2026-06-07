@@ -44,7 +44,7 @@ function isSuppressed(args: unknown[]): boolean {
 	return SUPPRESSED_MESSAGES.some((msg) => text.includes(msg));
 }
 
-export interface McpClientFixture {
+interface McpClientFixture {
 	client: Client;
 	stderr: string[];
 }

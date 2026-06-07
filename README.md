@@ -94,7 +94,7 @@ npm install
 npm run build        # Build with tsup → dist/
 npm test             # Run vitest
 npm run typecheck    # TypeScript type check
-npm run lint         # ESLint + markdownlint + Prettier check
+npm run lint         # ESLint + stylelint + markdownlint + Prettier + knip check
 npm run dev          # Watch mode build
 npm run dev:wp       # Start a local WordPress via wp-playground-cli (no Docker)
 ```
@@ -112,7 +112,7 @@ composer phpcs       # PHP CodeSniffer
 composer phpstan     # PHPStan static analysis
 ```
 
-Run `npm run lint` from the repo root to lint everything (ESLint + stylelint + markdownlint + Prettier).
+Run `npm run lint` from the repo root to lint everything (ESLint + stylelint + markdownlint + Prettier + knip).
 
 ## License
 

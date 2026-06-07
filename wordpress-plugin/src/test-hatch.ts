@@ -9,7 +9,6 @@
 /**
  * WordPress dependencies
  */
-// eslint-disable-next-line import/no-extraneous-dependencies -- externalized by @wordpress/scripts
 import { Y, Awareness } from '@wordpress/sync';
 // y-protocols is pinned to an exact version (no caret) in
 // wordpress-plugin/package.json devDependencies, matching the version

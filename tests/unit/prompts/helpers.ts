@@ -9,12 +9,7 @@ import { vi } from 'vitest';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 // Re-export session helpers so prompt tests don't import from tools/
-export {
-	createMockSession,
-	fakePost,
-	fakeUser,
-	fakeNote,
-} from '../tools/helpers.js';
+export { createMockSession, fakePost, fakeNote } from '../tools/helpers.js';
 
 export interface RegisteredPrompt {
 	name: string;

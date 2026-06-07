@@ -35,8 +35,8 @@ const KEYBOARD_STEP = 20;
 const WIDTH_PROPS = ['width', 'flexBasis', 'maxWidth', 'minWidth'] as const;
 const HANDLE_SLOT_CLASS = 'wpce-conversation-panel__resize-handle-slot';
 
-export const MIN_WIDTH = 280;
-export const DEFAULT_WIDTH = 280;
+const MIN_WIDTH = 280;
+const DEFAULT_WIDTH = 280;
 
 function getMaxWidth(): number {
 	return Math.max(MIN_WIDTH, Math.floor(window.innerWidth * 0.8));

@@ -6,9 +6,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const WP_BASE_URL = process.env.WP_BASE_URL ?? 'http://127.0.0.1:8889';
-export const WP_ADMIN_USER = process.env.WP_E2E_ADMIN_USER ?? 'admin';
-export const WP_ADMIN_PASSWORD =
-	process.env.WP_E2E_ADMIN_PASSWORD ?? 'password';
+const WP_ADMIN_USER = process.env.WP_E2E_ADMIN_USER ?? 'admin';
+const WP_ADMIN_PASSWORD = process.env.WP_E2E_ADMIN_PASSWORD ?? 'password';
 
 const PLAYGROUND_PORT = Number.parseInt(
 	new URL(WP_BASE_URL).port || '8889',
@@ -50,9 +49,7 @@ function writeState(state: PlaygroundState): void {
 	writeFileSync(STATE_FILE, JSON.stringify(state), { mode: 0o600 });
 }
 
-export async function waitForWordPress(
-	timeoutMs: number = 180_000
-): Promise<void> {
+async function waitForWordPress(timeoutMs: number = 180_000): Promise<void> {
 	const deadline = Date.now() + timeoutMs;
 	let lastError: unknown;
 
@@ -242,7 +239,7 @@ async function bootstrapAppPassword(): Promise<string> {
 /** App password created during global setup, shared by all tests. */
 let sharedAppPassword: string | null = null;
 
-export function getSharedAppPassword(): string {
+function getSharedAppPassword(): string {
 	if (!sharedAppPassword) {
 		const state = readState();
 		if (state.appPassword) {
@@ -449,25 +446,6 @@ export async function listCommands(
 ): Promise<CommandResponse[]> {
 	const query = postId ? `?post_id=${postId}` : '';
 	return apiFetch(`/wpce/v1/commands${query}`, {}, auth);
-}
-
-export async function updateCommand(
-	commandId: number,
-	params: {
-		status: string;
-		message?: string;
-		result_data?: string;
-	},
-	auth?: { username: string; appPassword: string }
-): Promise<CommandResponse> {
-	return apiFetch(
-		`/wpce/v1/commands/${commandId}`,
-		{
-			method: 'PATCH',
-			body: JSON.stringify(params),
-		},
-		auth
-	);
 }
 
 // ---------------------------------------------------------------------------

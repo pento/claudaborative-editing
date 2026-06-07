@@ -38,7 +38,7 @@ export interface Command {
 	result_data: Record<string, unknown> | null;
 }
 
-export interface McpStatus {
+interface McpStatus {
 	mcpConnected: boolean;
 	mcpLastSeenAt: string | null;
 	version: string | null;
@@ -47,7 +47,7 @@ export interface McpStatus {
 	error: string | null;
 }
 
-export interface CommandsState {
+interface CommandsState {
 	active: Command | null;
 	history: Command[];
 	isSubmitting: boolean;
