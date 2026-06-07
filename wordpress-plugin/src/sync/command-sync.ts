@@ -618,3 +618,17 @@ export function subscribeToMcpConnection(
 	commandAwareness.on('change', handler);
 	return () => commandAwareness?.off('change', handler);
 }
+
+// Test-only seam for the build-guarded hatch (src/test-hatch.ts). The body is
+// gated by the same `process.env.WPCE_TEST_HATCH` constant that gates the hatch
+// import in index.ts: DefinePlugin folds it to `'false'` in production, so the
+// real-internals branch is dead-code-eliminated and a production bundle can
+// never read the live Y.Doc / Awareness through this accessor — regardless of
+// whether tree-shaking also drops the now-unreferenced export.
+// eslint-disable-next-line camelcase -- name is load-bearing for grep-ability
+export function __getInternals_UNSAFE_FOR_TESTS() {
+	if (process.env.WPCE_TEST_HATCH !== 'true') {
+		return { commandDoc: null, commandAwareness: null };
+	}
+	return { commandDoc, commandAwareness };
+}

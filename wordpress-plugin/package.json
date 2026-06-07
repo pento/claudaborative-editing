@@ -22,7 +22,9 @@
 		"@wordpress/scripts": "^32.0.0",
 		"react": "^18.3.1",
 		"stylelint-config-prettier-scss": "^1.0.0",
-		"typescript": "^6.0.3"
+		"typescript": "^6.0.3",
+		"webpack": "^5.105.4",
+		"y-protocols": "1.0.7"
 	},
 	"scripts": {
 		"prebuild": "node ../bin/generate-shared-defs.js",

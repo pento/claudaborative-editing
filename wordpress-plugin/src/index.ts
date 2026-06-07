@@ -28,6 +28,12 @@ import { initCommandSync } from './sync/command-sync';
 // post room is the natural primary for editor collaboration.
 setTimeout(() => void initCommandSync(), 0);
 
+if (process.env.WPCE_TEST_HATCH === 'true') {
+	void import('./test-hatch').then(({ installTestHatch }) =>
+		installTestHatch()
+	);
+}
+
 // Notify the cloud service (if configured) so it creates a SessionManager
 // that will connect back to this site via Yjs sync.
 connectToCloud();
