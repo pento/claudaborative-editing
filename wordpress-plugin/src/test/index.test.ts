@@ -26,6 +26,9 @@ jest.mock('../components/ConversationPanel', () => ({
 	default: () => null,
 }));
 
+const mockInstallTestHatch = jest.fn();
+jest.mock('../test-hatch', () => ({ installTestHatch: mockInstallTestHatch }));
+
 import { registerPlugin } from '@wordpress/plugins';
 
 // Import the entry point (side effect: calls registerPlugin).
@@ -75,5 +78,31 @@ describe('AI Actions entry point', () => {
 				render: expect.any(Function),
 			})
 		);
+	});
+});
+
+describe('test hatch', () => {
+	const originalHatch = process.env.WPCE_TEST_HATCH;
+
+	afterEach(() => {
+		if (originalHatch === undefined) {
+			delete process.env.WPCE_TEST_HATCH;
+		} else {
+			process.env.WPCE_TEST_HATCH = originalHatch;
+		}
+	});
+
+	it('loads the test hatch only when WPCE_TEST_HATCH is enabled', async () => {
+		process.env.WPCE_TEST_HATCH = 'true';
+		jest.resetModules();
+		require('../index');
+
+		// The hatch import is dynamic; flush the microtask chain so its
+		// `.then(installTestHatch)` callback runs before the assertion.
+		await new Promise((resolve) => {
+			setTimeout(resolve, 0);
+		});
+
+		expect(mockInstallTestHatch).toHaveBeenCalledTimes(1);
 	});
 });
