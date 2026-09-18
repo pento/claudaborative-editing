@@ -14,7 +14,7 @@
 		},
 		{
 			"step": "runPHP",
-			"code": "<?php $ini = '/internal/shared/extensions/xdebug.ini'; if (is_file($ini)) { file_put_contents($ini, str_replace('xdebug.mode=debug,develop', 'xdebug.mode=coverage', file_get_contents($ini))); } ?>"
+			"code": "<?php $ini = '/internal/shared/extensions/xdebug.ini'; if (is_file($ini)) { $c = preg_replace('/^\\s*xdebug\\.mode\\s*=.*$/m', 'xdebug.mode=coverage', file_get_contents($ini), -1, $n); if (!$n) { $c .= \"\\nxdebug.mode=coverage\\n\"; } file_put_contents($ini, $c); } ?>"
 		},
 		{
 			"step": "defineWpConfigConsts",
