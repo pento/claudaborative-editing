@@ -8,7 +8,6 @@ import {
 	fakePost,
 } from './helpers.js';
 import { assertDefined } from '../../test-utils.js';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { SessionManager } from '../../../src/session/session-manager.js';
 
 describe('post tools', () => {
@@ -22,11 +21,7 @@ describe('post tools', () => {
 			user: fakeUser,
 			post: fakePost,
 		});
-		registerToolDefinitions(
-			server as unknown as McpServer,
-			session,
-			postTools
-		);
+		registerToolDefinitions(server, session, postTools);
 	});
 
 	it('registers wp_list_posts, wp_open_post, wp_close_post, and wp_create_post', () => {
@@ -121,11 +116,7 @@ describe('post tools', () => {
 				user: fakeUser,
 				post: fakePost,
 			});
-			registerToolDefinitions(
-				server as unknown as McpServer,
-				session,
-				postTools
-			);
+			registerToolDefinitions(server, session, postTools);
 		});
 
 		it('calls session.closePost() and returns success message', async () => {

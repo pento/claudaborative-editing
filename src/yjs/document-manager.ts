@@ -112,8 +112,7 @@ export class DocumentManager {
 	getBlocks(doc: Y.Doc): Block[] {
 		const documentMap = this.getDocumentMap(doc);
 		const blocksArray = documentMap.get('blocks') as
-			| Y.Array<Y.Map<unknown>>
-			| undefined;
+			Y.Array<Y.Map<unknown>> | undefined;
 		if (!blocksArray) {
 			return [];
 		}
@@ -132,8 +131,7 @@ export class DocumentManager {
 		doc.transact(() => {
 			const documentMap = this.getDocumentMap(doc);
 			let blocksArray = documentMap.get('blocks') as
-				| Y.Array<Y.Map<unknown>>
-				| undefined;
+				Y.Array<Y.Map<unknown>> | undefined;
 
 			if (!blocksArray) {
 				blocksArray = new Y.Array<Y.Map<unknown>>();
@@ -228,8 +226,7 @@ export class DocumentManager {
 		doc.transact(() => {
 			const documentMap = this.getDocumentMap(doc);
 			let blocksArray = documentMap.get('blocks') as
-				| Y.Array<Y.Map<unknown>>
-				| undefined;
+				Y.Array<Y.Map<unknown>> | undefined;
 			if (!blocksArray) {
 				blocksArray = new Y.Array<Y.Map<unknown>>();
 				documentMap.set('blocks', blocksArray);
@@ -268,8 +265,7 @@ export class DocumentManager {
 			}
 
 			let innerBlocksArray = parentYMap.get('innerBlocks') as
-				| Y.Array<Y.Map<unknown>>
-				| undefined;
+				Y.Array<Y.Map<unknown>> | undefined;
 			if (!innerBlocksArray) {
 				innerBlocksArray = new Y.Array<Y.Map<unknown>>();
 				parentYMap.set('innerBlocks', innerBlocksArray);
@@ -296,8 +292,7 @@ export class DocumentManager {
 			}
 
 			const innerBlocksArray = parentYMap.get('innerBlocks') as
-				| Y.Array<Y.Map<unknown>>
-				| undefined;
+				Y.Array<Y.Map<unknown>> | undefined;
 			if (!innerBlocksArray || innerBlocksArray.length === 0) {
 				throw new Error(
 					`Block at index ${parentIndex} has no inner blocks`
@@ -437,8 +432,7 @@ export class DocumentManager {
 			const attrMap = ymap.get('attributes') as Y.Map<unknown>;
 			const currentMetadata =
 				(attrMap.get('metadata') as
-					| Record<string, unknown>
-					| undefined) ?? {};
+					Record<string, unknown> | undefined) ?? {};
 			attrMap.set('metadata', { ...currentMetadata, noteId });
 		});
 	}
@@ -457,8 +451,7 @@ export class DocumentManager {
 
 			const attrMap = ymap.get('attributes') as Y.Map<unknown>;
 			const currentMetadata = attrMap.get('metadata') as
-				| Record<string, unknown>
-				| undefined;
+				Record<string, unknown> | undefined;
 
 			if (!currentMetadata || !('noteId' in currentMetadata)) {
 				return;
@@ -501,8 +494,7 @@ export class DocumentManager {
 			current = currentArray.get(part);
 			// For next iteration, if there are more parts, descend into innerBlocks
 			const innerBlocks = current.get('innerBlocks') as
-				| Y.Array<Y.Map<unknown>>
-				| undefined;
+				Y.Array<Y.Map<unknown>> | undefined;
 			if (innerBlocks) {
 				currentArray = innerBlocks;
 			}

@@ -93,9 +93,9 @@ function createTestDeps(
 			promptSecret: () => Promise.resolve(answers[answerIndex++] ?? ''),
 			log: (msg: string) => logs.push(msg),
 			error: (msg: string) => errors.push(msg),
-			exit: ((code: number) => {
+			exit: (code: number) => {
 				throw new SetupExitError(code);
-			}) as (code: number) => never,
+			},
 			cleanup: () => {},
 			...overrides,
 		},
@@ -346,7 +346,7 @@ describe('setup wizard', () => {
 								cookie: { endpoints: {} },
 							},
 						}),
-				} as unknown as Response);
+				});
 
 			const { deps, errors } = createTestDeps(
 				['https://example.com', 'admin', 'xxxx xxxx xxxx'],
@@ -760,7 +760,7 @@ describe('setup wizard', () => {
 				{
 					detectClients: () => [
 						{
-							type: 'claude-code' as McpClientType,
+							type: 'claude-code',
 							config: mockClaudeCode,
 							detected: false,
 						},
@@ -815,7 +815,7 @@ describe('setup wizard', () => {
 			const { deps, logs } = createTestDeps(manualAnswers, {
 				detectClients: () => [
 					{
-						type: 'claude-code' as McpClientType,
+						type: 'claude-code',
 						config: clientNoCli,
 						detected: true,
 					},
@@ -911,7 +911,7 @@ describe('setup wizard', () => {
 			const { deps, logs } = createTestDeps(manualAnswers, {
 				detectClients: () => [
 					{
-						type: 'claude-code' as McpClientType,
+						type: 'claude-code',
 						config: clientWithCli,
 						detected: true,
 					},
@@ -943,7 +943,7 @@ describe('setup wizard', () => {
 			const { deps, logs } = createTestDeps(manualAnswers, {
 				detectClients: () => [
 					{
-						type: 'claude-code' as McpClientType,
+						type: 'claude-code',
 						config: clientWithFailingCli,
 						detected: true,
 					},
@@ -1044,7 +1044,7 @@ describe('setup wizard', () => {
 			const { deps, logs } = createTestDeps([], {
 				detectClients: () => [
 					{
-						type: 'claude-code' as McpClientType,
+						type: 'claude-code',
 						config: clientWithRemove,
 						detected: true,
 					},
@@ -1074,7 +1074,7 @@ describe('setup wizard', () => {
 			const { deps, logs } = createTestDeps([], {
 				detectClients: () => [
 					{
-						type: 'claude-code' as McpClientType,
+						type: 'claude-code',
 						config: clientWithFailingRemove,
 						detected: true,
 					},

@@ -10,7 +10,6 @@ import {
 } from './helpers.js';
 import { assertDefined } from '../../test-utils.js';
 import { WordPressApiError } from '../../../src/wordpress/api-client.js';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 vi.mock('../../../src/version.js', () => ({
 	VERSION: '1.2.3',
@@ -44,11 +43,7 @@ describe('status tools', () => {
 
 	it('registers wp_status, wp_collaborators, and wp_save', () => {
 		const session = createMockSession();
-		registerToolDefinitions(
-			server as unknown as McpServer,
-			session,
-			statusTools
-		);
+		registerToolDefinitions(server, session, statusTools);
 
 		expect(server.registeredTools.has('wp_status')).toBe(true);
 		expect(server.registeredTools.has('wp_collaborators')).toBe(true);
@@ -58,11 +53,7 @@ describe('status tools', () => {
 	describe('wp_status', () => {
 		it('shows disconnected state', async () => {
 			const session = createMockSession({ state: 'disconnected' });
-			registerToolDefinitions(
-				server as unknown as McpServer,
-				session,
-				statusTools
-			);
+			registerToolDefinitions(server, session, statusTools);
 
 			const tool = server.registeredTools.get('wp_status');
 			assertDefined(tool);
@@ -79,11 +70,7 @@ describe('status tools', () => {
 				state: 'connected',
 				user: fakeUser,
 			});
-			registerToolDefinitions(
-				server as unknown as McpServer,
-				session,
-				statusTools
-			);
+			registerToolDefinitions(server, session, statusTools);
 
 			const tool = server.registeredTools.get('wp_status');
 			assertDefined(tool);
@@ -106,11 +93,7 @@ describe('status tools', () => {
 				},
 				collaborators: [fakeCollaborator],
 			});
-			registerToolDefinitions(
-				server as unknown as McpServer,
-				session,
-				statusTools
-			);
+			registerToolDefinitions(server, session, statusTools);
 
 			const tool = server.registeredTools.get('wp_status');
 			assertDefined(tool);
@@ -134,11 +117,7 @@ describe('status tools', () => {
 				post: fakePost,
 				postGone: { gone: true, reason: 'This post has been deleted.' },
 			});
-			registerToolDefinitions(
-				server as unknown as McpServer,
-				session,
-				statusTools
-			);
+			registerToolDefinitions(server, session, statusTools);
 
 			const tool = server.registeredTools.get('wp_status');
 			assertDefined(tool);
@@ -163,11 +142,7 @@ describe('status tools', () => {
 					transport: 'sse',
 				},
 			});
-			registerToolDefinitions(
-				server as unknown as McpServer,
-				session,
-				statusTools
-			);
+			registerToolDefinitions(server, session, statusTools);
 
 			const tool = server.registeredTools.get('wp_status');
 			assertDefined(tool);
@@ -191,11 +166,7 @@ describe('status tools', () => {
 						'Plugin protocol v99 is not compatible with this MCP server (supports v1). Update the MCP server.',
 				},
 			});
-			registerToolDefinitions(
-				server as unknown as McpServer,
-				session,
-				statusTools
-			);
+			registerToolDefinitions(server, session, statusTools);
 
 			const tool = server.registeredTools.get('wp_status');
 			assertDefined(tool);
@@ -218,11 +189,7 @@ describe('status tools', () => {
 					transport: 'sse',
 				},
 			});
-			registerToolDefinitions(
-				server as unknown as McpServer,
-				session,
-				statusTools
-			);
+			registerToolDefinitions(server, session, statusTools);
 
 			const tool = server.registeredTools.get('wp_status');
 			assertDefined(tool);
@@ -249,11 +216,7 @@ describe('status tools', () => {
 					transport: 'sse',
 					protocolWarning: null,
 				});
-			registerToolDefinitions(
-				server as unknown as McpServer,
-				session,
-				statusTools
-			);
+			registerToolDefinitions(server, session, statusTools);
 
 			const tool = server.registeredTools.get('wp_status');
 			assertDefined(tool);
@@ -273,11 +236,7 @@ describe('status tools', () => {
 					transport: 'sse',
 				},
 			});
-			registerToolDefinitions(
-				server as unknown as McpServer,
-				session,
-				statusTools
-			);
+			registerToolDefinitions(server, session, statusTools);
 
 			const tool = server.registeredTools.get('wp_status');
 			assertDefined(tool);
@@ -292,11 +251,7 @@ describe('status tools', () => {
 				user: fakeUser,
 				pluginInfo: null,
 			});
-			registerToolDefinitions(
-				server as unknown as McpServer,
-				session,
-				statusTools
-			);
+			registerToolDefinitions(server, session, statusTools);
 
 			const tool = server.registeredTools.get('wp_status');
 			assertDefined(tool);
@@ -337,11 +292,7 @@ describe('status tools', () => {
 					transport: 'sse',
 					protocolWarning: null,
 				}); // after detection
-			registerToolDefinitions(
-				server as unknown as McpServer,
-				session,
-				statusTools
-			);
+			registerToolDefinitions(server, session, statusTools);
 
 			const tool = server.registeredTools.get('wp_status');
 			assertDefined(tool);
@@ -372,11 +323,7 @@ describe('status tools', () => {
 			(
 				session.activateEditorPlugin as ReturnType<typeof vi.fn>
 			).mockRejectedValue(new WordPressApiError('Forbidden', 403, ''));
-			registerToolDefinitions(
-				server as unknown as McpServer,
-				session,
-				statusTools
-			);
+			registerToolDefinitions(server, session, statusTools);
 
 			const tool = server.registeredTools.get('wp_status');
 			assertDefined(tool);
@@ -401,11 +348,7 @@ describe('status tools', () => {
 				version: '0.0.1',
 				pluginFile: 'claudaborative-editing/claudaborative-editing',
 			});
-			registerToolDefinitions(
-				server as unknown as McpServer,
-				session,
-				statusTools
-			);
+			registerToolDefinitions(server, session, statusTools);
 
 			const tool = server.registeredTools.get('wp_status');
 			assertDefined(tool);
@@ -444,11 +387,7 @@ describe('status tools', () => {
 					transport: 'sse',
 					protocolWarning: null,
 				});
-			registerToolDefinitions(
-				server as unknown as McpServer,
-				session,
-				statusTools
-			);
+			registerToolDefinitions(server, session, statusTools);
 
 			const tool = server.registeredTools.get('wp_status');
 			assertDefined(tool);
@@ -477,11 +416,7 @@ describe('status tools', () => {
 			(
 				session.installEditorPlugin as ReturnType<typeof vi.fn>
 			).mockRejectedValue(new WordPressApiError('Not Found', 404, ''));
-			registerToolDefinitions(
-				server as unknown as McpServer,
-				session,
-				statusTools
-			);
+			registerToolDefinitions(server, session, statusTools);
 
 			const tool = server.registeredTools.get('wp_status');
 			assertDefined(tool);
@@ -500,11 +435,7 @@ describe('status tools', () => {
 			(
 				session.getEditorPluginInstallStatus as ReturnType<typeof vi.fn>
 			).mockRejectedValue(new WordPressApiError('Forbidden', 403, ''));
-			registerToolDefinitions(
-				server as unknown as McpServer,
-				session,
-				statusTools
-			);
+			registerToolDefinitions(server, session, statusTools);
 
 			const tool = server.registeredTools.get('wp_status');
 			assertDefined(tool);
@@ -533,11 +464,7 @@ describe('status tools', () => {
 			).mockRejectedValue(
 				new WordPressApiError('Internal Server Error', 500, '')
 			);
-			registerToolDefinitions(
-				server as unknown as McpServer,
-				session,
-				statusTools
-			);
+			registerToolDefinitions(server, session, statusTools);
 
 			const tool = server.registeredTools.get('wp_status');
 			assertDefined(tool);
@@ -561,11 +488,7 @@ describe('status tools', () => {
 			(
 				session.getTitle as ReturnType<typeof import('vitest').vi.fn>
 			).mockReturnValue('Updated Title');
-			registerToolDefinitions(
-				server as unknown as McpServer,
-				session,
-				statusTools
-			);
+			registerToolDefinitions(server, session, statusTools);
 
 			const tool = server.registeredTools.get('wp_status');
 			assertDefined(tool);
@@ -586,11 +509,7 @@ describe('status tools', () => {
 				post: fakePost,
 				collaborators: [fakeCollaborator],
 			});
-			registerToolDefinitions(
-				server as unknown as McpServer,
-				session,
-				statusTools
-			);
+			registerToolDefinitions(server, session, statusTools);
 
 			const tool = server.registeredTools.get('wp_collaborators');
 			assertDefined(tool);
@@ -609,11 +528,7 @@ describe('status tools', () => {
 				post: fakePost,
 				collaborators: [],
 			});
-			registerToolDefinitions(
-				server as unknown as McpServer,
-				session,
-				statusTools
-			);
+			registerToolDefinitions(server, session, statusTools);
 
 			const tool = server.registeredTools.get('wp_collaborators');
 			assertDefined(tool);
@@ -637,11 +552,7 @@ describe('status tools', () => {
 			).mockImplementation(() => {
 				throw new Error('unexpected');
 			});
-			registerToolDefinitions(
-				server as unknown as McpServer,
-				session,
-				statusTools
-			);
+			registerToolDefinitions(server, session, statusTools);
 
 			const tool = server.registeredTools.get('wp_collaborators');
 			assertDefined(tool);
@@ -658,11 +569,7 @@ describe('status tools', () => {
 				state: 'connected',
 				user: fakeUser,
 			});
-			registerToolDefinitions(
-				server as unknown as McpServer,
-				session,
-				statusTools
-			);
+			registerToolDefinitions(server, session, statusTools);
 
 			const tool = server.registeredTools.get('wp_collaborators');
 			assertDefined(tool);
@@ -682,11 +589,7 @@ describe('status tools', () => {
 				user: fakeUser,
 				post: fakePost,
 			});
-			registerToolDefinitions(
-				server as unknown as McpServer,
-				session,
-				statusTools
-			);
+			registerToolDefinitions(server, session, statusTools);
 
 			const tool = server.registeredTools.get('wp_save');
 			assertDefined(tool);
@@ -707,11 +610,7 @@ describe('status tools', () => {
 			(
 				session.getTitle as ReturnType<typeof import('vitest').vi.fn>
 			).mockReturnValue('Updated Title');
-			registerToolDefinitions(
-				server as unknown as McpServer,
-				session,
-				statusTools
-			);
+			registerToolDefinitions(server, session, statusTools);
 
 			const tool = server.registeredTools.get('wp_save');
 			assertDefined(tool);
@@ -732,11 +631,7 @@ describe('status tools', () => {
 					"Operation requires state editing, but current state is 'disconnected'"
 				);
 			});
-			registerToolDefinitions(
-				server as unknown as McpServer,
-				session,
-				statusTools
-			);
+			registerToolDefinitions(server, session, statusTools);
 
 			const tool = server.registeredTools.get('wp_save');
 			assertDefined(tool);

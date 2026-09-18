@@ -47,13 +47,13 @@ export async function startServer(): Promise<void> {
 	registerAllTools(server, session);
 
 	// Wire up channel notifications from the command handler to the MCP client.
-	// Uses a type cast because notifications/claude/channel is experimental
-	// and not in the SDK's ServerNotification union type.
+	// notifications/claude/channel is experimental, but the SDK's notification()
+	// signature accepts it without a cast.
 	session.setChannelNotifier(async (params) => {
 		await server.server.notification({
 			method: 'notifications/claude/channel',
 			params,
-		} as never);
+		});
 	});
 
 	// Register all prompts

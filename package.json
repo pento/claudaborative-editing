@@ -39,7 +39,19 @@
 	"engines": {
 		"node": ">=22.13"
 	},
-	"packageManager": "npm@11.9.0",
+	"packageManager": "npm@12.0.2",
+	"devEngines": {
+		"runtime": {
+			"name": "node",
+			"version": "^22.22.2 || >=24.15.0",
+			"onFail": "warn"
+		},
+		"packageManager": {
+			"name": "npm",
+			"version": ">=12.0.0",
+			"onFail": "error"
+		}
+	},
 	"scripts": {
 		"build": "tsup",
 		"build:all": "npm run build && npm --prefix wordpress-plugin run build",
@@ -79,40 +91,41 @@
 		]
 	},
 	"dependencies": {
-		"@modelcontextprotocol/sdk": "^1.29.0",
-		"@wordpress/block-serialization-default-parser": "^5.43.0",
-		"lib0": "0.2.99",
+		"@modelcontextprotocol/sdk": "^1.30.0",
+		"@wordpress/block-serialization-default-parser": "^5.55.0",
+		"lib0": "0.2.117",
 		"y-protocols": "^1.0.7",
-		"yjs": "13.6.29",
-		"zod": "^4.3.6"
+		"yjs": "13.6.32",
+		"zod": "^4.6.5"
 	},
 	"devDependencies": {
-		"@babel/core": "^7.29.0",
 		"@eslint/js": "^10.0.1",
-		"@playwright/test": "^1.59.1",
-		"@types/node": "^25.5.2",
-		"@vitest/coverage-v8": "^4.1.2",
-		"@wordpress/e2e-test-utils-playwright": "^1.43.0",
-		"@wordpress/eslint-plugin": "^25.0.0",
-		"@wordpress/prettier-config": "^4.43.0",
-		"@wp-playground/cli": "^3.1.36",
-		"eslint": "^10.2.1",
+		"@playwright/test": "^1.63.0",
+		"@types/node": "^25.9.7",
+		"@vitest/coverage-v8": "^5.0.1",
+		"@wordpress/e2e-test-utils-playwright": "^2.0.0",
+		"@wordpress/eslint-plugin": "^26.0.0",
+		"@wordpress/prettier-config": "^4.55.0",
+		"@wp-playground/cli": "^3.1.54",
+		"eslint": "^10.10.0",
 		"eslint-config-prettier": "^10.1.8",
-		"eslint-plugin-package-json": "^0.91.1",
-		"globals": "^17.4.0",
+		"eslint-plugin-package-json": "^1.8.1",
+		"globals": "^17.12.0",
 		"husky": "^9.1.7",
-		"knip": "^6.16.1",
-		"lint-staged": "^16.4.0",
-		"markdownlint-cli2": "^0.22.0",
-		"prettier": "^3.8.1",
+		"knip": "^6.36.0",
+		"lint-staged": "^17.5.1",
+		"markdownlint-cli2": "^0.23.2",
+		"prettier": "^3.9.7",
 		"tsup": "^8.5.1",
 		"typescript": "~6.0.2",
-		"typescript-eslint": "^8.58.2",
-		"vitest": "^4.1.2"
+		"typescript-eslint": "^8.70.0",
+		"vitest": "^5.0.1"
 	},
-	"overrides": {
-		"@wordpress/e2e-test-utils-playwright": {
-			"@types/node": "$@types/node"
-		}
+	"allowScripts": {
+		"core-js": false,
+		"esbuild": false,
+		"fs-ext-extra-prebuilt": false,
+		"fsevents": false,
+		"unrs-resolver": false
 	}
 }

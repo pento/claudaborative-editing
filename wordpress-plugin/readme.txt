@@ -3,7 +3,7 @@ Contributors: pento
 Donate link: https://github.com/sponsors/pento
 Tags: ai, collaborative-editing, gutenberg, claude
 Requires at least: 6.9
-Tested up to: 7.0
+Tested up to: 7.1
 Stable tag: 0.5.2
 Requires PHP: 7.4
 License: GPLv2 or later

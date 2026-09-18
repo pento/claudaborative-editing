@@ -21,9 +21,9 @@ function createTestDeps(overrides?: Partial<StartDeps>): {
 		deps: {
 			log: (msg: string) => logs.push(msg),
 			error: (msg: string) => errors.push(msg),
-			exit: ((code: number) => {
+			exit: (code: number) => {
 				throw new StartExitError(code);
-			}) as (code: number) => never,
+			},
 			isClaudeOnPath: () => true,
 			hasConfig: () => true,
 			runSetup: vi.fn().mockResolvedValue(undefined),

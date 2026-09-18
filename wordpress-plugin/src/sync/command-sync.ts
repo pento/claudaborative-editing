@@ -219,8 +219,7 @@ export async function initCommandSync(): Promise<void> {
 	let currentUser: { id: number } | undefined;
 	try {
 		currentUser = (await resolveSelect(coreDataStore).getCurrentUser()) as
-			| { id: number }
-			| undefined;
+			{ id: number } | undefined;
 	} catch {
 		initialized = false;
 		return;

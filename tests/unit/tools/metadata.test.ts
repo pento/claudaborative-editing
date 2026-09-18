@@ -8,7 +8,6 @@ import {
 	fakePost,
 } from './helpers.js';
 import { assertDefined } from '../../test-utils.js';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { SessionManager } from '../../../src/session/session-manager.js';
 
 describe('metadata tools', () => {
@@ -38,11 +37,7 @@ describe('metadata tools', () => {
 			},
 		]);
 
-		registerToolDefinitions(
-			server as unknown as McpServer,
-			session,
-			metadataTools
-		);
+		registerToolDefinitions(server, session, metadataTools);
 	});
 
 	it('registers all 11 metadata tools', () => {

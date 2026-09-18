@@ -6,26 +6,28 @@
 	"devDependencies": {
 		"@resvg/resvg-js": "^2.6.2",
 		"@testing-library/react": "^16.3.2",
-		"@types/jest": "^29.5.14",
-		"@wordpress/api-fetch": "^7.44.0",
-		"@wordpress/components": "^32.6.0",
-		"@wordpress/compose": "^7.44.0",
-		"@wordpress/core-data": "^7.44.0",
-		"@wordpress/data": "^10.44.0",
-		"@wordpress/editor": "^14.44.0",
-		"@wordpress/element": "^6.44.0",
-		"@wordpress/hooks": "^4.44.0",
-		"@wordpress/i18n": "^6.17.0",
-		"@wordpress/icons": "^12.2.0",
-		"@wordpress/interface": "^9.29.0",
-		"@wordpress/notices": "^5.44.0",
-		"@wordpress/plugins": "^7.44.0",
-		"@wordpress/scripts": "^32.0.0",
-		"@wordpress/stylelint-config": "^23.36.0",
-		"@wordpress/sync": "^1.44.0",
+		"@types/jest": "^30.0.0",
+		"@types/react": "^18.3.31",
+		"@types/react-dom": "^18.3.7",
+		"@wordpress/api-fetch": "^7.51.0",
+		"@wordpress/components": "^37.0.0",
+		"@wordpress/compose": "^8.4.0",
+		"@wordpress/core-data": "^7.51.0",
+		"@wordpress/data": "^10.51.0",
+		"@wordpress/editor": "^14.51.0",
+		"@wordpress/element": "^8.3.0",
+		"@wordpress/hooks": "^4.51.0",
+		"@wordpress/i18n": "^6.24.0",
+		"@wordpress/icons": "^15.2.0",
+		"@wordpress/interface": "^9.36.0",
+		"@wordpress/notices": "^5.51.0",
+		"@wordpress/plugins": "^7.51.0",
+		"@wordpress/scripts": "^35.0.0",
+		"@wordpress/stylelint-config": "^25.0.0",
+		"@wordpress/sync": "^1.51.0",
 		"react": "^18.3.1",
-		"stylelint": "^16.26.1",
-		"stylelint-config-prettier-scss": "^1.0.0",
+		"react-dom": "^18.3.1",
+		"stylelint": "^17.15.0",
 		"typescript": "^6.0.3",
 		"webpack": "^5.105.4",
 		"y-protocols": "1.0.7"
@@ -43,7 +45,26 @@
 		"test:coverage": "wp-scripts test-unit-js --coverage",
 		"typecheck": "tsc --noEmit"
 	},
+	"devEngines": {
+		"runtime": {
+			"name": "node",
+			"version": "^22.22.2 || >=24.15.0",
+			"onFail": "warn"
+		},
+		"packageManager": {
+			"name": "npm",
+			"version": ">=12.0.0",
+			"onFail": "error"
+		}
+	},
 	"overrides": {
-		"prettier": "^3.8.1"
+		"prettier": "3.9.7"
+	},
+	"allowScripts": {
+		"core-js": false,
+		"core-js-pure": false,
+		"fsevents": false,
+		"unrs-resolver": false,
+		"@parcel/watcher": false
 	}
 }

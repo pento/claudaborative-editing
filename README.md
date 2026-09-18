@@ -87,6 +87,13 @@ See [CLAUDE.md](CLAUDE.md) for architecture details, sync protocol documentation
 
 ## Development
 
+### Prerequisites
+
+- Node.js `^22.22.2 || >=24.15.0`
+- npm 12 or newer — `npm install` hard-fails with `EBADDEVENGINES` on npm 11, because npm 11 and npm 12 build different trees from the same lockfile
+
+Both floors are enforced via `devEngines` in `package.json`. (The published npm package itself only requires Node >=22.13, via `engines`.)
+
 ### MCP server
 
 ```bash

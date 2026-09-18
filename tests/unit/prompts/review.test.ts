@@ -8,7 +8,6 @@ import {
 } from './helpers.js';
 import { reviewPrompts } from '../../../src/prompts/review.js';
 import { registerPromptDefinitions } from '../../../src/prompts/registry.js';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { assertDefined } from '../../test-utils.js';
 
 describe('review', () => {
@@ -16,11 +15,7 @@ describe('review', () => {
 		it('instructs to connect first', async () => {
 			const server = createMockServer();
 			const session = createMockSession({ state: 'disconnected' });
-			registerPromptDefinitions(
-				server as unknown as McpServer,
-				session,
-				reviewPrompts
-			);
+			registerPromptDefinitions(server, session, reviewPrompts);
 
 			const prompt = server.registeredPrompts.get('review');
 			assertDefined(prompt);
@@ -35,11 +30,7 @@ describe('review', () => {
 		it('instructs to open a post first', async () => {
 			const server = createMockServer();
 			const session = createMockSession({ state: 'connected' });
-			registerPromptDefinitions(
-				server as unknown as McpServer,
-				session,
-				reviewPrompts
-			);
+			registerPromptDefinitions(server, session, reviewPrompts);
 
 			const prompt = server.registeredPrompts.get('review');
 			assertDefined(prompt);
@@ -57,11 +48,7 @@ describe('review', () => {
 				state: 'editing',
 				post: fakePost,
 			});
-			registerPromptDefinitions(
-				server as unknown as McpServer,
-				session,
-				reviewPrompts
-			);
+			registerPromptDefinitions(server, session, reviewPrompts);
 
 			const prompt = server.registeredPrompts.get('review');
 			assertDefined(prompt);
@@ -81,11 +68,7 @@ describe('review', () => {
 				post: fakePost,
 			});
 			vi.mocked(session.getNotesSupported).mockReturnValue(false);
-			registerPromptDefinitions(
-				server as unknown as McpServer,
-				session,
-				reviewPrompts
-			);
+			registerPromptDefinitions(server, session, reviewPrompts);
 
 			const prompt = server.registeredPrompts.get('review');
 			assertDefined(prompt);
@@ -103,11 +86,7 @@ describe('review', () => {
 				state: 'editing',
 				post: fakePost,
 			});
-			registerPromptDefinitions(
-				server as unknown as McpServer,
-				session,
-				reviewPrompts
-			);
+			registerPromptDefinitions(server, session, reviewPrompts);
 
 			const prompt = server.registeredPrompts.get('review');
 			assertDefined(prompt);
@@ -123,11 +102,7 @@ describe('review', () => {
 				state: 'editing',
 				post: fakePost,
 			});
-			registerPromptDefinitions(
-				server as unknown as McpServer,
-				session,
-				reviewPrompts
-			);
+			registerPromptDefinitions(server, session, reviewPrompts);
 
 			const prompt = server.registeredPrompts.get('review');
 			assertDefined(prompt);
@@ -145,11 +120,7 @@ describe('respond-to-notes', () => {
 		it('instructs to connect first', async () => {
 			const server = createMockServer();
 			const session = createMockSession({ state: 'disconnected' });
-			registerPromptDefinitions(
-				server as unknown as McpServer,
-				session,
-				reviewPrompts
-			);
+			registerPromptDefinitions(server, session, reviewPrompts);
 
 			const prompt = server.registeredPrompts.get('respond-to-notes');
 			assertDefined(prompt);
@@ -164,11 +135,7 @@ describe('respond-to-notes', () => {
 		it('instructs to open a post first', async () => {
 			const server = createMockServer();
 			const session = createMockSession({ state: 'connected' });
-			registerPromptDefinitions(
-				server as unknown as McpServer,
-				session,
-				reviewPrompts
-			);
+			registerPromptDefinitions(server, session, reviewPrompts);
 
 			const prompt = server.registeredPrompts.get('respond-to-notes');
 			assertDefined(prompt);
@@ -187,11 +154,7 @@ describe('respond-to-notes', () => {
 				post: fakePost,
 			});
 			vi.mocked(session.getNotesSupported).mockReturnValue(false);
-			registerPromptDefinitions(
-				server as unknown as McpServer,
-				session,
-				reviewPrompts
-			);
+			registerPromptDefinitions(server, session, reviewPrompts);
 
 			const prompt = server.registeredPrompts.get('respond-to-notes');
 			assertDefined(prompt);
@@ -207,11 +170,7 @@ describe('respond-to-notes', () => {
 				state: 'editing',
 				post: fakePost,
 			});
-			registerPromptDefinitions(
-				server as unknown as McpServer,
-				session,
-				reviewPrompts
-			);
+			registerPromptDefinitions(server, session, reviewPrompts);
 
 			const prompt = server.registeredPrompts.get('respond-to-notes');
 			assertDefined(prompt);
@@ -231,11 +190,7 @@ describe('respond-to-notes', () => {
 				notes: [fakeNote],
 				noteBlockMap: { 1: '0' },
 			});
-			registerPromptDefinitions(
-				server as unknown as McpServer,
-				session,
-				reviewPrompts
-			);
+			registerPromptDefinitions(server, session, reviewPrompts);
 
 			const prompt = server.registeredPrompts.get('respond-to-notes');
 			assertDefined(prompt);
@@ -269,11 +224,7 @@ describe('respond-to-notes', () => {
 				notes: [fakeNote, replyNote],
 				noteBlockMap: { 1: '0' },
 			});
-			registerPromptDefinitions(
-				server as unknown as McpServer,
-				session,
-				reviewPrompts
-			);
+			registerPromptDefinitions(server, session, reviewPrompts);
 
 			const prompt = server.registeredPrompts.get('respond-to-notes');
 			assertDefined(prompt);
@@ -292,11 +243,7 @@ describe('respond-to-note', () => {
 		it('instructs to connect first', async () => {
 			const server = createMockServer();
 			const session = createMockSession({ state: 'disconnected' });
-			registerPromptDefinitions(
-				server as unknown as McpServer,
-				session,
-				reviewPrompts
-			);
+			registerPromptDefinitions(server, session, reviewPrompts);
 
 			const prompt = server.registeredPrompts.get('respond-to-note');
 			assertDefined(prompt);
@@ -311,11 +258,7 @@ describe('respond-to-note', () => {
 		it('instructs to open a post first', async () => {
 			const server = createMockServer();
 			const session = createMockSession({ state: 'connected' });
-			registerPromptDefinitions(
-				server as unknown as McpServer,
-				session,
-				reviewPrompts
-			);
+			registerPromptDefinitions(server, session, reviewPrompts);
 
 			const prompt = server.registeredPrompts.get('respond-to-note');
 			assertDefined(prompt);
@@ -334,11 +277,7 @@ describe('respond-to-note', () => {
 				post: fakePost,
 			});
 			vi.mocked(session.getNotesSupported).mockReturnValue(false);
-			registerPromptDefinitions(
-				server as unknown as McpServer,
-				session,
-				reviewPrompts
-			);
+			registerPromptDefinitions(server, session, reviewPrompts);
 
 			const prompt = server.registeredPrompts.get('respond-to-note');
 			assertDefined(prompt);
@@ -358,11 +297,7 @@ describe('respond-to-note', () => {
 				notes: [fakeNote],
 				noteBlockMap: { 1: '0' },
 			});
-			registerPromptDefinitions(
-				server as unknown as McpServer,
-				session,
-				reviewPrompts
-			);
+			registerPromptDefinitions(server, session, reviewPrompts);
 
 			const prompt = server.registeredPrompts.get('respond-to-note');
 			assertDefined(prompt);
@@ -400,11 +335,7 @@ describe('respond-to-note', () => {
 				notes: [fakeNote, replyNote, otherNote],
 				noteBlockMap: { 1: '0', 10: '1' },
 			});
-			registerPromptDefinitions(
-				server as unknown as McpServer,
-				session,
-				reviewPrompts
-			);
+			registerPromptDefinitions(server, session, reviewPrompts);
 
 			const prompt = server.registeredPrompts.get('respond-to-note');
 			assertDefined(prompt);
@@ -437,11 +368,7 @@ describe('respond-to-note', () => {
 				notes: [fakeNote],
 				noteBlockMap: { 1: '0' },
 			});
-			registerPromptDefinitions(
-				server as unknown as McpServer,
-				session,
-				reviewPrompts
-			);
+			registerPromptDefinitions(server, session, reviewPrompts);
 
 			const prompt = server.registeredPrompts.get('respond-to-note');
 			assertDefined(prompt);

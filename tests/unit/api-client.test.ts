@@ -272,7 +272,7 @@ describe('WordPressApiClient', () => {
 				statusText: 'OK',
 				headers,
 				text: () => Promise.reject(new Error('body stream error')),
-			} as unknown as Response);
+			});
 			const result = await WordPressApiClient.discover(
 				'https://example.com'
 			);

@@ -349,12 +349,10 @@ export class SessionManager {
 	private collaborators: CollaboratorInfo[] = [];
 	private notesSupported = false;
 	private updateHandler:
-		| ((update: Uint8Array, origin: unknown) => void)
-		| null = null;
+		((update: Uint8Array, origin: unknown) => void) | null = null;
 	private commentDoc: Y.Doc | null = null;
 	private commentUpdateHandler:
-		| ((update: Uint8Array, origin: unknown) => void)
-		| null = null;
+		((update: Uint8Array, origin: unknown) => void) | null = null;
 
 	/** Cached resolved category names (populated in openPost, updated in setCategories). */
 	private _cachedCategories: string[] = [];
@@ -394,8 +392,7 @@ export class SessionManager {
 	private commandDoc: Y.Doc | null = null;
 	/** Update handler for the command doc. */
 	private commandUpdateHandler:
-		| ((update: Uint8Array, origin: unknown) => void)
-		| null = null;
+		((update: Uint8Array, origin: unknown) => void) | null = null;
 	/** The post room name (stored for removeRoom in closePost). */
 	private postRoom: string | null = null;
 
@@ -993,22 +990,18 @@ export class SessionManager {
 		const metadata: PostMetadata = {
 			status:
 				(this.documentManager.getProperty(this.doc, 'status') as
-					| string
-					| undefined) ?? this._currentPost?.status,
+					string | undefined) ?? this._currentPost?.status,
 			date:
 				(this.documentManager.getProperty(this.doc, 'date') as
-					| string
-					| undefined) ??
+					string | undefined) ??
 				this._currentPost?.date ??
 				undefined,
 			slug:
 				(this.documentManager.getProperty(this.doc, 'slug') as
-					| string
-					| undefined) ?? this._currentPost?.slug,
+					string | undefined) ?? this._currentPost?.slug,
 			sticky:
 				(this.documentManager.getProperty(this.doc, 'sticky') as
-					| boolean
-					| undefined) ?? this._currentPost?.sticky,
+					boolean | undefined) ?? this._currentPost?.sticky,
 			commentStatus:
 				(this.documentManager.getProperty(
 					this.doc,
@@ -1016,8 +1009,7 @@ export class SessionManager {
 				) as string | undefined) ?? this._currentPost?.comment_status,
 			excerpt:
 				(this.documentManager.getProperty(this.doc, 'excerpt') as
-					| string
-					| undefined) || undefined,
+					string | undefined) || undefined,
 			categories:
 				this._cachedCategories.length > 0
 					? this._cachedCategories
@@ -1684,8 +1676,7 @@ export class SessionManager {
 			for (let i = 0; i < blockList.length; i++) {
 				const idx = prefix ? `${prefix}.${i}` : String(i);
 				const metadata = blockList[i].attributes.metadata as
-					| Record<string, unknown>
-					| undefined;
+					Record<string, unknown> | undefined;
 				if (
 					metadata?.noteId !== null &&
 					metadata?.noteId !== undefined
@@ -2723,8 +2714,7 @@ export class SessionManager {
 			for (let i = 0; i < blockList.length; i++) {
 				const idx = prefix ? `${prefix}.${i}` : String(i);
 				const metadata = blockList[i].attributes.metadata as
-					| Record<string, unknown>
-					| undefined;
+					Record<string, unknown> | undefined;
 				if (metadata?.noteId === noteId) return idx;
 				if (blockList[i].innerBlocks.length > 0) {
 					const found = scan(blockList[i].innerBlocks, idx);
