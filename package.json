@@ -124,7 +124,7 @@
 	"allowScripts": {
 		"core-js": false,
 		"esbuild": false,
-		"fs-ext-extra-prebuilt": false,
+		"fs-ext-extra-prebuilt": true,
 		"fsevents": false,
 		"unrs-resolver": false
 	}
