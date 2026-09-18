@@ -49,7 +49,7 @@
 		"packageManager": {
 			"name": "npm",
 			"version": ">=12.0.0",
-			"onFail": "error"
+			"onFail": "warn"
 		}
 	},
 	"scripts": {
