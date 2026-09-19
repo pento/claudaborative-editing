@@ -65,6 +65,38 @@ describe('status tools', () => {
 			expect(result.content[0].text).toContain('wp_connect');
 		});
 
+		it('disconnected status shows the last connection error', async () => {
+			const session = createMockSession({
+				state: 'disconnected',
+				lastConnectError:
+					'Real-time collaboration is not enabled: Gutenberg 24.0.0 is active, but the "Enable real-time collaboration" experiment is off. Turn it on at https://example.com/wp-admin/options-general.php?page=experiments-wp-admin',
+			});
+			registerToolDefinitions(server, session, statusTools);
+
+			const tool = server.registeredTools.get('wp_status');
+			assertDefined(tool);
+			const result = await tool.handler({});
+			const text = result.content[0].text;
+
+			expect(text).toContain('Last connection attempt failed:');
+			expect(text).toContain(
+				'the "Enable real-time collaboration" experiment is off'
+			);
+		});
+
+		it('disconnected status omits the last-error line when there is none', async () => {
+			const session = createMockSession({ state: 'disconnected' });
+			registerToolDefinitions(server, session, statusTools);
+
+			const tool = server.registeredTools.get('wp_status');
+			assertDefined(tool);
+			const result = await tool.handler({});
+
+			expect(result.content[0].text).not.toContain(
+				'Last connection attempt failed'
+			);
+		});
+
 		it('shows connected state without a post open', async () => {
 			const session = createMockSession({
 				state: 'connected',
@@ -196,6 +228,56 @@ describe('status tools', () => {
 			const result = await tool.handler({});
 
 			expect(result.content[0].text).not.toContain('WARNING');
+		});
+
+		it('shows Collaboration line when the plugin reports it', async () => {
+			const session = createMockSession({
+				state: 'connected',
+				user: fakeUser,
+				pluginInfo: {
+					version: '1.0.0',
+					protocolVersion: 1,
+					transport: 'sse',
+					collaboration: {
+						gutenberg_active: true,
+						gutenberg_version: '24.0.0',
+						collaboration_enabled: true,
+						sync_endpoint_registered: true,
+						can_manage_options: true,
+						experiments_url: null,
+					},
+				},
+			});
+			registerToolDefinitions(server, session, statusTools);
+
+			const tool = server.registeredTools.get('wp_status');
+			assertDefined(tool);
+			const result = await tool.handler({});
+			const text = result.content[0].text;
+
+			expect(text).toContain('Collaboration:');
+			expect(text).toContain(
+				'Real-time collaboration is enabled (Gutenberg 24.0.0).'
+			);
+		});
+
+		it('omits the Collaboration line for older plugins that report no collaboration field', async () => {
+			const session = createMockSession({
+				state: 'connected',
+				user: fakeUser,
+				pluginInfo: {
+					version: '1.0.0',
+					protocolVersion: 1,
+					transport: 'sse',
+				},
+			});
+			registerToolDefinitions(server, session, statusTools);
+
+			const tool = server.registeredTools.get('wp_status');
+			assertDefined(tool);
+			const result = await tool.handler({});
+
+			expect(result.content[0].text).not.toContain('Collaboration:');
 		});
 
 		it('detects plugin on re-probe without install attempt', async () => {

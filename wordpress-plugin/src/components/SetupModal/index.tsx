@@ -19,6 +19,7 @@ import { cloud, code } from '@wordpress/icons';
 import { useCopyToClipboard } from '../../hooks/use-copy-to-clipboard';
 import { SETUP_COMMAND } from '../../constants';
 import SparkleIcon from '../SparkleIcon';
+import CollaborationNotice from '../ConnectionStatus/CollaborationNotice';
 
 import './style.scss';
 
@@ -46,6 +47,7 @@ export default function SetupModal({ onRequestClose }: SetupModalProps) {
 			className="wpce-setup-modal"
 			icon={<SparkleIcon size={24} />}
 		>
+			<CollaborationNotice />
 			<p className="wpce-setup-modal-intro">
 				{__(
 					'Choose how you want to connect Claudaborative Editing to your site:',

@@ -6,8 +6,9 @@ AI editing assistance directly in the WordPress block editor. Claude joins as a 
 
 ## Getting Started
 
-1. Install the [Claudaborative Editing](https://wordpress.org/plugins/claudaborative-editing/) WordPress plugin and activate it.
-2. Run the following in your terminal:
+1. Install the [Gutenberg plugin](https://wordpress.org/plugins/gutenberg/) (23.8 or later) and turn on **Enable real-time collaboration** under Settings → Experiments. Administrators can let the setup wizard do this.
+2. Install the [Claudaborative Editing](https://wordpress.org/plugins/claudaborative-editing/) WordPress plugin and activate it.
+3. Run the following in your terminal:
 
 ```bash
 npx claudaborative-editing start
@@ -52,7 +53,7 @@ A sparkle icon in the editor footer shows whether Claude is connected. Click it 
 ## Prerequisites
 
 - [Claude Code](https://claude.ai/download) installed
-- WordPress 7.0+, or WordPress 6.9 with [Gutenberg 22.8+](https://wordpress.org/plugins/gutenberg/), with collaborative editing enabled (Settings → Writing)
+- The [Gutenberg plugin](https://wordpress.org/plugins/gutenberg/) 23.8 or later, with the **Enable real-time collaboration** experiment turned on (Settings → Experiments). WordPress core does not ship real-time collaboration.
 - A WordPress user with `edit_posts` capability
 
 ## Configuration

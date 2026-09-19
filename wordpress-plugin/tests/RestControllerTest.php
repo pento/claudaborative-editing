@@ -1111,6 +1111,55 @@ class RestControllerTest extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * The status endpoint's collaboration object reports Gutenberg
+	 * real-time collaboration enablement, and reflects the requesting
+	 * user's manage_options capability.
+	 */
+	public function test_status_includes_collaboration() {
+		delete_option( Collaboration::EXPERIMENTS_OPTION );
+
+		$request  = new \WP_REST_Request( 'GET', '/wpce/v1/status' );
+		$response = rest_get_server()->dispatch( $request );
+
+		$data = $response->get_data();
+		$this->assertArrayHasKey( 'collaboration', $data );
+
+		$collaboration = $data['collaboration'];
+		foreach ( array( 'gutenberg_active', 'gutenberg_version', 'collaboration_enabled', 'sync_endpoint_registered', 'can_manage_options', 'experiments_url' ) as $key ) {
+			$this->assertArrayHasKey( $key, $collaboration );
+		}
+
+		$this->assertFalse( $collaboration['gutenberg_active'] );
+		$this->assertNull( $collaboration['gutenberg_version'] );
+		$this->assertNull( $collaboration['experiments_url'] );
+		$this->assertFalse( $collaboration['sync_endpoint_registered'] );
+		$this->assertFalse( $collaboration['collaboration_enabled'] );
+		$this->assertFalse( $collaboration['can_manage_options'] );
+
+		update_option( Collaboration::EXPERIMENTS_OPTION, array( Collaboration::EXPERIMENT_ID => true ) );
+		wp_set_current_user( self::$admin_id );
+
+		$request  = new \WP_REST_Request( 'GET', '/wpce/v1/status' );
+		$response = rest_get_server()->dispatch( $request );
+
+		$collaboration = $response->get_data()['collaboration'];
+		$this->assertTrue( $collaboration['collaboration_enabled'] );
+		$this->assertTrue( $collaboration['can_manage_options'] );
+
+		delete_option( Collaboration::EXPERIMENTS_OPTION );
+	}
+
+	/**
+	 * Adding the collaboration object must not change the protocol version.
+	 */
+	public function test_status_protocol_version_unchanged() {
+		$request  = new \WP_REST_Request( 'GET', '/wpce/v1/status' );
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertSame( 1, $response->get_data()['protocol_version'] );
+	}
+
+	/**
 	 * The list endpoint should expire stale commands and update post_modified_gmt.
 	 */
 	public function test_list_commands_expiry_updates_modified_date() {
@@ -1927,6 +1976,53 @@ class RestControllerTest extends \WP_UnitTestCase {
 		$joined = implode( "\n", $inline );
 		$this->assertStringContainsString( '"cloudUrl":"https:\/\/cloud.example.com"', $joined );
 		$this->assertStringContainsString( '"cloudApiKey":"test-key-123"', $joined );
+	}
+
+	/**
+	 * enqueue_editor_assets includes the collaboration state in
+	 * wpceInitialState: off (and can_manage_options false) for a
+	 * non-admin on a site without the experiment enabled, and reflecting
+	 * the enabled experiment and manage_options capability for an admin.
+	 */
+	public function test_enqueue_editor_assets_includes_collaboration_state() {
+		$this->ensure_asset_file();
+		delete_transient( 'wpce_mcp_last_seen_' . self::$editor_id );
+		delete_option( Collaboration::EXPERIMENTS_OPTION );
+
+		wp_set_current_user( self::$subscriber_id );
+
+		$GLOBALS['wp_scripts'] = null;
+		wp_default_scripts( wp_scripts() );
+
+		\Claudaborative_Editing::enqueue_editor_assets();
+
+		$scripts = wp_scripts();
+		$inline  = $scripts->get_data( 'wp-hooks', 'after' );
+
+		$this->assertIsArray( $inline );
+
+		$joined = implode( "\n", $inline );
+		$this->assertStringContainsString(
+			'"collaboration":{"gutenbergActive":false,"collaborationEnabled":false,"canManageOptions":false,"experimentsUrl":null}',
+			$joined
+		);
+
+		update_option( Collaboration::EXPERIMENTS_OPTION, array( Collaboration::EXPERIMENT_ID => true ) );
+		wp_set_current_user( self::$admin_id );
+
+		$GLOBALS['wp_scripts'] = null;
+		wp_default_scripts( wp_scripts() );
+
+		\Claudaborative_Editing::enqueue_editor_assets();
+
+		$scripts = wp_scripts();
+		$inline  = $scripts->get_data( 'wp-hooks', 'after' );
+		$joined  = implode( "\n", $inline );
+
+		$this->assertStringContainsString( '"collaborationEnabled":true', $joined );
+		$this->assertStringContainsString( '"canManageOptions":true', $joined );
+
+		delete_option( Collaboration::EXPERIMENTS_OPTION );
 	}
 
 	/**

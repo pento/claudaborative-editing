@@ -13,7 +13,7 @@ npm run lint         # ESLint + stylelint + markdownlint + Prettier + knip check
 npm run lint:fix     # Auto-fix all lint and formatting issues
 npm run knip         # Find unused files, dependencies & exports (knip.jsonc)
 npm run dev          # Watch mode build
-npm run dev:wp       # Start a local WordPress on http://127.0.0.1:9400 via wp-playground-cli (ephemeral, Gutenberg latest, collab enabled)
+npm run dev:wp       # Start a local WordPress on http://127.0.0.1:9400 via wp-playground-cli (ephemeral, Gutenberg latest, RTC experiment enabled)
 ```
 
 ## Package Manager
@@ -29,6 +29,8 @@ GitHub Actions ships its own bundled npm and `corepack enable` does not override
 npm 12 blocks dependency lifecycle scripts by default. Both workspaces record explicit decisions in an `allowScripts` map in `package.json`. Most entries are denied, for one of two reasons: `esbuild`, `fsevents`, `unrs-resolver` and `@parcel/watcher` are fallbacks for packages that ship prebuilt platform binaries as optional dependencies, so the fallback is dead weight; `core-js` and `core-js-pure` only print a funding banner.
 
 **`fs-ext-extra-prebuilt` is approved**, and must stay approved. Despite the name it does not ship a prebuilt for every platform (there is no `prebuilds/` directory) — its `install` script is what fetches or builds the binary. Denying it makes `wp-playground-cli` fail to start with `Failed to load fs-ext native module`, which breaks `npm run dev:wp` and both PHPUnit scripts. It surfaces only on platforms lacking a prebuilt, so CI can stay green while local development is broken.
+
+**The same package also caps the Node version for Playground-backed scripts.** `fs-ext-extra-prebuilt` is a native addon, so its prebuilts are ABI-locked to a Node major, and it currently ships none above **node-25** (check `node_modules/fs-ext-extra-prebuilt/binaries/`). On a newer Node the install script has nothing to fetch and falls back to building from source, which needs `node-gyp`; without it `wp-playground-cli` dies at startup with `No prebuilt binary found for <platform> (Node vNN), and no local build available`. That takes out `npm run dev:wp`, `npm run test:plugin-php` and `npm run test:e2e` (its global setup spawns the same CLI), while unit tests, lint and typecheck are unaffected — so the failure looks unrelated to Node at first glance. Until upstream ships a newer prebuilt, run those three scripts on a Node that has one **and** satisfies `devEngines.runtime` — currently the 22 line from 22.22.2, or the 24 and 25 lines from 24.15.0. Note the two constraints fail in opposite directions, so check both: 24.14.0 has a prebuilt but is below the runtime floor, while 26.x clears the floor and has no prebuilt. CI pins its own Node and is unaffected.
 
 Review new entries with `npm install-scripts ls` and record the decision with `npm install-scripts approve|deny <pkg>`. Two traps when deciding: a blocked script only surfaces when it is actually reached, so re-check after every lockfile refresh (`npm install --package-lock-only` prints the uncovered packages); and **verify a denial against a clean `rm -rf node_modules` install**, because a tree built by npm 11 already contains the artifacts those scripts produce and will mask a denial that actually breaks something.
 
@@ -81,7 +83,7 @@ disconnected ──connect──→ connected ──openPost/createPost──→
 ### Key Design Decisions
 
 - **yjs and lib0 pinned to exact versions** (currently `yjs` 13.6.32, `lib0` 0.2.117): the binary update format must stay compatible with what Gutenberg ships. Gutenberg declares carets (`yjs: ^13.6.29`, `lib0: ^0.2.99`) and currently resolves to yjs 13.6.29 / lib0 0.2.117. Before bumping either, check the diff for changes to the encoder/decoder, struct `read`/`write`, or the sync protocol — patch releases so far have only been behavioural bugfixes, which is why running a slightly newer yjs than Gutenberg is safe.
-- **Mixed V1/V2 encoding**: Sync step1/step2 use y-protocols V1 encoding. Regular updates and compactions use V2 encoding. This split exists because Gutenberg switched updates/compactions to V2 (PR #76304) but still uses y-protocols for the sync handshake. Minimum compatible Gutenberg version: 22.8.
+- **Mixed V1/V2 encoding**: Sync step1/step2 use y-protocols V1 encoding. Regular updates and compactions use V2 encoding. This split exists because Gutenberg switched updates/compactions to V2 (PR #76304) but still uses y-protocols for the sync handshake. Minimum compatible Gutenberg version: 23.8 (the RTC experiment gate; the V1/V2 split itself dates from 22.8).
 - **Room format**: `postType/{type}:{id}` (e.g., `postType/post:123`)
 - **Block-level editing**: Claude edits at block granularity to preserve CRDT merge semantics. Full-content replacement would lose concurrent edits.
 - **Rich-text attributes**: Block attributes with `type === "rich-text"` OR `source === "rich-text"` OR `source === "html"` are stored as `Y.Text`. Others are plain values. Handled by `BlockTypeRegistry`.
@@ -92,6 +94,8 @@ disconnected ──connect──→ connected ──openPost/createPost──→
 ### Sync Protocol
 
 Endpoint: `POST /wp-sync/v1/updates`. Each request sends local updates + awareness, receives remote updates + awareness + end_cursor. Update types: `sync_step1`, `sync_step2`, `update`, `compaction`.
+
+**Enablement**: RTC is a Gutenberg experiment since 23.8 (PR #80658): option `gutenberg-experiments['gutenberg-real-time-collaboration']`, admin page `options-general.php?page=experiments-wp-admin` (Settings → Experiments; the old `admin.php?page=gutenberg-experiments` only redirects there), settable by administrators via `POST /wp/v2/settings` (the setting replaces the whole `gutenberg-experiments` object, so GET-merge-POST). When off, `rest_api_init` skips `wp-sync/v1` (our probe gets 404) and Gutenberg emits no `window.__experimentalEnableRealTimeCollaboration`, so `@wordpress/sync` creates no providers and `getSyncManager()` is undefined. Gutenberg's upgrade routine deletes the pre-23.8 options (`wp_collaboration_enabled` etc.) and migrates nothing; WordPress core has never shipped the endpoint. Gutenberg also registers `/wp-sync/v1/save` (CRDT repair, unused by us) and disables collaboration for post types without `custom-fields` support (filter `wp_is_post_type_collaboration_disabled`). The companion plugin reports enablement via `/wpce/v1/status.collaboration` and `wpceInitialState.collaboration`; the MCP's `wp_status` shows the last connect error while disconnected.
 
 ### Portable Tool & Prompt Definitions
 

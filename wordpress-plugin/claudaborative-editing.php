@@ -31,6 +31,7 @@ spl_autoload_register(
 	}
 );
 
+use Claudaborative_Editing\Collaboration;
 use Claudaborative_Editing\Command_Defs;
 use Claudaborative_Editing\Command_Formatter;
 use Claudaborative_Editing\Command_Store;
@@ -132,11 +133,12 @@ class Claudaborative_Editing {
 			'wp-hooks',
 			'window.wpceInitialState = ' . wp_json_encode(
 				array(
-					'mcpConnected' => $mcp_connected,
-					'cloudUrl'     => $cloud_url,
-					'cloudApiKey'  => $cloud_api_key,
-					'userLocale'   => get_user_locale(),
-					'siteLocale'   => get_locale(),
+					'mcpConnected'  => $mcp_connected,
+					'cloudUrl'      => $cloud_url,
+					'cloudApiKey'   => $cloud_api_key,
+					'userLocale'    => get_user_locale(),
+					'siteLocale'    => get_locale(),
+					'collaboration' => Collaboration::get_editor_state(),
 				)
 			) . ';' .
 			( $mcp_connected
@@ -175,7 +177,7 @@ class Claudaborative_Editing {
 	 * @return mixed Unmodified $result.
 	 */
 	public static function track_mcp_sync( $result, $server, $request ) {
-		if ( '/wp-sync/v1/updates' !== $request->get_route() ) {
+		if ( Collaboration::SYNC_ROUTE !== $request->get_route() ) {
 			return $result;
 		}
 		if ( 'mcp' !== $request->get_header( 'x_wpce_client' ) ) {

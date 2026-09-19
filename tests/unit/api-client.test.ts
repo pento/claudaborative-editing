@@ -461,6 +461,195 @@ describe('WordPressApiClient', () => {
 		});
 	});
 
+	describe('getCollaborationStatus', () => {
+		it('returns the collaboration object when present', async () => {
+			const collaboration = {
+				gutenberg_active: true,
+				gutenberg_version: '24.0.0',
+				collaboration_enabled: true,
+				sync_endpoint_registered: true,
+				can_manage_options: true,
+				experiments_url: null,
+			};
+			fetchMock.mockResolvedValue(
+				mockResponse({
+					version: '0.5.2',
+					protocol_version: 1,
+					mcp_connected: false,
+					mcp_last_seen_at: null,
+					collaboration,
+				})
+			);
+			const client = createClient();
+
+			await expect(client.getCollaborationStatus()).resolves.toEqual(
+				collaboration
+			);
+		});
+
+		it('returns null when the field is absent (older plugin)', async () => {
+			fetchMock.mockResolvedValue(
+				mockResponse({
+					version: '0.5.2',
+					protocol_version: 1,
+					mcp_connected: false,
+					mcp_last_seen_at: null,
+				})
+			);
+			const client = createClient();
+
+			await expect(client.getCollaborationStatus()).resolves.toBeNull();
+		});
+
+		it('returns null on a 404 (no companion plugin)', async () => {
+			fetchMock.mockResolvedValue(
+				mockResponse(
+					{ code: 'rest_no_route', message: 'No route' },
+					{ status: 404, statusText: 'Not Found' }
+				)
+			);
+			const client = createClient();
+
+			await expect(client.getCollaborationStatus()).resolves.toBeNull();
+		});
+
+		it('returns null when fetch itself rejects, without masking the original error elsewhere', async () => {
+			fetchMock.mockRejectedValue(new Error('network down'));
+			const client = createClient();
+
+			await expect(client.getCollaborationStatus()).resolves.toBeNull();
+		});
+	});
+
+	describe('enableRealTimeCollaborationExperiment', () => {
+		it('merges the experiment into the existing option and returns ok', async () => {
+			fetchMock
+				.mockResolvedValueOnce(
+					mockResponse({
+						'gutenberg-experiments': { 'gutenberg-other': true },
+					})
+				)
+				.mockResolvedValueOnce(
+					mockResponse({
+						'gutenberg-experiments': {
+							'gutenberg-other': true,
+							'gutenberg-real-time-collaboration': true,
+						},
+					})
+				);
+			const client = createClient();
+
+			const result = await client.enableRealTimeCollaborationExperiment();
+
+			expect(result).toEqual({ ok: true });
+			expect(fetchMock).toHaveBeenCalledTimes(2);
+			const postCall = fetchMock.mock.calls[1] as [string, RequestInit];
+			expect(postCall[0]).toBe(
+				'https://example.com/wp-json/wp/v2/settings'
+			);
+			expect(JSON.parse(postCall[1].body as string)).toEqual({
+				'gutenberg-experiments': {
+					'gutenberg-other': true,
+					'gutenberg-real-time-collaboration': true,
+				},
+			});
+		});
+
+		it('returns forbidden when the GET is a 403, without posting', async () => {
+			fetchMock.mockResolvedValueOnce(
+				mockResponse(
+					{ code: 'rest_forbidden', message: 'Sorry' },
+					{ status: 403, statusText: 'Forbidden' }
+				)
+			);
+			const client = createClient();
+
+			const result = await client.enableRealTimeCollaborationExperiment();
+
+			expect(result.ok).toBe(false);
+			expect(result).toMatchObject({ reason: 'forbidden' });
+			expect(fetchMock).toHaveBeenCalledTimes(1);
+		});
+
+		it('returns not_registered when the GET response lacks the option, without posting', async () => {
+			fetchMock.mockResolvedValueOnce(mockResponse({}));
+			const client = createClient();
+
+			const result = await client.enableRealTimeCollaborationExperiment();
+
+			expect(result.ok).toBe(false);
+			expect(result).toMatchObject({ reason: 'not_registered' });
+			expect(fetchMock).toHaveBeenCalledTimes(1);
+		});
+
+		it('returns not_registered when the POST is a 400', async () => {
+			fetchMock
+				.mockResolvedValueOnce(
+					mockResponse({ 'gutenberg-experiments': {} })
+				)
+				.mockResolvedValueOnce(
+					mockResponse(
+						{
+							code: 'rest_invalid_param',
+							message: 'Invalid parameter.',
+						},
+						{ status: 400, statusText: 'Bad Request' }
+					)
+				);
+			const client = createClient();
+
+			const result = await client.enableRealTimeCollaborationExperiment();
+
+			expect(result).toMatchObject({
+				ok: false,
+				reason: 'not_registered',
+			});
+		});
+
+		it('returns unexpected when the POST response does not persist the value', async () => {
+			fetchMock
+				.mockResolvedValueOnce(
+					mockResponse({ 'gutenberg-experiments': {} })
+				)
+				.mockResolvedValueOnce(
+					mockResponse({ 'gutenberg-experiments': {} })
+				);
+			const client = createClient();
+
+			const result = await client.enableRealTimeCollaborationExperiment();
+
+			expect(result).toMatchObject({
+				ok: false,
+				reason: 'unexpected',
+			});
+		});
+
+		it('merges from an empty object when the option value is null', async () => {
+			fetchMock
+				.mockResolvedValueOnce(
+					mockResponse({ 'gutenberg-experiments': null })
+				)
+				.mockResolvedValueOnce(
+					mockResponse({
+						'gutenberg-experiments': {
+							'gutenberg-real-time-collaboration': true,
+						},
+					})
+				);
+			const client = createClient();
+
+			const result = await client.enableRealTimeCollaborationExperiment();
+
+			expect(result).toEqual({ ok: true });
+			const postCall = fetchMock.mock.calls[1] as [string, RequestInit];
+			expect(JSON.parse(postCall[1].body as string)).toEqual({
+				'gutenberg-experiments': {
+					'gutenberg-real-time-collaboration': true,
+				},
+			});
+		});
+	});
+
 	describe('getCurrentUser', () => {
 		it('fetches /wp/v2/users/me', async () => {
 			fetchMock.mockResolvedValue(mockResponse(fakeUser));
@@ -783,10 +972,13 @@ describe('WordPressApiClient', () => {
 			} catch (err) {
 				const apiErr = err as WordPressApiError;
 				expect(apiErr.message).toContain(
-					'Collaborative editing is not enabled'
+					'Real-time collaboration is not enabled'
 				);
-				expect(apiErr.message).toContain('Settings');
-				expect(apiErr.message).toContain('WordPress 7.0');
+				expect(apiErr.message).toContain(
+					'options-general.php?page=experiments-wp-admin'
+				);
+				expect(apiErr.message).not.toContain('Writing');
+				expect(apiErr.message).not.toContain('WordPress 7.0');
 			}
 		});
 
@@ -807,7 +999,7 @@ describe('WordPressApiClient', () => {
 				expect.fail('should have thrown');
 			} catch (err) {
 				const apiErr = err as WordPressApiError;
-				expect(apiErr.message).not.toContain('Collaborative editing');
+				expect(apiErr.message).not.toContain('Real-time collaboration');
 				expect(apiErr.message).toContain('404');
 			}
 		});

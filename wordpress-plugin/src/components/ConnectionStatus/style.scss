@@ -50,7 +50,10 @@
 	vertical-align: baseline;
 }
 
-.wpce-footer-status-tooltip-onboarding {
+// Needs the same two-class specificity as the `white-space: nowrap` rule
+// above, or that rule wins and long onboarding text overflows the popover
+// instead of wrapping.
+.wpce-footer-status-popover .wpce-footer-status-tooltip-onboarding {
 	white-space: normal;
 	min-width: 300px;
 	max-width: 350px;
@@ -140,4 +143,20 @@
 	min-height: 0;
 	height: auto;
 	flex-shrink: 0;
+}
+
+// Notice shown when real-time collaboration is not enabled on the site.
+// Scaled down to fit the narrow footer popover; SetupModal renders the
+// same component and relies on the Notice's own default sizing there.
+.wpce-footer-status-popover .wpce-collaboration-notice.components-notice {
+	font-size: 12px;
+	margin: 0 0 8px;
+
+	p {
+		margin: 0 0 4px;
+
+		&:last-child {
+			margin-bottom: 0;
+		}
+	}
 }

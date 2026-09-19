@@ -10,6 +10,7 @@
 import * as Y from 'yjs';
 import { debugLog, isDebugEnabled } from '../debug-log.js';
 import type { WordPressApiClient } from './api-client.js';
+import type { CollaborationStatus } from './collaboration.js';
 import {
 	commandIdFromKey,
 	commandKey,
@@ -65,6 +66,8 @@ export interface PluginStatus {
 	protocol_version: number;
 	mcp_connected: boolean;
 	mcp_last_seen_at: string | null;
+	/** Additive; absent on older plugin builds. Every reader uses `?? null`. */
+	collaboration?: CollaborationStatus;
 }
 
 export interface Command {

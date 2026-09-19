@@ -49,6 +49,7 @@ addFilter(
  * Internal dependencies
  */
 import type { Command } from '../store/types';
+import { isCollaborationEnabled } from './collaboration';
 
 // Types derived from the @wordpress/sync re-exports of Yjs.
 type YDoc = InstanceType<typeof Y.Doc>;
@@ -214,6 +215,15 @@ export async function initCommandSync(): Promise<void> {
 		return;
 	}
 	initialized = true;
+
+	// RTC is a Gutenberg experiment (23.8+, off by default). When it's off,
+	// getSyncManager() is undefined, so addEntities()/getEntityRecords()
+	// below would only trigger a pointless REST fetch. Skip sync entirely;
+	// this state is set once at page load and won't change without a
+	// reload, so there's no retry path here.
+	if (!isCollaborationEnabled()) {
+		return;
+	}
 
 	// Resolve the current user ID for the per-user command room.
 	let currentUser: { id: number } | undefined;
@@ -402,6 +412,12 @@ export function writeCommandToSync(command: Command): void {
 		return;
 	}
 
+	// RTC is off, so the Y.Doc will never exist — queuing would only spin a
+	// retry timer that ends in a "dropping pending writes" warning.
+	if (!isCollaborationEnabled()) {
+		return;
+	}
+
 	// Y.Doc not ready — queue and start a shared retry timer if needed.
 	pendingWrites.push(command);
 	if (pendingWriteTimer !== null) return;
@@ -456,6 +472,11 @@ export function subscribeToCommandSync(
 ): () => void {
 	let observer: ((event: YMapEvent) => void) | null = null;
 	let observedMap: YMap | null = null;
+
+	if (!getStateMap() && !isCollaborationEnabled()) {
+		// RTC is off, so the doc will never appear — skip the 30 s poll.
+		return () => {};
+	}
 
 	// Poll until the doc is available (it's created async during loadCollection).
 	// Timeout after ~30 seconds to avoid leaking an interval if sync never initializes.
@@ -557,6 +578,13 @@ export function subscribeToMcpConnection(
 	const handler = () => callback(isMcpConnected());
 
 	if (!commandAwareness) {
+		if (!isCollaborationEnabled()) {
+			// RTC is off, so awareness will never initialize — skip the
+			// 30 s poll and report disconnected immediately.
+			callback(false);
+			return () => {};
+		}
+
 		// Awareness not yet initialized — poll until it is.
 		// Timeout after ~30 seconds to avoid leaking an interval if sync never initializes.
 		const AWARENESS_POLL_INTERVAL_MS = 100;

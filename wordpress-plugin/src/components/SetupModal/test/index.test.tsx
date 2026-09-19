@@ -63,6 +63,11 @@ jest.mock('@wordpress/icons', () => ({
 	code: { name: 'code' },
 }));
 
+jest.mock('../../ConnectionStatus/CollaborationNotice', () => ({
+	__esModule: true,
+	default: () => null,
+}));
+
 jest.mock('../../SparkleIcon', () => {
 	const { createElement } = require('react');
 	return {

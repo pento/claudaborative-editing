@@ -97,6 +97,7 @@ function createTestDeps(
 				throw new SetupExitError(code);
 			},
 			cleanup: () => {},
+			isInteractive: true,
 			...overrides,
 		},
 		logs,
@@ -364,7 +365,7 @@ describe('setup wizard', () => {
 			);
 		});
 
-		it('shows requirements guidance when sync endpoint returns 404', async () => {
+		it('shows requirements guidance when sync endpoint returns 404 and the companion plugin is absent', async () => {
 			fetchMock
 				.mockResolvedValueOnce(mockDiscoveryResponse())
 				.mockResolvedValueOnce(mockAuthSupportResponse())
@@ -376,6 +377,13 @@ describe('setup wizard', () => {
 						avatar_urls: {},
 					})
 				)
+				.mockResolvedValueOnce(
+					mockResponse(
+						{ code: 'rest_no_route', message: 'No route' },
+						{ status: 404, statusText: 'Not Found' }
+					)
+				)
+				// GET /wpce/v1/status — no companion plugin installed either
 				.mockResolvedValueOnce(
 					mockResponse(
 						{ code: 'rest_no_route', message: 'No route' },
@@ -396,12 +404,22 @@ describe('setup wizard', () => {
 			);
 			const errorText = errors.join('\n');
 			expect(errorText).toContain(
-				'Collaborative editing is not available'
+				'Real-time collaboration is not enabled'
 			);
-			expect(errorText).toContain('Requires WordPress 7.0 or later');
+			expect(errorText).toContain(
+				'options-general.php?page=experiments-wp-admin'
+			);
+			// Declined (no answer queued for the y/N prompt) — never touches
+			// the admin-only settings endpoint.
+			const calledUrls = fetchMock.mock.calls.map((c: unknown[]) =>
+				String(c[0])
+			);
+			expect(calledUrls).not.toContain(
+				'https://example.com/wp-json/wp/v2/settings'
+			);
 		});
 
-		it('exits with error when sync endpoint returns 404', async () => {
+		it('exits with error when sync endpoint returns 404 and the companion plugin is absent', async () => {
 			fetchMock
 				.mockResolvedValueOnce(mockDiscoveryResponse())
 				.mockResolvedValueOnce(mockAuthSupportResponse())
@@ -412,6 +430,12 @@ describe('setup wizard', () => {
 						slug: 'admin',
 						avatar_urls: {},
 					})
+				)
+				.mockResolvedValueOnce(
+					mockResponse(
+						{ code: 'rest_no_route', message: 'No route' },
+						{ status: 404, statusText: 'Not Found' }
+					)
 				)
 				.mockResolvedValueOnce(
 					mockResponse(
@@ -432,8 +456,586 @@ describe('setup wizard', () => {
 				SetupExitError
 			);
 			expect(errors.join('\n')).toContain(
-				'Collaborative editing is not available'
+				'Real-time collaboration is not enabled'
 			);
+		});
+
+		it('shows the collaboration diagnosis and exits without prompting when the route is already registered', async () => {
+			fetchMock
+				.mockResolvedValueOnce(mockDiscoveryResponse())
+				.mockResolvedValueOnce(mockAuthSupportResponse())
+				.mockResolvedValueOnce(
+					mockResponse({
+						id: 1,
+						name: 'admin',
+						slug: 'admin',
+						avatar_urls: {},
+					})
+				)
+				.mockResolvedValueOnce(
+					mockResponse(
+						{ code: 'rest_no_route', message: 'No route' },
+						{ status: 404, statusText: 'Not Found' }
+					)
+				)
+				.mockResolvedValueOnce(
+					mockResponse({
+						version: '0.5.2',
+						protocol_version: 1,
+						mcp_connected: false,
+						mcp_last_seen_at: null,
+						collaboration: {
+							gutenberg_active: true,
+							gutenberg_version: '24.0.0',
+							collaboration_enabled: true,
+							sync_endpoint_registered: true,
+							can_manage_options: true,
+							experiments_url: null,
+						},
+					})
+				);
+
+			const { deps, errors, logs } = createTestDeps(
+				['https://example.com', 'admin', 'xxxx xxxx xxxx'],
+				{
+					detectClients: () => defaultClientList(),
+					hasConfig: () => false,
+				}
+			);
+
+			await expect(runSetup(deps, { manual: true })).rejects.toThrow(
+				SetupExitError
+			);
+			expect(errors.join('\n')).toContain(
+				'Real-time collaboration is enabled (Gutenberg 24.0.0)'
+			);
+			expect(logs.join('\n')).toContain(
+				'may be blocking POST /wp-sync/v1/updates'
+			);
+			expect(logs.join('\n')).not.toContain(
+				'Enable the "Enable real-time collaboration" experiment now?'
+			);
+			expect(fetchMock).toHaveBeenCalledTimes(5);
+		});
+
+		it('exits without prompting when Gutenberg is not active', async () => {
+			fetchMock
+				.mockResolvedValueOnce(mockDiscoveryResponse())
+				.mockResolvedValueOnce(mockAuthSupportResponse())
+				.mockResolvedValueOnce(
+					mockResponse({
+						id: 1,
+						name: 'admin',
+						slug: 'admin',
+						avatar_urls: {},
+					})
+				)
+				.mockResolvedValueOnce(
+					mockResponse(
+						{ code: 'rest_no_route', message: 'No route' },
+						{ status: 404, statusText: 'Not Found' }
+					)
+				)
+				.mockResolvedValueOnce(
+					mockResponse({
+						version: '0.5.2',
+						protocol_version: 1,
+						mcp_connected: false,
+						mcp_last_seen_at: null,
+						collaboration: {
+							gutenberg_active: false,
+							gutenberg_version: null,
+							collaboration_enabled: false,
+							sync_endpoint_registered: false,
+							can_manage_options: true,
+							experiments_url: null,
+						},
+					})
+				);
+
+			const { deps, errors } = createTestDeps(
+				['https://example.com', 'admin', 'xxxx xxxx xxxx'],
+				{
+					detectClients: () => defaultClientList(),
+					hasConfig: () => false,
+				}
+			);
+
+			await expect(runSetup(deps, { manual: true })).rejects.toThrow(
+				SetupExitError
+			);
+			expect(errors.join('\n')).toContain(
+				'the Gutenberg plugin is not active'
+			);
+			expect(fetchMock).toHaveBeenCalledTimes(5);
+		});
+
+		it('exits without prompting when the active Gutenberg version is too old', async () => {
+			fetchMock
+				.mockResolvedValueOnce(mockDiscoveryResponse())
+				.mockResolvedValueOnce(mockAuthSupportResponse())
+				.mockResolvedValueOnce(
+					mockResponse({
+						id: 1,
+						name: 'admin',
+						slug: 'admin',
+						avatar_urls: {},
+					})
+				)
+				.mockResolvedValueOnce(
+					mockResponse(
+						{ code: 'rest_no_route', message: 'No route' },
+						{ status: 404, statusText: 'Not Found' }
+					)
+				)
+				.mockResolvedValueOnce(
+					mockResponse({
+						version: '0.5.2',
+						protocol_version: 1,
+						mcp_connected: false,
+						mcp_last_seen_at: null,
+						collaboration: {
+							gutenberg_active: true,
+							gutenberg_version: '23.5.0',
+							collaboration_enabled: false,
+							sync_endpoint_registered: false,
+							can_manage_options: true,
+							experiments_url: null,
+						},
+					})
+				);
+
+			const { deps, errors } = createTestDeps(
+				['https://example.com', 'admin', 'xxxx xxxx xxxx'],
+				{
+					detectClients: () => defaultClientList(),
+					hasConfig: () => false,
+				}
+			);
+
+			await expect(runSetup(deps, { manual: true })).rejects.toThrow(
+				SetupExitError
+			);
+			expect(errors.join('\n')).toContain('23.8 or later is required');
+			expect(fetchMock).toHaveBeenCalledTimes(5);
+		});
+
+		it('exits without prompting when the user cannot manage options', async () => {
+			fetchMock
+				.mockResolvedValueOnce(mockDiscoveryResponse())
+				.mockResolvedValueOnce(mockAuthSupportResponse())
+				.mockResolvedValueOnce(
+					mockResponse({
+						id: 1,
+						name: 'admin',
+						slug: 'admin',
+						avatar_urls: {},
+					})
+				)
+				.mockResolvedValueOnce(
+					mockResponse(
+						{ code: 'rest_no_route', message: 'No route' },
+						{ status: 404, statusText: 'Not Found' }
+					)
+				)
+				.mockResolvedValueOnce(
+					mockResponse({
+						version: '0.5.2',
+						protocol_version: 1,
+						mcp_connected: false,
+						mcp_last_seen_at: null,
+						collaboration: {
+							gutenberg_active: true,
+							gutenberg_version: '24.0.0',
+							collaboration_enabled: false,
+							sync_endpoint_registered: false,
+							can_manage_options: false,
+							experiments_url: null,
+						},
+					})
+				);
+
+			const { deps, errors, logs } = createTestDeps(
+				['https://example.com', 'admin', 'xxxx xxxx xxxx'],
+				{
+					detectClients: () => defaultClientList(),
+					hasConfig: () => false,
+				}
+			);
+
+			await expect(runSetup(deps, { manual: true })).rejects.toThrow(
+				SetupExitError
+			);
+			expect(errors.join('\n')).toContain('Ask an administrator');
+			expect(logs.join('\n')).not.toContain(
+				'Enable the "Enable real-time collaboration" experiment now?'
+			);
+			expect(fetchMock).toHaveBeenCalledTimes(5);
+		});
+
+		it('non-interactive: prints the URL and exits without prompting', async () => {
+			fetchMock
+				.mockResolvedValueOnce(mockDiscoveryResponse())
+				.mockResolvedValueOnce(mockAuthSupportResponse())
+				.mockResolvedValueOnce(
+					mockResponse({
+						id: 1,
+						name: 'admin',
+						slug: 'admin',
+						avatar_urls: {},
+					})
+				)
+				.mockResolvedValueOnce(
+					mockResponse(
+						{ code: 'rest_no_route', message: 'No route' },
+						{ status: 404, statusText: 'Not Found' }
+					)
+				)
+				.mockResolvedValueOnce(
+					mockResponse({
+						version: '0.5.2',
+						protocol_version: 1,
+						mcp_connected: false,
+						mcp_last_seen_at: null,
+						collaboration: {
+							gutenberg_active: true,
+							gutenberg_version: '24.0.0',
+							collaboration_enabled: false,
+							sync_endpoint_registered: false,
+							can_manage_options: true,
+							experiments_url: null,
+						},
+					})
+				);
+
+			const { deps, errors, logs } = createTestDeps(
+				['https://example.com', 'admin', 'xxxx xxxx xxxx'],
+				{
+					detectClients: () => defaultClientList(),
+					hasConfig: () => false,
+					isInteractive: false,
+				}
+			);
+
+			await expect(runSetup(deps, { manual: true })).rejects.toThrow(
+				SetupExitError
+			);
+			expect(errors.join('\n')).toContain(
+				'the "Enable real-time collaboration" experiment is off'
+			);
+			expect(logs.join('\n')).toContain('then run setup again');
+			expect(fetchMock).toHaveBeenCalledTimes(5);
+		});
+
+		it('declines the offer when the answer is empty, without touching settings', async () => {
+			fetchMock
+				.mockResolvedValueOnce(mockDiscoveryResponse())
+				.mockResolvedValueOnce(mockAuthSupportResponse())
+				.mockResolvedValueOnce(
+					mockResponse({
+						id: 1,
+						name: 'admin',
+						slug: 'admin',
+						avatar_urls: {},
+					})
+				)
+				.mockResolvedValueOnce(
+					mockResponse(
+						{ code: 'rest_no_route', message: 'No route' },
+						{ status: 404, statusText: 'Not Found' }
+					)
+				)
+				.mockResolvedValueOnce(
+					mockResponse({
+						version: '0.5.2',
+						protocol_version: 1,
+						mcp_connected: false,
+						mcp_last_seen_at: null,
+						collaboration: {
+							gutenberg_active: true,
+							gutenberg_version: '24.0.0',
+							collaboration_enabled: false,
+							sync_endpoint_registered: false,
+							can_manage_options: true,
+							experiments_url: null,
+						},
+					})
+				);
+
+			const { deps, logs } = createTestDeps(
+				['https://example.com', 'admin', 'xxxx xxxx xxxx', ''],
+				{
+					detectClients: () => defaultClientList(),
+					hasConfig: () => false,
+				}
+			);
+
+			await expect(runSetup(deps, { manual: true })).rejects.toThrow(
+				SetupExitError
+			);
+			expect(logs.join('\n')).toContain('then run setup again');
+			expect(fetchMock).toHaveBeenCalledTimes(5);
+		});
+
+		it('accepted, but GET /wp/v2/settings is forbidden', async () => {
+			fetchMock
+				.mockResolvedValueOnce(mockDiscoveryResponse())
+				.mockResolvedValueOnce(mockAuthSupportResponse())
+				.mockResolvedValueOnce(
+					mockResponse({
+						id: 1,
+						name: 'admin',
+						slug: 'admin',
+						avatar_urls: {},
+					})
+				)
+				.mockResolvedValueOnce(
+					mockResponse(
+						{ code: 'rest_no_route', message: 'No route' },
+						{ status: 404, statusText: 'Not Found' }
+					)
+				)
+				.mockResolvedValueOnce(
+					mockResponse({
+						version: '0.5.2',
+						protocol_version: 1,
+						mcp_connected: false,
+						mcp_last_seen_at: null,
+						collaboration: {
+							gutenberg_active: true,
+							gutenberg_version: '24.0.0',
+							collaboration_enabled: false,
+							sync_endpoint_registered: false,
+							can_manage_options: true,
+							experiments_url: null,
+						},
+					})
+				)
+				.mockResolvedValueOnce(
+					mockResponse(
+						{ code: 'rest_forbidden', message: 'Sorry' },
+						{ status: 403, statusText: 'Forbidden' }
+					)
+				);
+
+			const { deps, errors, logs } = createTestDeps(
+				['https://example.com', 'admin', 'xxxx xxxx xxxx', 'y'],
+				{
+					detectClients: () => defaultClientList(),
+					hasConfig: () => false,
+				}
+			);
+
+			await expect(runSetup(deps, { manual: true })).rejects.toThrow(
+				SetupExitError
+			);
+			expect(errors.join('\n')).toContain('cannot change site settings');
+			expect(logs.join('\n')).toContain(
+				'Ask an administrator to enable it'
+			);
+			expect(fetchMock).toHaveBeenCalledTimes(6);
+		});
+
+		it('accepted, but GET /wp/v2/settings lacks the experiments option', async () => {
+			fetchMock
+				.mockResolvedValueOnce(mockDiscoveryResponse())
+				.mockResolvedValueOnce(mockAuthSupportResponse())
+				.mockResolvedValueOnce(
+					mockResponse({
+						id: 1,
+						name: 'admin',
+						slug: 'admin',
+						avatar_urls: {},
+					})
+				)
+				.mockResolvedValueOnce(
+					mockResponse(
+						{ code: 'rest_no_route', message: 'No route' },
+						{ status: 404, statusText: 'Not Found' }
+					)
+				)
+				.mockResolvedValueOnce(
+					mockResponse({
+						version: '0.5.2',
+						protocol_version: 1,
+						mcp_connected: false,
+						mcp_last_seen_at: null,
+						collaboration: {
+							gutenberg_active: true,
+							gutenberg_version: '24.0.0',
+							collaboration_enabled: false,
+							sync_endpoint_registered: false,
+							can_manage_options: true,
+							experiments_url: null,
+						},
+					})
+				)
+				.mockResolvedValueOnce(mockResponse({}));
+
+			const { deps, errors } = createTestDeps(
+				['https://example.com', 'admin', 'xxxx xxxx xxxx', 'y'],
+				{
+					detectClients: () => defaultClientList(),
+					hasConfig: () => false,
+				}
+			);
+
+			await expect(runSetup(deps, { manual: true })).rejects.toThrow(
+				SetupExitError
+			);
+			expect(errors.join('\n')).toContain('not registered');
+			expect(fetchMock).toHaveBeenCalledTimes(6);
+		});
+
+		it('accepted and succeeds: enables the experiment and re-validates the endpoint', async () => {
+			fetchMock
+				.mockResolvedValueOnce(mockDiscoveryResponse())
+				.mockResolvedValueOnce(mockAuthSupportResponse())
+				.mockResolvedValueOnce(
+					mockResponse({
+						id: 1,
+						name: 'admin',
+						slug: 'admin',
+						avatar_urls: {},
+					})
+				)
+				.mockResolvedValueOnce(
+					mockResponse(
+						{ code: 'rest_no_route', message: 'No route' },
+						{ status: 404, statusText: 'Not Found' }
+					)
+				)
+				.mockResolvedValueOnce(
+					mockResponse({
+						version: '0.5.2',
+						protocol_version: 1,
+						mcp_connected: false,
+						mcp_last_seen_at: null,
+						collaboration: {
+							gutenberg_active: true,
+							gutenberg_version: '24.0.0',
+							collaboration_enabled: false,
+							sync_endpoint_registered: false,
+							can_manage_options: true,
+							experiments_url: null,
+						},
+					})
+				)
+				.mockResolvedValueOnce(
+					mockResponse({
+						'gutenberg-experiments': { 'gutenberg-other': true },
+					})
+				)
+				.mockResolvedValueOnce(
+					mockResponse({
+						'gutenberg-experiments': {
+							'gutenberg-other': true,
+							'gutenberg-real-time-collaboration': true,
+						},
+					})
+				)
+				.mockResolvedValueOnce(mockResponse({ rooms: [] }));
+
+			const writeConfig = vi.fn().mockResolvedValue(true);
+			const { deps, logs } = createTestDeps(
+				['https://example.com', 'admin', 'xxxx xxxx xxxx', 'y'],
+				{
+					detectClients: () => defaultClientList(),
+					writeConfig,
+					hasConfig: () => false,
+				}
+			);
+
+			await runSetup(deps, { manual: true });
+
+			const output = logs.join('\n');
+			expect(output).toContain('experiment enabled');
+			expect(output).toContain(
+				'Collaborative editing endpoint available'
+			);
+			expect(output).toContain("Done! Here's what to do next:");
+			expect(fetchMock).toHaveBeenCalledTimes(8);
+			const settingsPostCall = fetchMock.mock.calls[6] as [
+				string,
+				RequestInit,
+			];
+			expect(settingsPostCall[0]).toBe(
+				'https://example.com/wp-json/wp/v2/settings'
+			);
+			expect(JSON.parse(settingsPostCall[1].body as string)).toEqual({
+				'gutenberg-experiments': {
+					'gutenberg-other': true,
+					'gutenberg-real-time-collaboration': true,
+				},
+			});
+		});
+
+		it('accepted and enabled, but the endpoint is still 404 afterwards', async () => {
+			fetchMock
+				.mockResolvedValueOnce(mockDiscoveryResponse())
+				.mockResolvedValueOnce(mockAuthSupportResponse())
+				.mockResolvedValueOnce(
+					mockResponse({
+						id: 1,
+						name: 'admin',
+						slug: 'admin',
+						avatar_urls: {},
+					})
+				)
+				.mockResolvedValueOnce(
+					mockResponse(
+						{ code: 'rest_no_route', message: 'No route' },
+						{ status: 404, statusText: 'Not Found' }
+					)
+				)
+				.mockResolvedValueOnce(
+					mockResponse({
+						version: '0.5.2',
+						protocol_version: 1,
+						mcp_connected: false,
+						mcp_last_seen_at: null,
+						collaboration: {
+							gutenberg_active: true,
+							gutenberg_version: '24.0.0',
+							collaboration_enabled: false,
+							sync_endpoint_registered: false,
+							can_manage_options: true,
+							experiments_url: null,
+						},
+					})
+				)
+				.mockResolvedValueOnce(
+					mockResponse({
+						'gutenberg-experiments': {},
+					})
+				)
+				.mockResolvedValueOnce(
+					mockResponse({
+						'gutenberg-experiments': {
+							'gutenberg-real-time-collaboration': true,
+						},
+					})
+				)
+				.mockResolvedValueOnce(
+					mockResponse(
+						{ code: 'rest_no_route', message: 'No route' },
+						{ status: 404, statusText: 'Not Found' }
+					)
+				);
+
+			const { deps, errors } = createTestDeps(
+				['https://example.com', 'admin', 'xxxx xxxx xxxx', 'y'],
+				{
+					detectClients: () => defaultClientList(),
+					hasConfig: () => false,
+				}
+			);
+
+			await expect(runSetup(deps, { manual: true })).rejects.toThrow(
+				SetupExitError
+			);
+			expect(errors.join('\n')).toContain('still unavailable');
+			expect(fetchMock).toHaveBeenCalledTimes(8);
 		});
 
 		it('exits with error when site URL is empty', async () => {
@@ -535,7 +1137,7 @@ describe('setup wizard', () => {
 
 			const errorOutput = errors.join('\n');
 			expect(errorOutput).not.toContain(
-				'Collaborative editing is not enabled'
+				'Real-time collaboration is not enabled'
 			);
 			expect(errorOutput).toMatch(
 				/Something broke|Internal Server Error|500/
@@ -617,6 +1219,24 @@ describe('setup wizard', () => {
 			expect(output).toContain('authorize-application.php');
 			expect(output).toContain('Credentials received automatically');
 			expect(output).toContain('Authenticated as "admin"');
+		});
+
+		it('cancels the pending "press Enter" prompt once credentials arrive via callback', async () => {
+			mockSuccessfulValidation();
+			const openAuth = vi.fn().mockResolvedValue(mockAuthHandle());
+			const cancelPendingPrompt = vi.fn();
+
+			const { deps } = createTestDeps(['https://example.com', ''], {
+				openAuth,
+				cancelPendingPrompt,
+				detectClients: () => defaultClientList(),
+				writeConfig: vi.fn().mockResolvedValue(true),
+				hasConfig: () => false,
+			});
+
+			await runSetup(deps);
+
+			expect(cancelPendingPrompt).toHaveBeenCalledTimes(1);
 		});
 
 		it('prepends https:// to bare domain before starting auth flow', async () => {

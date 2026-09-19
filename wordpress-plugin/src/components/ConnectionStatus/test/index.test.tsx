@@ -56,6 +56,11 @@ jest.mock('@wordpress/icons', () => ({
 	code: { name: 'code' },
 }));
 
+jest.mock('../CollaborationNotice', () => ({
+	__esModule: true,
+	default: () => null,
+}));
+
 jest.mock('../../../hooks/use-mcp-status', () => ({
 	useMcpStatus: jest.fn(),
 }));
