@@ -5,7 +5,6 @@ import { createMockServer, createMockSession } from './helpers.js';
 import { assertDefined } from '../../test-utils.js';
 import { BlockTypeRegistry } from '../../../src/yjs/block-type-registry.js';
 import type { WPBlockType } from '../../../src/wordpress/types.js';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { SessionManager } from '../../../src/session/session-manager.js';
 
 /**
@@ -74,11 +73,7 @@ describe('block-types tool', () => {
 	beforeEach(() => {
 		server = createMockServer();
 		session = createSessionWithRegistry(sampleBlockTypes);
-		registerToolDefinitions(
-			server as unknown as McpServer,
-			session,
-			blockTypeTools
-		);
+		registerToolDefinitions(server, session, blockTypeTools);
 	});
 
 	it('registers wp_block_types tool', () => {
@@ -163,11 +158,7 @@ describe('block-types tool', () => {
 		it('shows reconnect hint when connected with fallback registry', async () => {
 			server = createMockServer();
 			session = createSessionWithFallbackRegistry();
-			registerToolDefinitions(
-				server as unknown as McpServer,
-				session,
-				blockTypeTools
-			);
+			registerToolDefinitions(server, session, blockTypeTools);
 
 			const tool = server.registeredTools.get('wp_block_types');
 			assertDefined(tool);
@@ -187,11 +178,7 @@ describe('block-types tool', () => {
 			Object.assign(session, {
 				getRegistry: vi.fn().mockReturnValue(registry),
 			});
-			registerToolDefinitions(
-				server as unknown as McpServer,
-				session,
-				blockTypeTools
-			);
+			registerToolDefinitions(server, session, blockTypeTools);
 
 			const tool = server.registeredTools.get('wp_block_types');
 			assertDefined(tool);
@@ -214,11 +201,7 @@ describe('block-types tool', () => {
 					throw new Error('registry unavailable');
 				}),
 			});
-			registerToolDefinitions(
-				server as unknown as McpServer,
-				session,
-				blockTypeTools
-			);
+			registerToolDefinitions(server, session, blockTypeTools);
 
 			const tool = server.registeredTools.get('wp_block_types');
 			assertDefined(tool);
@@ -246,11 +229,7 @@ describe('block-types tool', () => {
 					allowed_blocks: ['core/column'],
 				},
 			]);
-			registerToolDefinitions(
-				server as unknown as McpServer,
-				session,
-				blockTypeTools
-			);
+			registerToolDefinitions(server, session, blockTypeTools);
 
 			const tool = server.registeredTools.get('wp_block_types');
 			assertDefined(tool);
@@ -276,11 +255,7 @@ describe('block-types tool', () => {
 					ancestor: ['core/comment-template'],
 				},
 			]);
-			registerToolDefinitions(
-				server as unknown as McpServer,
-				session,
-				blockTypeTools
-			);
+			registerToolDefinitions(server, session, blockTypeTools);
 
 			const tool = server.registeredTools.get('wp_block_types');
 			assertDefined(tool);
@@ -312,11 +287,7 @@ describe('block-types tool', () => {
 					supports: { allowedBlocks: true },
 				},
 			]);
-			registerToolDefinitions(
-				server as unknown as McpServer,
-				session,
-				blockTypeTools
-			);
+			registerToolDefinitions(server, session, blockTypeTools);
 
 			const tool = server.registeredTools.get('wp_block_types');
 			assertDefined(tool);

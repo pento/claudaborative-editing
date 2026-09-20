@@ -20,13 +20,13 @@ jobs:
                 node-version: [22, 24]
 
         steps:
-            - uses: actions/checkout@v6
+            - uses: actions/checkout@v7
 
-            - uses: actions/setup-node@v6
+            - uses: actions/setup-node@v7
               with:
                   node-version: ${{ matrix.node-version }}
 
-            - run: npm install -g npm@11.9.0
+            - run: npm install -g npm@12.0.2
 
             - run: npm ci --no-audit
 
@@ -60,13 +60,13 @@ jobs:
                 shard: [1, 2, 3]
 
         steps:
-            - uses: actions/checkout@v6
+            - uses: actions/checkout@v7
 
-            - uses: actions/setup-node@v6
+            - uses: actions/setup-node@v7
               with:
                   node-version: 22
 
-            - run: npm install -g npm@11.9.0
+            - run: npm install -g npm@12.0.2
 
             - name: Set up PHP
               uses: shivammathur/setup-php@v2
@@ -88,7 +88,7 @@ jobs:
         runs-on: ubuntu-latest
 
         steps:
-            - uses: actions/checkout@v6
+            - uses: actions/checkout@v7
 
             - name: Set up PHP
               uses: shivammathur/setup-php@v2
@@ -114,16 +114,16 @@ jobs:
         needs: [plugin-lint-php]
 
         steps:
-            - uses: actions/checkout@v6
+            - uses: actions/checkout@v7
 
-            - uses: actions/setup-node@v6
+            - uses: actions/setup-node@v7
               with:
                   node-version: 22
                   cache-dependency-path: |
                       package-lock.json
                       wordpress-plugin/package-lock.json
 
-            - run: npm install -g npm@11.9.0
+            - run: npm install -g npm@12.0.2
 
             - name: Install root npm dependencies
               run: npm ci --no-audit
@@ -140,6 +140,24 @@ jobs:
 
             - name: Run PHPUnit with coverage
               run: npm run test:plugin-php:coverage
+
+            # PHPUnit only warns when Xdebug is loaded without coverage mode, so
+            # a run with no coverage at all still exits 0 and produces an empty
+            # report. Fail here instead of silently reporting 0%.
+            - name: Assert coverage was collected
+              run: |
+                  file=wordpress-plugin/coverage/clover.xml
+                  if [ ! -f "$file" ]; then
+                      echo "::error::$file was not produced — the coverage run did not complete."
+                      exit 1
+                  fi
+                  metrics=$(grep -o '<metrics files="[^>]*>' "$file" | tail -1)
+                  covered=$(printf '%s' "$metrics" | grep -o 'coveredstatements="[0-9]*"' | grep -o '[0-9]*')
+                  echo "Covered statements: ${covered:-0}"
+                  if [ "${covered:-0}" -le 0 ]; then
+                      echo "::error::$file reports no covered statements — Xdebug was not in coverage mode. See playground/xdebug-coverage.ini."
+                      exit 1
+                  fi
 
             - name: Convert Clover XML to LCOV
               uses: andstor/clover2lcov-action@v1
@@ -167,12 +185,14 @@ jobs:
         runs-on: ubuntu-latest
 
         steps:
-            - uses: actions/checkout@v6
+            - uses: actions/checkout@v7
 
-            - uses: actions/setup-node@v6
+            - uses: actions/setup-node@v7
               with:
                   node-version: 22
                   cache-dependency-path: wordpress-plugin/package-lock.json
+
+            - run: npm install -g npm@12.0.2
 
             - name: Install plugin npm dependencies
               run: npm ci --no-audit

@@ -92,8 +92,7 @@ export function renderBlock(block: Block, index: string): string {
 		.join(', ');
 
 	const metadata = block.attributes.metadata as
-		| Record<string, unknown>
-		| undefined;
+		Record<string, unknown> | undefined;
 	const hasNote = metadata?.noteId !== null && metadata?.noteId !== undefined;
 
 	const header = attrStr

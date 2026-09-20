@@ -182,10 +182,30 @@ const MOCK_COMMAND: Command = {
 // ---------------------------------------------------------------------------
 
 describe('command-sync', () => {
+	const originalWpceInitialState = (window as any).wpceInitialState;
+
 	beforeEach(() => {
 		jest.clearAllMocks();
 		jest.resetModules();
 		capturedAwareness = null;
+		// Default to RTC enabled so existing tests exercise the sync path
+		// as before. Individual tests/describe blocks may override this.
+		(window as any).wpceInitialState = {
+			collaboration: {
+				gutenbergActive: true,
+				collaborationEnabled: true,
+				canManageOptions: true,
+				experimentsUrl: null,
+			},
+		};
+	});
+
+	afterEach(() => {
+		if (originalWpceInitialState !== undefined) {
+			(window as any).wpceInitialState = originalWpceInitialState;
+		} else {
+			delete (window as any).wpceInitialState;
+		}
 	});
 
 	describe('initCommandSync', () => {
@@ -243,6 +263,35 @@ describe('command-sync', () => {
 			// Should allow retry after reset.
 			await mod.initCommandSync();
 			expect(mockAddEntities).toHaveBeenCalledTimes(1);
+		});
+
+		it('proceeds with sync when wpceInitialState is absent (default enabled)', async () => {
+			delete (window as any).wpceInitialState;
+			const mod = loadModule();
+			await mod.initCommandSync();
+
+			expect(mockAddEntities).toHaveBeenCalledTimes(1);
+		});
+	});
+
+	describe('initCommandSync (RTC disabled)', () => {
+		beforeEach(() => {
+			(window as any).wpceInitialState = {
+				collaboration: {
+					gutenbergActive: true,
+					collaborationEnabled: false,
+					canManageOptions: true,
+					experimentsUrl: null,
+				},
+			};
+		});
+
+		it('does not register the entity or trigger the resolver', async () => {
+			const mod = loadModule();
+			await mod.initCommandSync();
+
+			expect(mockAddEntities).not.toHaveBeenCalled();
+			expect(mockGetEntityRecords).not.toHaveBeenCalled();
 		});
 	});
 
@@ -368,6 +417,37 @@ describe('command-sync', () => {
 			// Don't call initCommandSync — doc is null
 			// Should not throw.
 			expect(() => mod.writeCommandToSync(MOCK_COMMAND)).not.toThrow();
+		});
+
+		it('does not queue or start a retry timer when RTC is disabled', () => {
+			jest.useFakeTimers();
+			const setIntervalSpy = jest.spyOn(global, 'setInterval');
+			const warnSpy = jest
+				.spyOn(console, 'warn')
+				.mockImplementation(() => {});
+
+			try {
+				(window as any).wpceInitialState = {
+					collaboration: {
+						gutenbergActive: true,
+						collaborationEnabled: false,
+						canManageOptions: true,
+						experimentsUrl: null,
+					},
+				};
+
+				const mod = loadModule();
+				mod.writeCommandToSync(MOCK_COMMAND);
+
+				jest.advanceTimersByTime(30_000);
+
+				expect(setIntervalSpy).not.toHaveBeenCalled();
+				expect(warnSpy).not.toHaveBeenCalled();
+			} finally {
+				warnSpy.mockRestore();
+				setIntervalSpy.mockRestore();
+				jest.useRealTimers();
+			}
 		});
 
 		it('warns and drops pending writes after max retries when Y.Doc never becomes available', async () => {
@@ -628,6 +708,35 @@ describe('command-sync', () => {
 
 			// Clean up the polling interval.
 			unsubscribe();
+			jest.useRealTimers();
+		});
+
+		it('calls callback(false) synchronously when RTC is disabled, without polling', () => {
+			jest.useFakeTimers();
+			const setIntervalSpy = jest.spyOn(global, 'setInterval');
+
+			(window as any).wpceInitialState = {
+				collaboration: {
+					gutenbergActive: true,
+					collaborationEnabled: false,
+					canManageOptions: true,
+					experimentsUrl: null,
+				},
+			};
+
+			const mod = loadModule();
+			// Don't initialize awareness — RTC is disabled so it never will be.
+
+			const callback = jest.fn();
+			const unsubscribe = mod.subscribeToMcpConnection(callback);
+
+			// Called synchronously, no 100ms x 300 poll needed.
+			expect(callback).toHaveBeenCalledTimes(1);
+			expect(callback).toHaveBeenCalledWith(false);
+			expect(setIntervalSpy).not.toHaveBeenCalled();
+
+			unsubscribe();
+			setIntervalSpy.mockRestore();
 			jest.useRealTimers();
 		});
 
@@ -1144,6 +1253,34 @@ describe('command-sync', () => {
 			expect(typeof unsubscribe).toBe('function');
 
 			unsubscribe();
+		});
+
+		it('skips the doc poll entirely when RTC is disabled', () => {
+			jest.useFakeTimers();
+			const setIntervalSpy = jest.spyOn(global, 'setInterval');
+
+			try {
+				(window as any).wpceInitialState = {
+					collaboration: {
+						gutenbergActive: true,
+						collaborationEnabled: false,
+						canManageOptions: true,
+						experimentsUrl: null,
+					},
+				};
+
+				const mod = loadModule();
+				const callback = jest.fn();
+				const unsubscribe = mod.subscribeToCommandSync(callback);
+
+				expect(setIntervalSpy).not.toHaveBeenCalled();
+				expect(typeof unsubscribe).toBe('function');
+
+				unsubscribe();
+			} finally {
+				setIntervalSpy.mockRestore();
+				jest.useRealTimers();
+			}
 		});
 
 		it('calls callback when state map commands change', async () => {

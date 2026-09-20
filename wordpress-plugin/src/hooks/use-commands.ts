@@ -56,8 +56,7 @@ export function useCommands(postId: number | null): UseCommandsReturn {
 	} = useSelect((select) => {
 		const s = select(store);
 		const user = select(coreStore).getCurrentUser() as
-			| { id: number }
-			| undefined;
+			{ id: number } | undefined;
 
 		return {
 			activeCommand: s.getActiveCommand(),

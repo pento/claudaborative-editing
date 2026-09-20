@@ -1,6 +1,7 @@
 import type { SessionManager } from '../session/session-manager.js';
 import { VERSION } from '../version.js';
 import { WordPressApiError } from '../wordpress/api-client.js';
+import { describeCollaborationState } from '../wordpress/collaboration.js';
 import type { ToolDefinition, ToolResult } from './definitions.js';
 
 function getPluginDownloadUrl(): string {
@@ -20,6 +21,12 @@ export const statusTools: ToolDefinition[] = [
 
 			if (state === 'disconnected') {
 				lines.push('Connection: disconnected');
+				const lastConnectError = session.getLastConnectError();
+				if (lastConnectError) {
+					lines.push(
+						`Last connection attempt failed: ${lastConnectError}`
+					);
+				}
 				lines.push('');
 				lines.push('Use wp_connect to connect to a WordPress site.');
 			} else {
@@ -45,6 +52,11 @@ export const statusTools: ToolDefinition[] = [
 					);
 					if (pluginInfo.protocolWarning) {
 						lines.push(`WARNING: ${pluginInfo.protocolWarning}`);
+					}
+					if (pluginInfo.collaboration) {
+						lines.push(
+							`Collaboration: ${describeCollaborationState(pluginInfo.collaboration, session.apiClient.createUrl(''))}`
+						);
 					}
 				}
 

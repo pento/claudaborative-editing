@@ -9,7 +9,6 @@ import {
 } from '../../../src/tools/registry.js';
 import { createMockServer, createMockSession } from './helpers.js';
 import { assertDefined } from '../../test-utils.js';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolDefinition } from '../../../src/tools/definitions.js';
 
 describe('tools/registry', () => {
@@ -111,11 +110,7 @@ describe('tools/registry', () => {
 				},
 			];
 
-			registerToolDefinitions(
-				server as unknown as McpServer,
-				session,
-				tools
-			);
+			registerToolDefinitions(server, session, tools);
 
 			const registered = server.registeredTools.get('test_tool');
 			assertDefined(registered);
@@ -140,11 +135,7 @@ describe('tools/registry', () => {
 				},
 			];
 
-			registerToolDefinitions(
-				server as unknown as McpServer,
-				session,
-				tools
-			);
+			registerToolDefinitions(server, session, tools);
 
 			const registered = server.registeredTools.get('test_tool');
 			assertDefined(registered);
@@ -167,11 +158,7 @@ describe('tools/registry', () => {
 				},
 			];
 
-			registerToolDefinitions(
-				server as unknown as McpServer,
-				session,
-				tools
-			);
+			registerToolDefinitions(server, session, tools);
 
 			const registered = server.registeredTools.get('test_tool');
 			assertDefined(registered);
@@ -197,11 +184,7 @@ describe('tools/registry', () => {
 				},
 			];
 
-			registerToolDefinitions(
-				server as unknown as McpServer,
-				session,
-				tools
-			);
+			registerToolDefinitions(server, session, tools);
 
 			const registered = server.registeredTools.get('test_tool');
 			assertDefined(registered);
@@ -227,11 +210,7 @@ describe('tools/registry', () => {
 				},
 			];
 
-			registerToolDefinitions(
-				server as unknown as McpServer,
-				session,
-				tools
-			);
+			registerToolDefinitions(server, session, tools);
 
 			const registered = server.registeredTools.get('test_tool');
 			assertDefined(registered);
@@ -260,11 +239,7 @@ describe('tools/registry', () => {
 				},
 			];
 
-			registerToolDefinitions(
-				server as unknown as McpServer,
-				session,
-				tools
-			);
+			registerToolDefinitions(server, session, tools);
 
 			const registered = server.registeredTools.get('test_tool');
 			assertDefined(registered);
@@ -280,7 +255,7 @@ describe('tools/registry', () => {
 		it('registers all tools on the MCP server', () => {
 			const server = createMockServer();
 			const session = createMockSession();
-			registerAllTools(server as unknown as McpServer, session);
+			registerAllTools(server, session);
 			expect(server.registeredTools.size).toBe(40);
 		});
 	});

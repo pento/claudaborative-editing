@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import { createMockServer, createMockSession, fakePost } from './helpers.js';
 import { editingPrompts } from '../../../src/prompts/editing.js';
 import { registerPromptDefinitions } from '../../../src/prompts/registry.js';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { SessionManager } from '../../../src/session/session-manager.js';
 import type { RegisteredPrompt } from './helpers.js';
 import { assertDefined } from '../../test-utils.js';
@@ -12,11 +11,7 @@ describe('edit', () => {
 		it('instructs to connect first', async () => {
 			const server = createMockServer();
 			const session = createMockSession({ state: 'disconnected' });
-			registerPromptDefinitions(
-				server as unknown as McpServer,
-				session,
-				editingPrompts
-			);
+			registerPromptDefinitions(server, session, editingPrompts);
 
 			const prompt = server.registeredPrompts.get('edit');
 			assertDefined(prompt);
@@ -30,11 +25,7 @@ describe('edit', () => {
 		it('instructs to open a post first', async () => {
 			const server = createMockServer();
 			const session = createMockSession({ state: 'connected' });
-			registerPromptDefinitions(
-				server as unknown as McpServer,
-				session,
-				editingPrompts
-			);
+			registerPromptDefinitions(server, session, editingPrompts);
 
 			const prompt = server.registeredPrompts.get('edit');
 			assertDefined(prompt);
@@ -58,11 +49,7 @@ describe('edit', () => {
 				post: fakePost,
 				postContent,
 			});
-			registerPromptDefinitions(
-				server as unknown as McpServer,
-				session,
-				editingPrompts
-			);
+			registerPromptDefinitions(server, session, editingPrompts);
 			const editPrompt = server.registeredPrompts.get('edit');
 			assertDefined(editPrompt);
 			prompt = editPrompt;
@@ -95,11 +82,7 @@ describe('proofread', () => {
 		it('instructs to connect first', async () => {
 			const server = createMockServer();
 			const session = createMockSession({ state: 'disconnected' });
-			registerPromptDefinitions(
-				server as unknown as McpServer,
-				session,
-				editingPrompts
-			);
+			registerPromptDefinitions(server, session, editingPrompts);
 
 			const prompt = server.registeredPrompts.get('proofread');
 			assertDefined(prompt);
@@ -113,11 +96,7 @@ describe('proofread', () => {
 		it('instructs to open a post first', async () => {
 			const server = createMockServer();
 			const session = createMockSession({ state: 'connected' });
-			registerPromptDefinitions(
-				server as unknown as McpServer,
-				session,
-				editingPrompts
-			);
+			registerPromptDefinitions(server, session, editingPrompts);
 
 			const prompt = server.registeredPrompts.get('proofread');
 			assertDefined(prompt);
@@ -141,11 +120,7 @@ describe('proofread', () => {
 				post: fakePost,
 				postContent,
 			});
-			registerPromptDefinitions(
-				server as unknown as McpServer,
-				session,
-				editingPrompts
-			);
+			registerPromptDefinitions(server, session, editingPrompts);
 			const proofreadPrompt = server.registeredPrompts.get('proofread');
 			assertDefined(proofreadPrompt);
 			prompt = proofreadPrompt;

@@ -7,7 +7,6 @@ import {
 } from '../../../src/prompts/registry.js';
 import { createMockServer, createMockSession } from './helpers.js';
 import { assertDefined } from '../../test-utils.js';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { PromptDefinition } from '../../../src/prompts/definitions.js';
 
 describe('prompts/registry', () => {
@@ -60,11 +59,7 @@ describe('prompts/registry', () => {
 				},
 			];
 
-			registerPromptDefinitions(
-				server as unknown as McpServer,
-				session,
-				testPrompts
-			);
+			registerPromptDefinitions(server, session, testPrompts);
 
 			const registered = server.registeredPrompts.get('test-prompt');
 			assertDefined(registered);
@@ -82,7 +77,7 @@ describe('prompts/registry', () => {
 		it('registers all prompts on the MCP server', () => {
 			const server = createMockServer();
 			const session = createMockSession();
-			registerAllPrompts(server as unknown as McpServer, session);
+			registerAllPrompts(server, session);
 			expect(server.registeredPrompts.size).toBe(8);
 		});
 	});

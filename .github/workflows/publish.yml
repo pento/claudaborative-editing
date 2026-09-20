@@ -20,13 +20,18 @@ jobs:
         runs-on: ubuntu-latest
 
         steps:
-            - uses: actions/checkout@v6
+            - uses: actions/checkout@v7
 
-            - uses: actions/setup-node@v6
+            - uses: actions/setup-node@v7
               with:
                   node-version: 24
                   cache: npm
+                  cache-dependency-path: |
+                      package-lock.json
+                      wordpress-plugin/package-lock.json
                   registry-url: https://registry.npmjs.org
+
+            - run: npm install -g npm@12.0.2
 
             - run: npm ci
             - run: npm --prefix wordpress-plugin ci
@@ -55,13 +60,18 @@ jobs:
         runs-on: ubuntu-latest
 
         steps:
-            - uses: actions/checkout@v6
+            - uses: actions/checkout@v7
 
-            - uses: actions/setup-node@v6
+            - uses: actions/setup-node@v7
               with:
                   node-version: 24
                   cache: npm
+                  cache-dependency-path: |
+                      package-lock.json
+                      wordpress-plugin/package-lock.json
                   registry-url: https://registry.npmjs.org
+
+            - run: npm install -g npm@12.0.2
 
             - run: npm ci
             - run: npm --prefix wordpress-plugin ci
@@ -70,7 +80,7 @@ jobs:
             - run: npm test
             - run: npm publish
             - run: npm pack
-            - uses: actions/upload-artifact@v4
+            - uses: actions/upload-artifact@v7
               with:
                   name: npm-tarball
                   path: claudaborative-editing-*.tgz
@@ -82,13 +92,17 @@ jobs:
         needs: [publish]
 
         steps:
-            - uses: actions/checkout@v6
+            - uses: actions/checkout@v7
 
-            - uses: actions/setup-node@v6
+            - uses: actions/setup-node@v7
               with:
                   node-version: 24
                   cache: npm
-                  cache-dependency-path: wordpress-plugin/package-lock.json
+                  cache-dependency-path: |
+                      package-lock.json
+                      wordpress-plugin/package-lock.json
+
+            - run: npm install -g npm@12.0.2
 
             - name: Install root npm dependencies
               run: npm ci
@@ -129,13 +143,17 @@ jobs:
             contents: write
 
         steps:
-            - uses: actions/checkout@v6
+            - uses: actions/checkout@v7
 
-            - uses: actions/setup-node@v6
+            - uses: actions/setup-node@v7
               with:
                   node-version: 24
                   cache: npm
-                  cache-dependency-path: wordpress-plugin/package-lock.json
+                  cache-dependency-path: |
+                      package-lock.json
+                      wordpress-plugin/package-lock.json
+
+            - run: npm install -g npm@12.0.2
 
             - name: Install root npm dependencies
               run: npm ci
@@ -174,7 +192,7 @@ jobs:
                   echo "$NOTES" > release-notes.txt
                   cat release-notes.txt
 
-            - uses: actions/download-artifact@v4
+            - uses: actions/download-artifact@v7
               with:
                   name: npm-tarball
 

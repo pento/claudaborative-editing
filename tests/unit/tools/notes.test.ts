@@ -8,7 +8,6 @@ import {
 	fakePost,
 } from './helpers.js';
 import { assertDefined } from '../../test-utils.js';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { SessionManager } from '../../../src/session/session-manager.js';
 
 describe('note tools', () => {
@@ -22,11 +21,7 @@ describe('note tools', () => {
 			user: fakeUser,
 			post: fakePost,
 		});
-		registerToolDefinitions(
-			server as unknown as McpServer,
-			session,
-			noteTools
-		);
+		registerToolDefinitions(server, session, noteTools);
 	});
 
 	it('registers all note tools', () => {

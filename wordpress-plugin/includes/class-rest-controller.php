@@ -901,6 +901,7 @@ class REST_Controller extends \WP_REST_Controller {
 				'protocol_version' => self::PROTOCOL_VERSION,
 				'mcp_connected'    => $connected,
 				'mcp_last_seen_at' => $last_seen_at ? $last_seen_at : null,
+				'collaboration'    => Collaboration::get_status(),
 			)
 		);
 	}

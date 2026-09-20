@@ -3,7 +3,6 @@ import { connectTools } from '../../../src/tools/connect.js';
 import { registerToolDefinitions } from '../../../src/tools/registry.js';
 import { createMockServer, createMockSession, fakeUser } from './helpers.js';
 import { assertDefined } from '../../test-utils.js';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { SessionManager } from '../../../src/session/session-manager.js';
 
 describe('connect tools', () => {
@@ -13,11 +12,7 @@ describe('connect tools', () => {
 	beforeEach(() => {
 		server = createMockServer();
 		session = createMockSession({ user: fakeUser });
-		registerToolDefinitions(
-			server as unknown as McpServer,
-			session,
-			connectTools
-		);
+		registerToolDefinitions(server, session, connectTools);
 	});
 
 	it('registers wp_connect and wp_disconnect', () => {
@@ -68,7 +63,7 @@ describe('connect tools', () => {
 			});
 			const connectedServer = createMockServer();
 			registerToolDefinitions(
-				connectedServer as unknown as McpServer,
+				connectedServer,
 				connectedSession,
 				connectTools
 			);
@@ -96,7 +91,7 @@ describe('connect tools', () => {
 			});
 			const editingServer = createMockServer();
 			registerToolDefinitions(
-				editingServer as unknown as McpServer,
+				editingServer,
 				editingSession,
 				connectTools
 			);

@@ -1,4 +1,12 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import {
+	describe,
+	it,
+	expect,
+	vi,
+	beforeEach,
+	afterEach,
+	type MockInstance,
+} from 'vitest';
 import * as Y from 'yjs';
 import {
 	CommandClient,
@@ -206,8 +214,7 @@ describe('CommandClient', () => {
 			// Terminal command should persist in the Y.Map (browser-side
 			// stale cleanup handles removal after processing).
 			const entry = documentMap.get('cmd_7') as
-				| { status: string }
-				| undefined;
+				{ status: string } | undefined;
 			expect(entry).toBeDefined();
 			expect(entry?.status).toBe('completed');
 		});
@@ -252,8 +259,7 @@ describe('CommandClient', () => {
 			await client.updateCommandStatus(9, 'failed', 'Something broke');
 
 			const entry = documentMap.get('cmd_9') as
-				| { status: string }
-				| undefined;
+				{ status: string } | undefined;
 			expect(entry).toBeDefined();
 			expect(entry?.status).toBe('failed');
 		});
@@ -270,8 +276,7 @@ describe('CommandClient', () => {
 			await client.updateCommandStatus(3, 'running');
 
 			const entry = documentMap.get('cmd_3') as
-				| Record<string, unknown>
-				| undefined;
+				Record<string, unknown> | undefined;
 			expect(entry).toBeDefined();
 			expect(entry?.status).toBe('running');
 		});
@@ -1141,15 +1146,13 @@ describe('CommandClient', () => {
 	// -------------------------------------------------------
 
 	describe('debug logging when enabled', () => {
-		let debugSpy: ReturnType<typeof vi.fn>;
+		let debugSpy: MockInstance<typeof debugLogModule.debugLog>;
 
 		beforeEach(() => {
 			vi.spyOn(debugLogModule, 'isDebugEnabled').mockReturnValue(true);
 			debugSpy = vi
 				.spyOn(debugLogModule, 'debugLog')
-				.mockImplementation(() => {}) as unknown as ReturnType<
-				typeof vi.fn
-			>;
+				.mockImplementation(() => {});
 		});
 
 		afterEach(() => {

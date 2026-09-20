@@ -74,6 +74,70 @@ async function waitForWordPress(timeoutMs: number = 180_000): Promise<void> {
 	);
 }
 
+export const SYNC_NAMESPACE_MISSING_ERROR =
+	'Playground has no wp-sync/v1 namespace — is the Gutenberg real-time collaboration experiment enabled in playground/e2e.blueprint.json?';
+
+/**
+ * Fails fast with a clear diagnosis when the Gutenberg RTC experiment isn't
+ * enabled, instead of letting every test's sync handshake time out
+ * separately waiting for a namespace that will never appear. This is the
+ * guard against a repeat of the incident where the old `setSiteOptions`
+ * step (`wp_collaboration_enabled: 1`) silently no-oped since Gutenberg
+ * 23.8.
+ *
+ * Polls rather than checking once: `startPlaygroundSubprocess()` starts
+ * serving HTTP as soon as the CLI boots, but `waitForWordPress()` only
+ * waits for `wp-login.php` — it does not wait for the blueprint to finish
+ * installing Gutenberg (a large download). A single check right after
+ * `waitForWordPress()` can catch a legitimately still-booting site (its
+ * REST index briefly lists only core namespaces) and misreport it as the
+ * RTC experiment being off. `timeoutMs`/`pollIntervalMs` default to real
+ * boot-time values; tests override both to stay fast.
+ */
+export async function assertSyncNamespaceRegistered(
+	timeoutMs: number = 120_000,
+	pollIntervalMs: number = 1_000
+): Promise<void> {
+	const deadline = Date.now() + timeoutMs;
+	// Every path through the loop body assigns this before the deadline check
+	// reads it, so an initialiser here would be dead.
+	let lastError: string;
+
+	for (;;) {
+		try {
+			const response = await fetch(`${WP_BASE_URL}/wp-json/`);
+			if (!response.ok) {
+				lastError = `${WP_BASE_URL}/wp-json/ returned ${response.status} — WordPress is not serving the REST API.`;
+			} else {
+				try {
+					const body = (await response.json()) as {
+						namespaces?: string[];
+					};
+					if (body.namespaces?.includes('wp-sync/v1')) {
+						return;
+					}
+					lastError = SYNC_NAMESPACE_MISSING_ERROR;
+				} catch {
+					// A fatal error or a proxy can serve HTML here; a booting site
+					// can legitimately do this briefly, so record it and keep
+					// polling rather than letting the parse failure abort early.
+					lastError = `${WP_BASE_URL}/wp-json/ did not return JSON — WordPress is not serving the REST API.`;
+				}
+			}
+		} catch (error) {
+			lastError = String(error);
+		}
+
+		if (Date.now() >= deadline) {
+			// Report whatever was last observed — a missing namespace, a
+			// non-2xx response, or a non-JSON body — rather than a generic
+			// timeout, so the failure is actionable.
+			throw new Error(lastError);
+		}
+		await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+	}
+}
+
 /**
  * Starts wp-playground-cli in server mode as a detached subprocess.
  *
@@ -269,6 +333,17 @@ export async function ensurePlaygroundRunning(): Promise<void> {
 		}
 		await waitForWordPress();
 	}
+
+	// Runs whether we just booted Playground or are reusing an
+	// already-running instance (including the CLAUDABORATIVE_E2E_REUSE_ENV=1
+	// reuse path) — a stale instance started from an old blueprint must not
+	// slip through undetected just because it's already responding. On the
+	// reuse path a genuinely stale instance now costs the full poll timeout
+	// before erroring (it was already up, so there's no boot-in-progress
+	// namespace to wait for); that's an acceptable trade for not misreporting
+	// a fresh boot that's still installing Gutenberg, and still far better
+	// than the 90s handshake timeout per test this guard replaces.
+	await assertSyncNamespaceRegistered();
 
 	// Reuse the cached app password only if we're reusing an existing
 	// Playground. A fresh Playground has a fresh SQLite DB, so any cached

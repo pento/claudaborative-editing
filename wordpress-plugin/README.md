@@ -10,7 +10,8 @@ A WordPress plugin that adds AI action controls to the Gutenberg editor for use 
 
 ## Requirements
 
-- WordPress 7.0+
+- WordPress 6.9+
+- The Gutenberg plugin 23.8+ with the **Enable real-time collaboration** experiment turned on (Settings → Experiments)
 - PHP 7.4+
 - A running Claude Code session with the Claudaborative Editing MCP server
 
@@ -18,7 +19,8 @@ A WordPress plugin that adds AI action controls to the Gutenberg editor for use 
 
 ### Prerequisites
 
-- Node.js 22+
+- Node.js `^22.22.2 || >=24.15.0`
+- npm 12 or newer (npm 11 builds a different tree from the same lockfile; `devEngines` warns rather than failing the install)
 - Composer
 
 No Docker required. PHPUnit and end-to-end tests run against

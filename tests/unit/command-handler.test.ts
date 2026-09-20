@@ -84,7 +84,7 @@ function setupMockCommandClient(pluginStatusResult?: {
 		capturedOnCommand = onCommand;
 		capturedOnResponse = onResponse;
 		return instance as unknown as CommandClient;
-	} as unknown as typeof CommandClient);
+	});
 
 	/**
 	 * Dispatch a command through the captured onCommand callback and

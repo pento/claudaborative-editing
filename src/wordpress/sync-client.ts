@@ -54,8 +54,7 @@ export class SyncClient {
 
 	private rooms = new Map<string, RoomState>();
 	private onStatusChange:
-		| ((status: SyncStatus, error?: Error) => void)
-		| null = null;
+		((status: SyncStatus, error?: Error) => void) | null = null;
 	private firstPollResolve: (() => void) | null = null;
 
 	constructor(

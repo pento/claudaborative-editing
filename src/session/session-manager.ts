@@ -14,6 +14,11 @@ import {
 	WordPressApiClient,
 	WordPressApiError,
 } from '../wordpress/api-client.js';
+import {
+	describeCollaborationState,
+	SYNC_BLOCKED_HINT,
+	type CollaborationStatus,
+} from '../wordpress/collaboration.js';
 import { SyncClient } from '../wordpress/sync-client.js';
 import {
 	createSyncStep1,
@@ -345,16 +350,22 @@ export class SessionManager {
 	private _user: WPUser | null = null;
 	private _currentPost: WPPost | null = null;
 	private state: SessionState = 'disconnected';
+	/**
+	 * Message from the most recent failed connect() call, or null after a
+	 * successful connect(). Surfaced by wp_status while disconnected — the
+	 * auto-connect path in server.ts only console.error()s failures, so
+	 * this is the only way the diagnosis (e.g. "RTC experiment is off")
+	 * reaches the model without it calling wp_connect first.
+	 */
+	private _lastConnectError: string | null = null;
 	private awarenessState: AwarenessLocalState | null = null;
 	private collaborators: CollaboratorInfo[] = [];
 	private notesSupported = false;
 	private updateHandler:
-		| ((update: Uint8Array, origin: unknown) => void)
-		| null = null;
+		((update: Uint8Array, origin: unknown) => void) | null = null;
 	private commentDoc: Y.Doc | null = null;
 	private commentUpdateHandler:
-		| ((update: Uint8Array, origin: unknown) => void)
-		| null = null;
+		((update: Uint8Array, origin: unknown) => void) | null = null;
 
 	/** Cached resolved category names (populated in openPost, updated in setCategories). */
 	private _cachedCategories: string[] = [];
@@ -394,8 +405,7 @@ export class SessionManager {
 	private commandDoc: Y.Doc | null = null;
 	/** Update handler for the command doc. */
 	private commandUpdateHandler:
-		| ((update: Uint8Array, origin: unknown) => void)
-		| null = null;
+		((update: Uint8Array, origin: unknown) => void) | null = null;
 	/** The post room name (stored for removeRoom in closePost). */
 	private postRoom: string | null = null;
 
@@ -470,106 +480,144 @@ export class SessionManager {
 			await this.disconnect();
 		}
 
-		// Discover REST API URL from the site only when the caller did not provide one
-		const restUrl =
-			config.restUrl ??
-			(await WordPressApiClient.discover(config.siteUrl)).restUrl;
-
-		this._apiClient = new WordPressApiClient({
-			...config,
-			restUrl,
-		});
-
-		// Check application-passwords support before first authenticated request
-		await this.apiClient.checkAuthSupport();
-
-		// Validate credentials
-		const user = await this.apiClient.validateConnection();
-		this._user = user;
-
-		// Validate sync endpoint is available (the real gate for collaborative editing)
-		await this.apiClient.validateSyncEndpoint();
-
-		// Fetch block type registry from the API; fall back to hardcoded if unavailable
 		try {
-			const blockTypes = await this.apiClient.getBlockTypes();
-			this.registry = BlockTypeRegistry.fromApiResponse(blockTypes);
-		} catch {
-			this.registry = BlockTypeRegistry.createFallback();
-		}
-		this.documentManager.setRegistry(this.registry);
+			// Discover REST API URL from the site only when the caller did not provide one
+			const restUrl =
+				config.restUrl ??
+				(await WordPressApiClient.discover(config.siteUrl)).restUrl;
 
-		// Check if the site supports notes (block comments)
-		try {
-			this.notesSupported = await this.apiClient.checkNotesSupport();
-		} catch {
-			this.notesSupported = false;
-		}
+			this._apiClient = new WordPressApiClient({
+				...config,
+				restUrl,
+			});
 
-		// Build awareness state from user info
-		this.awarenessState = buildAwarenessState(user);
+			// Check application-passwords support before first authenticated request
+			await this.apiClient.checkAuthSupport();
 
-		// Create the SyncClient with the command room.
-		// The SyncClient lives for the entire connection and is reused for
-		// post + comment rooms when a post is opened.
-		const syncClient = new SyncClient(this.apiClient, {
-			...DEFAULT_SYNC_CONFIG,
-		});
-		this._syncClient = syncClient;
+			// Validate credentials
+			const user = await this.apiClient.validateConnection();
+			this._user = user;
 
-		// Create command Y.Doc and join the command room
-		debugLog(
-			'session',
-			'Creating command doc and joining room',
-			this.commandRoom
-		);
-		this.commandDoc = new Y.Doc();
-		this.commandUpdateHandler = (update: Uint8Array, origin: unknown) => {
-			if (origin === LOCAL_ORIGIN) {
-				const syncUpdate = createUpdateFromChange(update);
-				syncClient.queueUpdate(this.commandRoom, syncUpdate);
-			}
-		};
-		this.commandDoc.on('updateV2', this.commandUpdateHandler);
-
-		const cmdDoc = this.commandDoc;
-		syncClient.start(
-			this.commandRoom,
-			cmdDoc.clientID,
-			[createSyncStep1(cmdDoc)],
-			{
-				onUpdate: (update) => {
-					try {
-						return processIncomingUpdate(cmdDoc, update);
-					} catch {
-						return null;
+			// Validate sync endpoint is available (the real gate for collaborative
+			// editing). On a 404, probe the companion plugin's collaboration status
+			// to turn a bare "not found" into a precise diagnosis (e.g. "the RTC
+			// experiment is off") wherever the plugin is present to ask.
+			try {
+				await this.apiClient.validateSyncEndpoint();
+			} catch (err) {
+				if (err instanceof WordPressApiError && err.status === 404) {
+					const collab =
+						await this.apiClient.getCollaborationStatus();
+					if (collab) {
+						// When the route is registered the diagnosis reads
+						// "…is enabled", which on its own would claim success
+						// as the reason connect() failed. Add the missing
+						// half so the message stays actionable.
+						const diagnosis = describeCollaborationState(
+							collab,
+							this.apiClient.createUrl('')
+						);
+						throw new WordPressApiError(
+							collab.sync_endpoint_registered
+								? `${diagnosis} ${SYNC_BLOCKED_HINT}`
+								: diagnosis,
+							404,
+							err.body
+						);
 					}
-				},
-				onAwareness: () => {},
-				onStatusChange: (_status, error) => {
-					// Sync errors while editing may indicate the post was
-					// deleted/trashed. Check via REST to confirm.
-					if (
-						this.state === 'editing' &&
-						_status === 'error' &&
-						error instanceof WordPressApiError &&
-						(error.status === 403 ||
-							error.status === 404 ||
-							error.status === 410)
-					) {
-						this.checkPostStillExists();
-					}
-				},
-				onCompactionRequested: () => createCompactionUpdate(cmdDoc),
-				getAwarenessState: () => this.awarenessState,
+				}
+				throw err;
 			}
-		);
 
-		// Detect WordPress editor plugin and start command listener
-		await this.probeEditorPlugin();
+			// Fetch block type registry from the API; fall back to hardcoded if unavailable
+			try {
+				const blockTypes = await this.apiClient.getBlockTypes();
+				this.registry = BlockTypeRegistry.fromApiResponse(blockTypes);
+			} catch {
+				this.registry = BlockTypeRegistry.createFallback();
+			}
+			this.documentManager.setRegistry(this.registry);
 
-		this.state = 'connected';
-		return user;
+			// Check if the site supports notes (block comments)
+			try {
+				this.notesSupported = await this.apiClient.checkNotesSupport();
+			} catch {
+				this.notesSupported = false;
+			}
+
+			// Build awareness state from user info
+			this.awarenessState = buildAwarenessState(user);
+
+			// Create the SyncClient with the command room.
+			// The SyncClient lives for the entire connection and is reused for
+			// post + comment rooms when a post is opened.
+			const syncClient = new SyncClient(this.apiClient, {
+				...DEFAULT_SYNC_CONFIG,
+			});
+			this._syncClient = syncClient;
+
+			// Create command Y.Doc and join the command room
+			debugLog(
+				'session',
+				'Creating command doc and joining room',
+				this.commandRoom
+			);
+			this.commandDoc = new Y.Doc();
+			this.commandUpdateHandler = (
+				update: Uint8Array,
+				origin: unknown
+			) => {
+				if (origin === LOCAL_ORIGIN) {
+					const syncUpdate = createUpdateFromChange(update);
+					syncClient.queueUpdate(this.commandRoom, syncUpdate);
+				}
+			};
+			this.commandDoc.on('updateV2', this.commandUpdateHandler);
+
+			const cmdDoc = this.commandDoc;
+			syncClient.start(
+				this.commandRoom,
+				cmdDoc.clientID,
+				[createSyncStep1(cmdDoc)],
+				{
+					onUpdate: (update) => {
+						try {
+							return processIncomingUpdate(cmdDoc, update);
+						} catch {
+							return null;
+						}
+					},
+					onAwareness: () => {},
+					onStatusChange: (_status, error) => {
+						// Sync errors while editing may indicate the post was
+						// deleted/trashed. Check via REST to confirm.
+						if (
+							this.state === 'editing' &&
+							_status === 'error' &&
+							error instanceof WordPressApiError &&
+							(error.status === 403 ||
+								error.status === 404 ||
+								error.status === 410)
+						) {
+							this.checkPostStillExists();
+						}
+					},
+					onCompactionRequested: () => createCompactionUpdate(cmdDoc),
+					getAwarenessState: () => this.awarenessState,
+				}
+			);
+
+			// Detect WordPress editor plugin and start command listener
+			await this.probeEditorPlugin();
+
+			this.state = 'connected';
+			this._lastConnectError = null;
+			return user;
+		} catch (err) {
+			this._lastConnectError =
+				err instanceof Error ? err.message : String(err);
+			throw err;
+		}
 	}
 
 	/**
@@ -993,22 +1041,18 @@ export class SessionManager {
 		const metadata: PostMetadata = {
 			status:
 				(this.documentManager.getProperty(this.doc, 'status') as
-					| string
-					| undefined) ?? this._currentPost?.status,
+					string | undefined) ?? this._currentPost?.status,
 			date:
 				(this.documentManager.getProperty(this.doc, 'date') as
-					| string
-					| undefined) ??
+					string | undefined) ??
 				this._currentPost?.date ??
 				undefined,
 			slug:
 				(this.documentManager.getProperty(this.doc, 'slug') as
-					| string
-					| undefined) ?? this._currentPost?.slug,
+					string | undefined) ?? this._currentPost?.slug,
 			sticky:
 				(this.documentManager.getProperty(this.doc, 'sticky') as
-					| boolean
-					| undefined) ?? this._currentPost?.sticky,
+					boolean | undefined) ?? this._currentPost?.sticky,
 			commentStatus:
 				(this.documentManager.getProperty(
 					this.doc,
@@ -1016,8 +1060,7 @@ export class SessionManager {
 				) as string | undefined) ?? this._currentPost?.comment_status,
 			excerpt:
 				(this.documentManager.getProperty(this.doc, 'excerpt') as
-					| string
-					| undefined) || undefined,
+					string | undefined) || undefined,
 			categories:
 				this._cachedCategories.length > 0
 					? this._cachedCategories
@@ -1684,8 +1727,7 @@ export class SessionManager {
 			for (let i = 0; i < blockList.length; i++) {
 				const idx = prefix ? `${prefix}.${i}` : String(i);
 				const metadata = blockList[i].attributes.metadata as
-					| Record<string, unknown>
-					| undefined;
+					Record<string, unknown> | undefined;
 				if (
 					metadata?.noteId !== null &&
 					metadata?.noteId !== undefined
@@ -1861,6 +1903,14 @@ export class SessionManager {
 		return this.state;
 	}
 
+	/**
+	 * Message from the most recent failed connect() call, or null if the
+	 * last connect() succeeded (or none has been attempted).
+	 */
+	getLastConnectError(): string | null {
+		return this._lastConnectError;
+	}
+
 	getSyncStatus(): {
 		isPolling: boolean;
 		hasCollaborators: boolean;
@@ -1965,6 +2015,7 @@ export class SessionManager {
 		protocolVersion: number;
 		transport: string;
 		protocolWarning: string | null;
+		collaboration: CollaborationStatus | null;
 	} | null {
 		if (!this.commandHandler) return null;
 		const ps = this.commandHandler.getPluginStatus();
@@ -1974,6 +2025,7 @@ export class SessionManager {
 			protocolVersion: ps.protocol_version,
 			transport: this.commandHandler.getTransport(),
 			protocolWarning: this.commandHandler.getProtocolWarning(),
+			collaboration: ps.collaboration ?? null,
 		};
 	}
 
@@ -2723,8 +2775,7 @@ export class SessionManager {
 			for (let i = 0; i < blockList.length; i++) {
 				const idx = prefix ? `${prefix}.${i}` : String(i);
 				const metadata = blockList[i].attributes.metadata as
-					| Record<string, unknown>
-					| undefined;
+					Record<string, unknown> | undefined;
 				if (metadata?.noteId === noteId) return idx;
 				if (blockList[i].innerBlocks.length > 0) {
 					const found = scan(blockList[i].innerBlocks, idx);

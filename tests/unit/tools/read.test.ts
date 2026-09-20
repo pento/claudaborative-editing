@@ -8,7 +8,6 @@ import {
 	fakePost,
 } from './helpers.js';
 import { assertDefined } from '../../test-utils.js';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { SessionManager } from '../../../src/session/session-manager.js';
 
 describe('read tools', () => {
@@ -25,11 +24,7 @@ describe('read tools', () => {
 				'Title: "My Great Post"\n\n[0] core/paragraph\n  "Hello world"',
 			blockContent: '[0] core/paragraph\n  "Hello world"',
 		});
-		registerToolDefinitions(
-			server as unknown as McpServer,
-			session,
-			readTools
-		);
+		registerToolDefinitions(server, session, readTools);
 	});
 
 	it('registers wp_read_post, wp_read_block, and wp_view_post', () => {

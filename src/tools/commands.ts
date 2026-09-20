@@ -1,12 +1,20 @@
 import { z } from 'zod';
+import type { CommandStatus } from '../../shared/commands.js';
 import type { ToolDefinition } from './definitions.js';
 
-/** Statuses that can be set via the tool (subset of CommandStatus). */
-type SettableCommandStatus =
-	| 'running'
-	| 'completed'
-	| 'failed'
-	| 'awaiting_input';
+/**
+ * Statuses that can be set via the tool. `satisfies` keeps this honest: adding
+ * a value that isn't a real CommandStatus is a compile error, and the Zod enum
+ * below is built from the same array rather than repeating the literals.
+ */
+const SETTABLE_COMMAND_STATUSES = [
+	'running',
+	'completed',
+	'failed',
+	'awaiting_input',
+] as const satisfies readonly CommandStatus[];
+
+type SettableCommandStatus = (typeof SETTABLE_COMMAND_STATUSES)[number];
 
 interface UpdateCommandStatusInput {
 	commandId: number;
@@ -27,7 +35,7 @@ export const commandTools: ToolDefinition[] = [
 					'The command ID from the channel notification metadata'
 				),
 			status: z
-				.enum(['running', 'completed', 'failed', 'awaiting_input'])
+				.enum(SETTABLE_COMMAND_STATUSES)
 				.describe('New status for the command'),
 			message: z
 				.string()

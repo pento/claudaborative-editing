@@ -9,6 +9,31 @@ import type {
 	SyncPayload,
 	SyncResponse,
 } from './types.js';
+import {
+	collaborationGuidance,
+	GUTENBERG_EXPERIMENTS_OPTION,
+	MIN_GUTENBERG_VERSION,
+	RTC_EXPERIMENT_ID,
+	type CollaborationStatus,
+} from './collaboration.js';
+
+/**
+ * Result of {@link WordPressApiClient.enableRealTimeCollaborationExperiment}.
+ */
+export type EnableExperimentResult =
+	| { ok: true }
+	| {
+			ok: false;
+			reason: 'forbidden' | 'not_registered' | 'unexpected';
+			message: string;
+	  };
+
+const NOT_REGISTERED_MESSAGE =
+	`The Gutenberg experiments setting is not registered on this site. ` +
+	`Gutenberg ${MIN_GUTENBERG_VERSION} or later must be installed and active.`;
+
+const FORBIDDEN_MESSAGE =
+	'Your account cannot change site settings. An administrator must enable the experiment.';
 
 /** Result of REST API URL discovery from the site's home page. */
 export interface DiscoveryResult {
@@ -451,6 +476,120 @@ export class WordPressApiClient {
 	}
 
 	/**
+	 * Fetch the companion plugin's collaboration diagnosis.
+	 * GET /wpce/v1/status (the `collaboration` field).
+	 *
+	 * Returns `null` on any failure (missing plugin, network error,
+	 * older plugin without the field) — this is a best-effort probe used
+	 * to enrich a diagnosis, and must never mask the original error.
+	 */
+	async getCollaborationStatus(): Promise<CollaborationStatus | null> {
+		try {
+			const data = await this.apiFetch<{
+				collaboration?: CollaborationStatus;
+			}>('/wpce/v1/status');
+			return data.collaboration ?? null;
+		} catch {
+			return null;
+		}
+	}
+
+	/**
+	 * Turn on the "Enable real-time collaboration" Gutenberg experiment via
+	 * `GET`-merge-`POST /wp/v2/settings` (the settings endpoint replaces the
+	 * whole `gutenberg-experiments` option object, so the existing value
+	 * must be read and merged rather than overwritten outright).
+	 *
+	 * Only ever called after explicit user consent (decision 14) — this
+	 * method itself does not gate on that, it just owns the mechanics.
+	 */
+	async enableRealTimeCollaborationExperiment(): Promise<EnableExperimentResult> {
+		let settings: Record<string, unknown>;
+		try {
+			settings =
+				await this.apiFetch<Record<string, unknown>>('/wp/v2/settings');
+		} catch (err) {
+			if (
+				err instanceof WordPressApiError &&
+				(err.status === 401 || err.status === 403)
+			) {
+				return {
+					ok: false,
+					reason: 'forbidden',
+					message: FORBIDDEN_MESSAGE,
+				};
+			}
+			return {
+				ok: false,
+				reason: 'unexpected',
+				message: err instanceof Error ? err.message : String(err),
+			};
+		}
+
+		if (!(GUTENBERG_EXPERIMENTS_OPTION in settings)) {
+			return {
+				ok: false,
+				reason: 'not_registered',
+				message: NOT_REGISTERED_MESSAGE,
+			};
+		}
+
+		const existing = settings[GUTENBERG_EXPERIMENTS_OPTION] as Record<
+			string,
+			unknown
+		> | null;
+		const merged = { ...(existing ?? {}), [RTC_EXPERIMENT_ID]: true };
+
+		let response: Record<string, unknown>;
+		try {
+			response = await this.apiFetch<Record<string, unknown>>(
+				'/wp/v2/settings',
+				{
+					method: 'POST',
+					body: JSON.stringify({
+						[GUTENBERG_EXPERIMENTS_OPTION]: merged,
+					}),
+				}
+			);
+		} catch (err) {
+			if (err instanceof WordPressApiError) {
+				if (err.status === 400) {
+					return {
+						ok: false,
+						reason: 'not_registered',
+						message: NOT_REGISTERED_MESSAGE,
+					};
+				}
+				if (err.status === 401 || err.status === 403) {
+					return {
+						ok: false,
+						reason: 'forbidden',
+						message: FORBIDDEN_MESSAGE,
+					};
+				}
+			}
+			return {
+				ok: false,
+				reason: 'unexpected',
+				message: err instanceof Error ? err.message : String(err),
+			};
+		}
+
+		const updatedOption = response[GUTENBERG_EXPERIMENTS_OPTION] as
+			Record<string, unknown> | undefined;
+		if (updatedOption?.[RTC_EXPERIMENT_ID] !== true) {
+			return {
+				ok: false,
+				reason: 'unexpected',
+				message:
+					'WordPress accepted the setting but it did not persist.',
+			};
+		}
+
+		return { ok: true };
+	}
+
+	/**
 	 * Produce a human-friendly error message for common failure modes.
 	 */
 	private formatErrorMessage(
@@ -463,11 +602,7 @@ export class WordPressApiClient {
 		}
 
 		if (status === 404 && path.startsWith('/wp-sync/')) {
-			return (
-				'Collaborative editing is not enabled. ' +
-				'Enable it in Settings \u2192 Writing in your WordPress admin, then try again. ' +
-				'(Requires WordPress 7.0 or later.)'
-			);
+			return collaborationGuidance(this.siteUrl);
 		}
 
 		return `WordPress API error ${status}: ${body}`;

@@ -287,12 +287,10 @@ export default function PrePublishPanel() {
 			) as number),
 			currentCategoryIds:
 				(editor.getEditedPostAttribute('categories') as
-					| number[]
-					| undefined) ?? [],
+					number[] | undefined) ?? [],
 			currentTagIds:
 				(editor.getEditedPostAttribute('tags') as
-					| number[]
-					| undefined) ?? [],
+					number[] | undefined) ?? [],
 		};
 	}, []);
 

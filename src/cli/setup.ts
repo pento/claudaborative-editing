@@ -11,6 +11,16 @@ import {
 	WordPressApiError,
 } from '../wordpress/api-client.js';
 import {
+	collaborationGuidance,
+	describeCollaborationState,
+	experimentsUrl,
+	isGutenbergVersionSupported,
+	EXPERIMENTS_MENU,
+	MIN_GUTENBERG_VERSION,
+	RTC_EXPERIMENT_LABEL,
+	SYNC_BLOCKED_HINT,
+} from '../wordpress/collaboration.js';
+import {
 	startAuthFlow,
 	buildManualAuthUrl,
 	openBrowserDefault,
@@ -39,6 +49,22 @@ export interface SetupDeps {
 	error: (message: string) => void;
 	exit: (code: number) => never;
 	cleanup: () => void;
+	/**
+	 * Whether the process can prompt interactively. Gates the "enable the
+	 * RTC experiment now?" offer (decision 15): a scripted/non-TTY run
+	 * prints the URL and exits instead of hanging on rl.question.
+	 */
+	isInteractive: boolean;
+	/**
+	 * Cancel a pending readline question so a later `prompt()` call isn't
+	 * silently ignored. `defaultDeps()` shares one `readline.Interface`,
+	 * and Node's `Interface.question()` drops a new question while one is
+	 * already pending (it just re-prompts the old one) rather than queuing
+	 * it. Needed after the browser-auth "Press Enter to use manual"
+	 * question is left pending when the callback wins instead. No-op when
+	 * omitted (tests inject deps directly, so it never applies there).
+	 */
+	cancelPendingPrompt?: () => void;
 	/** Override auth flow for testing */
 	openAuth?: (
 		siteUrl: string,
@@ -162,6 +188,12 @@ function defaultDeps(): SetupDeps {
 		cleanup: () => {
 			closeRl();
 		},
+		// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-conversion -- @types/node declares isTTY as `boolean`, but it's `undefined` on non-TTY stdin at runtime (decision 15).
+		isInteractive: Boolean(process.stdin.isTTY),
+		cancelPendingPrompt: () => {
+			closeRl();
+			reopenRl();
+		},
 	};
 }
 /* v8 ignore stop */
@@ -180,8 +212,12 @@ export async function runSetup(
 	deps.log('============================');
 	deps.log('');
 	deps.log('Prerequisites:');
-	deps.log('  - WordPress 7.0+ with collaborative editing enabled');
-	deps.log('    (Settings → Writing in your WordPress admin)');
+	deps.log(
+		`  - The Gutenberg plugin (${MIN_GUTENBERG_VERSION} or later) with the "${RTC_EXPERIMENT_LABEL}"`
+	);
+	deps.log(
+		`    experiment turned on (${EXPERIMENTS_MENU} in your WordPress admin)`
+	);
 	deps.log('');
 
 	// 1. Collect credentials (browser or manual)
@@ -305,6 +341,10 @@ async function collectBrowserCredentials(
 		}
 
 		if (result?.credentials) {
+			// The 'Press Enter to use the manual process' question above is
+			// still pending — cancel it so a later prompt() (e.g. the RTC
+			// experiment y/N offer, or "entry already exists") isn't ignored.
+			deps.cancelPendingPrompt?.();
 			deps.log('  Credentials received automatically.');
 			return result.credentials;
 		}
@@ -390,19 +430,102 @@ async function validateCredentials(
 		deps.log('  ✓ Collaborative editing endpoint available');
 	} catch (err) {
 		if (err instanceof WordPressApiError && err.status === 404) {
-			deps.log('');
-			deps.error(
-				'Collaborative editing is not available.\n' +
-					'  Requires WordPress 7.0 or later, or the Gutenberg plugin 22.8 or later.\n' +
-					'  If using WordPress 7.0+, enable collaborative editing in Settings → Writing.'
-			);
-			deps.exit(1);
+			await handleMissingSyncEndpoint(deps, client, credentials.siteUrl);
+			return;
 		}
 		if (err instanceof WordPressApiError) {
 			deps.error(err.message);
 		} else {
 			deps.error('Could not validate the sync endpoint.');
 		}
+		deps.exit(1);
+	}
+}
+
+/**
+ * Handle a 404 on the sync endpoint: diagnose why (via the companion
+ * plugin's `/wpce/v1/status` when it's present), and — only for a user who
+ * can act on it, and only after explicit consent — offer to turn on the
+ * RTC experiment via `POST /wp/v2/settings` (decisions 1 and 14).
+ */
+async function handleMissingSyncEndpoint(
+	deps: SetupDeps,
+	client: WordPressApiClient,
+	siteUrl: string
+): Promise<void> {
+	const collab = await client.getCollaborationStatus();
+	deps.log('');
+	deps.error(
+		collab
+			? describeCollaborationState(collab, siteUrl)
+			: collaborationGuidance(siteUrl)
+	);
+
+	// The route exists but the POST still 404s (proxy or filter) — nothing
+	// to enable. The diagnosis above reads "…is enabled" in this case, so
+	// say what actually went wrong before giving up.
+	if (collab?.sync_endpoint_registered) {
+		deps.log(`  ${SYNC_BLOCKED_HINT}`);
+		deps.exit(1);
+	}
+
+	// The settings API cannot install/activate Gutenberg or update its version.
+	if (
+		collab &&
+		(!collab.gutenberg_active ||
+			!isGutenbergVersionSupported(collab.gutenberg_version))
+	) {
+		deps.exit(1);
+	}
+
+	// Gutenberg reports the experiment as already on, yet the route is still
+	// missing. Turning it on again cannot help, so don't offer to.
+	if (collab?.collaboration_enabled) {
+		deps.log(`  ${SYNC_BLOCKED_HINT}`);
+		deps.exit(1);
+	}
+
+	// The diagnosis already said "Ask an administrator".
+	if (collab && !collab.can_manage_options) {
+		deps.exit(1);
+	}
+
+	if (!deps.isInteractive) {
+		deps.log(
+			`  Enable it at ${experimentsUrl(siteUrl)}, then run setup again.`
+		);
+		deps.exit(1);
+	}
+
+	const answer = await deps.prompt(
+		`Enable the "${RTC_EXPERIMENT_LABEL}" experiment now? (y/N): `
+	);
+	if (!/^[yY]/.test(answer)) {
+		deps.log(
+			`  Enable it at ${experimentsUrl(siteUrl)}, then run setup again.`
+		);
+		deps.exit(1);
+	}
+
+	const result = await client.enableRealTimeCollaborationExperiment();
+	if (!result.ok) {
+		deps.error(result.message);
+		if (result.reason === 'forbidden') {
+			deps.log(
+				'  Ask an administrator to enable it, then run setup again.'
+			);
+		}
+		deps.exit(1);
+	}
+	deps.log('  ✓ Real-time collaboration experiment enabled');
+
+	try {
+		await client.validateSyncEndpoint();
+		deps.log('  ✓ Collaborative editing endpoint available');
+	} catch {
+		deps.error(
+			'The experiment is enabled but the sync endpoint is still unavailable. Check that Gutenberg is active, then run setup again.'
+		);
 		deps.exit(1);
 	}
 }

@@ -8,7 +8,6 @@ import {
 	fakePost,
 } from './helpers.js';
 import { assertDefined } from '../../test-utils.js';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { SessionManager } from '../../../src/session/session-manager.js';
 
 describe('edit tools', () => {
@@ -23,11 +22,7 @@ describe('edit tools', () => {
 			post: fakePost,
 			blockContent: '[0] core/paragraph\n  "Updated content"',
 		});
-		registerToolDefinitions(
-			server as unknown as McpServer,
-			session,
-			editTools
-		);
+		registerToolDefinitions(server, session, editTools);
 	});
 
 	it('registers all edit tools', () => {
@@ -160,11 +155,7 @@ describe('edit tools', () => {
 				},
 			});
 			const partialServer = createMockServer();
-			registerToolDefinitions(
-				partialServer as unknown as McpServer,
-				partialSession,
-				editTools
-			);
+			registerToolDefinitions(partialServer, partialSession, editTools);
 
 			const tool =
 				partialServer.registeredTools.get('wp_edit_block_text');
@@ -203,11 +194,7 @@ describe('edit tools', () => {
 				},
 			});
 			const failServer = createMockServer();
-			registerToolDefinitions(
-				failServer as unknown as McpServer,
-				failSession,
-				editTools
-			);
+			registerToolDefinitions(failServer, failSession, editTools);
 
 			const tool = failServer.registeredTools.get('wp_edit_block_text');
 			assertDefined(tool);
@@ -272,11 +259,7 @@ describe('edit tools', () => {
 				},
 			});
 			const multiServer = createMockServer();
-			registerToolDefinitions(
-				multiServer as unknown as McpServer,
-				multiSession,
-				editTools
-			);
+			registerToolDefinitions(multiServer, multiSession, editTools);
 
 			const tool = multiServer.registeredTools.get('wp_edit_block_text');
 			assertDefined(tool);

@@ -1,8 +1,8 @@
 {
 	"$schema": "./node_modules/knip/schema-jsonc.json",
-	// System binaries invoked from scripts, not provided by any npm package:
-	// `composer` (PHP toolchain) and `claude` (the Claude Code CLI).
-	"ignoreBinaries": ["composer", "claude"],
+	// System binary invoked from scripts, not provided by any npm package:
+	// `composer` (PHP toolchain).
+	"ignoreBinaries": ["composer"],
 	"workspaces": {
 		".": {
 			"project": [

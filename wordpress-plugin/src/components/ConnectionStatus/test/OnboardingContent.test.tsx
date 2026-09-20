@@ -42,6 +42,12 @@ jest.mock('@wordpress/components', () => {
 				'data-size': size,
 			}),
 		Spinner: () => createElement('span', { 'data-testid': 'spinner' }),
+		Notice: ({ children, className }: any) =>
+			createElement(
+				'div',
+				{ 'data-testid': 'notice', className },
+				children
+			),
 	};
 });
 
@@ -158,6 +164,51 @@ describe('OnboardingContent', () => {
 			expect(
 				screen.queryByText('Sign up at claudaborative.cloud')
 			).toBeNull();
+		});
+	});
+
+	describe('collaboration notice', () => {
+		it('renders the CollaborationNotice heading when RTC is disabled', () => {
+			(window as any).wpceInitialState = {
+				collaboration: {
+					gutenbergActive: true,
+					collaborationEnabled: false,
+					canManageOptions: true,
+					experimentsUrl:
+						'https://example.com/wp-admin/options-general.php?page=experiments-wp-admin',
+				},
+			};
+
+			render(<OnboardingContent />);
+
+			expect(
+				screen.getByText(
+					'Real-time collaboration is not enabled on this site, so Claudaborative Editing cannot connect.'
+				)
+			).toBeTruthy();
+		});
+
+		it('also shows the notice while cloud settings are connecting', () => {
+			(window as any).wpceInitialState = {
+				cloudUrl: 'https://claudaborative.cloud',
+				cloudApiKey: 'key-abc-123',
+				collaboration: {
+					gutenbergActive: true,
+					collaborationEnabled: false,
+					canManageOptions: true,
+					experimentsUrl:
+						'https://example.com/wp-admin/options-general.php?page=experiments-wp-admin',
+				},
+			};
+
+			render(<OnboardingContent />);
+
+			expect(
+				screen.getByText(
+					'Real-time collaboration is not enabled on this site, so Claudaborative Editing cannot connect.'
+				)
+			).toBeTruthy();
+			expect(screen.getByTestId('spinner')).toBeTruthy();
 		});
 	});
 });

@@ -83,8 +83,7 @@ export function yMapToBlock(ymap: Y.Map<unknown>): Block {
 
 	// Read inner blocks recursively
 	const innerBlocksArray = ymap.get('innerBlocks') as
-		| Y.Array<Y.Map<unknown>>
-		| undefined;
+		Y.Array<Y.Map<unknown>> | undefined;
 	const innerBlocks: Block[] = [];
 	if (innerBlocksArray) {
 		for (let i = 0; i < innerBlocksArray.length; i++) {

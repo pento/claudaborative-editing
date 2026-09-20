@@ -22,7 +22,9 @@
 		{
 			"step": "setSiteOptions",
 			"options": {
-				"wp_collaboration_enabled": 1
+				"gutenberg-experiments": {
+					"gutenberg-real-time-collaboration": true
+				}
 			}
 		}
 	]

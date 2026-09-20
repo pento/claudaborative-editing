@@ -10,6 +10,7 @@ import type {
 } from '../../src/wordpress/types.js';
 import type { SyncCallbacks } from '../../src/wordpress/sync-client.js';
 import { WordPressApiError } from '../../src/wordpress/api-client.js';
+import type { CollaborationStatus } from '../../src/wordpress/collaboration.js';
 import { assertDefined } from '../test-utils.js';
 
 // --- Mock the WordPress API client ---
@@ -35,6 +36,11 @@ const mockCreateNote = vi.fn<() => Promise<WPNote>>();
 const mockUpdateNote = vi.fn<() => Promise<WPNote>>();
 const mockDeleteNote = vi.fn<() => Promise<void>>();
 const mockRequest = vi.fn();
+const mockGetCollaborationStatus =
+	vi.fn<() => Promise<CollaborationStatus | null>>();
+const mockCreateUrl = vi
+	.fn<(path: string) => string>()
+	.mockImplementation((path: string) => `https://example.com${path}`);
 
 vi.mock('../../src/wordpress/api-client.js', () => {
 	// eslint-disable-next-line @typescript-eslint/no-shadow -- must match the real export name
@@ -73,6 +79,8 @@ vi.mock('../../src/wordpress/api-client.js', () => {
 				this.createNote = mockCreateNote;
 				this.updateNote = mockUpdateNote;
 				this.deleteNote = mockDeleteNote;
+				this.getCollaborationStatus = mockGetCollaborationStatus;
+				this.createUrl = mockCreateUrl;
 				this.request = mockRequest;
 			}),
 			{
@@ -274,6 +282,70 @@ describe('SessionManager', () => {
 			);
 		});
 
+		it('enriches a 404 on the sync endpoint with the collaboration diagnosis when the plugin reports one', async () => {
+			mockValidateConnection.mockResolvedValue(fakeUser);
+			mockValidateSyncEndpoint.mockRejectedValue(
+				new WordPressApiError('Not Found', 404, '')
+			);
+			mockGetCollaborationStatus.mockResolvedValue({
+				gutenberg_active: true,
+				gutenberg_version: '23.5.0',
+				collaboration_enabled: false,
+				sync_endpoint_registered: false,
+				can_manage_options: true,
+				experiments_url:
+					'https://example.com/wp-admin/options-general.php?page=experiments-wp-admin',
+			});
+
+			await expect(session.connect(fakeConfig)).rejects.toThrow(
+				'23.8 or later is required'
+			);
+			expect(session.getState()).toBe('disconnected');
+		});
+
+		it('explains a 404 that persists even though the sync route is registered', async () => {
+			mockValidateConnection.mockResolvedValue(fakeUser);
+			mockValidateSyncEndpoint.mockRejectedValue(
+				new WordPressApiError('Not Found', 404, '')
+			);
+			mockGetCollaborationStatus.mockResolvedValue({
+				gutenberg_active: true,
+				gutenberg_version: '24.0.0',
+				collaboration_enabled: true,
+				sync_endpoint_registered: true,
+				can_manage_options: true,
+				experiments_url: null,
+			});
+
+			await expect(session.connect(fakeConfig)).rejects.toThrow(
+				'may be blocking POST /wp-sync/v1/updates'
+			);
+		});
+
+		it('keeps the original error when the collaboration probe returns null', async () => {
+			mockValidateConnection.mockResolvedValue(fakeUser);
+			mockValidateSyncEndpoint.mockRejectedValue(
+				new WordPressApiError('Not Found', 404, '')
+			);
+			mockGetCollaborationStatus.mockResolvedValue(null);
+
+			await expect(session.connect(fakeConfig)).rejects.toThrow(
+				'Not Found'
+			);
+		});
+
+		it('does not probe collaboration status for a non-404 sync endpoint failure', async () => {
+			mockValidateConnection.mockResolvedValue(fakeUser);
+			mockValidateSyncEndpoint.mockRejectedValue(
+				new WordPressApiError('Internal Server Error', 500, '')
+			);
+
+			await expect(session.connect(fakeConfig)).rejects.toThrow(
+				'Internal Server Error'
+			);
+			expect(mockGetCollaborationStatus).not.toHaveBeenCalled();
+		});
+
 		it('fetches block types during connect', async () => {
 			mockValidateConnection.mockResolvedValue(fakeUser);
 			mockValidateSyncEndpoint.mockResolvedValue(undefined);
@@ -412,6 +484,34 @@ describe('SessionManager', () => {
 			const state = callbacks.getAwarenessState();
 			expect(state).toBeDefined();
 			expect(state).toHaveProperty('collaboratorInfo');
+		});
+	});
+
+	describe('getLastConnectError()', () => {
+		it('is null before any connect attempt', () => {
+			expect(session.getLastConnectError()).toBeNull();
+		});
+
+		it('is the failure message after a failed connect()', async () => {
+			mockValidateConnection.mockRejectedValue(
+				new Error('401 Unauthorized')
+			);
+
+			await expect(session.connect(fakeConfig)).rejects.toThrow();
+
+			expect(session.getLastConnectError()).toBe('401 Unauthorized');
+		});
+
+		it('is null again after a subsequent successful connect()', async () => {
+			mockValidateConnection.mockRejectedValueOnce(
+				new Error('401 Unauthorized')
+			);
+			await expect(session.connect(fakeConfig)).rejects.toThrow();
+			expect(session.getLastConnectError()).not.toBeNull();
+
+			await connectSession(session);
+
+			expect(session.getLastConnectError()).toBeNull();
 		});
 	});
 
@@ -3790,6 +3890,7 @@ describe('SessionManager', () => {
 					protocolVersion: 1,
 					transport: 'sse',
 					protocolWarning: null,
+					collaboration: null,
 				});
 			});
 
@@ -4130,7 +4231,49 @@ describe('SessionManager', () => {
 					protocolVersion: 3,
 					transport: 'polling',
 					protocolWarning: null,
+					collaboration: null,
 				});
+			});
+
+			it('includes collaboration status when the plugin reports it', async () => {
+				const collaboration: CollaborationStatus = {
+					gutenberg_active: true,
+					gutenberg_version: '24.0.0',
+					collaboration_enabled: true,
+					sync_endpoint_registered: true,
+					can_manage_options: true,
+					experiments_url: null,
+				};
+				mockCommandHandlerStart.mockResolvedValue(true);
+				mockCommandHandlerGetPluginStatus.mockReturnValue({
+					version: '2.1.0',
+					protocol_version: 3,
+					mcp_connected: true,
+					mcp_last_seen_at: '2026-01-01T00:00:00',
+					collaboration,
+				});
+				mockCommandHandlerGetTransport.mockReturnValue('polling');
+
+				await connectSession(session);
+
+				expect(session.getPluginInfo()?.collaboration).toEqual(
+					collaboration
+				);
+			});
+
+			it('reports collaboration as null for an older plugin without the field', async () => {
+				mockCommandHandlerStart.mockResolvedValue(true);
+				mockCommandHandlerGetPluginStatus.mockReturnValue({
+					version: '1.0.0',
+					protocol_version: 1,
+					mcp_connected: false,
+					mcp_last_seen_at: null,
+				});
+				mockCommandHandlerGetTransport.mockReturnValue('sse');
+
+				await connectSession(session);
+
+				expect(session.getPluginInfo()?.collaboration).toBeNull();
 			});
 
 			it('returns null when no command handler exists', async () => {

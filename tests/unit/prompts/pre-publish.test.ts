@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import { createMockServer, createMockSession, fakePost } from './helpers.js';
 import { prePublishPrompts } from '../../../src/prompts/pre-publish.js';
 import { registerPromptDefinitions } from '../../../src/prompts/registry.js';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { SessionManager } from '../../../src/session/session-manager.js';
 import type { RegisteredPrompt } from './helpers.js';
 import { assertDefined } from '../../test-utils.js';
@@ -12,11 +11,7 @@ describe('pre-publish-check', () => {
 		it('instructs to connect first', async () => {
 			const server = createMockServer();
 			const session = createMockSession({ state: 'disconnected' });
-			registerPromptDefinitions(
-				server as unknown as McpServer,
-				session,
-				prePublishPrompts
-			);
+			registerPromptDefinitions(server, session, prePublishPrompts);
 
 			const prompt = server.registeredPrompts.get('pre-publish-check');
 			assertDefined(prompt);
@@ -30,11 +25,7 @@ describe('pre-publish-check', () => {
 		it('instructs to open a post first', async () => {
 			const server = createMockServer();
 			const session = createMockSession({ state: 'connected' });
-			registerPromptDefinitions(
-				server as unknown as McpServer,
-				session,
-				prePublishPrompts
-			);
+			registerPromptDefinitions(server, session, prePublishPrompts);
 
 			const prompt = server.registeredPrompts.get('pre-publish-check');
 			assertDefined(prompt);
@@ -58,11 +49,7 @@ describe('pre-publish-check', () => {
 				post: fakePost,
 				postContent,
 			});
-			registerPromptDefinitions(
-				server as unknown as McpServer,
-				session,
-				prePublishPrompts
-			);
+			registerPromptDefinitions(server, session, prePublishPrompts);
 			const prePublishPrompt =
 				server.registeredPrompts.get('pre-publish-check');
 			assertDefined(prePublishPrompt);

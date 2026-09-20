@@ -3,7 +3,7 @@ Contributors: pento
 Donate link: https://github.com/sponsors/pento
 Tags: ai, collaborative-editing, gutenberg, claude
 Requires at least: 6.9
-Tested up to: 7.0
+Tested up to: 7.1
 Stable tag: 0.5.2
 Requires PHP: 7.4
 License: GPLv2 or later
@@ -31,7 +31,7 @@ If you don't want to use Claude Code, then a [Claudaborative Cloud](https://clau
 
 = What version of WordPress is required? =
 
-WordPress 7.0 or later for a standalone block editor experience, or WordPress 6.9 and Gutenberg 22.8+ if you're using the Gutenberg plugin. Collaborative editing must be enabled in Writing settings.
+WordPress 6.9 or later, plus the Gutenberg plugin 23.8 or later with the "Enable real-time collaboration" experiment turned on (Settings → Experiments). WordPress core does not currently ship real-time collaboration.
 
 = How do I set up the MCP server? =
 

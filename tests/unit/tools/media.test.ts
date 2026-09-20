@@ -1,5 +1,4 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { mediaTools } from '../../../src/tools/media.js';
 import { registerToolDefinitions } from '../../../src/tools/registry.js';
 import type { SessionManager } from '../../../src/session/session-manager.js';
@@ -23,11 +22,7 @@ describe('media tools', () => {
 			user: fakeUser,
 			post: fakePost,
 		});
-		registerToolDefinitions(
-			server as unknown as McpServer,
-			session,
-			mediaTools
-		);
+		registerToolDefinitions(server, session, mediaTools);
 	});
 
 	it('registers wp_upload_media tool', () => {

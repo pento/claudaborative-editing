@@ -19,6 +19,7 @@ import type {
 	WPUser,
 } from '../../../src/wordpress/types.js';
 import type { CollaboratorInfo } from '../../../src/yjs/types.js';
+import type { CollaborationStatus } from '../../../src/wordpress/collaboration.js';
 
 export interface RegisteredTool {
 	name: string;
@@ -151,7 +152,9 @@ export function createMockSession(
 			protocolVersion: number;
 			transport: string;
 			protocolWarning?: string | null;
+			collaboration?: CollaborationStatus | null;
 		} | null;
+		lastConnectError?: string | null;
 	} = {}
 ): SessionManager {
 	const state = overrides.state ?? 'disconnected';
@@ -267,10 +270,14 @@ export function createMockSession(
 			overrides.pluginInfo
 				? {
 						protocolWarning: null,
+						collaboration: null,
 						...overrides.pluginInfo,
 					}
 				: null
 		),
+		getLastConnectError: vi
+			.fn()
+			.mockReturnValue(overrides.lastConnectError ?? null),
 		apiClient: {
 			createUrl: vi
 				.fn()

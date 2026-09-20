@@ -24,7 +24,11 @@ export function debugLog(category: string, ...args: unknown[]): void {
 			if (a === null || a === undefined) return '';
 			if (typeof a === 'object') return JSON.stringify(a);
 			if (typeof a === 'string') return a;
-			return String(a as string | number | boolean);
+			// The guards above leave only primitives and functions, all of which
+			// stringify meaningfully. A cast can't be used to narrow here because
+			// String() accepts unknown, so no-unnecessary-type-assertion rejects it.
+			// eslint-disable-next-line @typescript-eslint/no-base-to-string -- see above
+			return String(a);
 		})
 		.join(' ');
 
