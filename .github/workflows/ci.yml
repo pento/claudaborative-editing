@@ -141,6 +141,24 @@ jobs:
             - name: Run PHPUnit with coverage
               run: npm run test:plugin-php:coverage
 
+            # PHPUnit only warns when Xdebug is loaded without coverage mode, so
+            # a run with no coverage at all still exits 0 and produces an empty
+            # report. Fail here instead of silently reporting 0%.
+            - name: Assert coverage was collected
+              run: |
+                  file=wordpress-plugin/coverage/clover.xml
+                  if [ ! -f "$file" ]; then
+                      echo "::error::$file was not produced — the coverage run did not complete."
+                      exit 1
+                  fi
+                  metrics=$(grep -o '<metrics files="[^>]*>' "$file" | tail -1)
+                  covered=$(printf '%s' "$metrics" | grep -o 'coveredstatements="[0-9]*"' | grep -o '[0-9]*')
+                  echo "Covered statements: ${covered:-0}"
+                  if [ "${covered:-0}" -le 0 ]; then
+                      echo "::error::$file reports no covered statements — Xdebug was not in coverage mode. See the xdebug.mode step in playground/phpunit.blueprint.json."
+                      exit 1
+                  fi
+
             - name: Convert Clover XML to LCOV
               uses: andstor/clover2lcov-action@v1
               with:
