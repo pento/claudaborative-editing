@@ -20,7 +20,7 @@ A WordPress plugin that adds AI action controls to the Gutenberg editor for use 
 ### Prerequisites
 
 - Node.js `^22.22.2 || >=24.15.0`
-- npm 12 or newer (`npm install` hard-fails on npm 11)
+- npm 12 or newer (npm 11 builds a different tree from the same lockfile; `devEngines` warns rather than failing the install)
 - Composer
 
 No Docker required. PHPUnit and end-to-end tests run against

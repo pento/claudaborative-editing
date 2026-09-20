@@ -518,6 +518,72 @@ describe('setup wizard', () => {
 			expect(fetchMock).toHaveBeenCalledTimes(5);
 		});
 
+		it('exits without prompting when the experiment is already enabled but the route is missing', async () => {
+			fetchMock
+				.mockResolvedValueOnce(mockDiscoveryResponse())
+				.mockResolvedValueOnce(mockAuthSupportResponse())
+				.mockResolvedValueOnce(
+					mockResponse({
+						id: 1,
+						name: 'admin',
+						slug: 'admin',
+						avatar_urls: {},
+					})
+				)
+				.mockResolvedValueOnce(
+					mockResponse(
+						{ code: 'rest_no_route', message: 'No route' },
+						{ status: 404, statusText: 'Not Found' }
+					)
+				)
+				.mockResolvedValueOnce(
+					mockResponse({
+						version: '0.5.2',
+						protocol_version: 1,
+						mcp_connected: false,
+						mcp_last_seen_at: null,
+						collaboration: {
+							gutenberg_active: true,
+							gutenberg_version: '24.0.0',
+							collaboration_enabled: true,
+							sync_endpoint_registered: false,
+							can_manage_options: true,
+							experiments_url: null,
+						},
+					})
+				);
+
+			const { deps, errors, logs } = createTestDeps(
+				['https://example.com', 'admin', 'xxxx xxxx xxxx'],
+				{
+					detectClients: () => defaultClientList(),
+					hasConfig: () => false,
+				}
+			);
+
+			await expect(runSetup(deps, { manual: true })).rejects.toThrow(
+				SetupExitError
+			);
+			expect(errors.join('\n')).toContain(
+				'the sync endpoint (/wp-sync/v1/updates) is not registered'
+			);
+			expect(logs.join('\n')).toContain(
+				'may be blocking POST /wp-sync/v1/updates'
+			);
+			// Enabling an already-enabled experiment cannot register the
+			// route, so the wizard must not offer to.
+			expect(logs.join('\n')).not.toContain(
+				'Enable the "Enable real-time collaboration" experiment now?'
+			);
+			// Never reads site settings on this path.
+			expect(
+				fetchMock.mock.calls.some((call) =>
+					String(call[0]).includes('/wp/v2/settings')
+				)
+			).toBe(false);
+			expect(fetchMock).toHaveBeenCalledTimes(5);
+		});
+
 		it('exits without prompting when Gutenberg is not active', async () => {
 			fetchMock
 				.mockResolvedValueOnce(mockDiscoveryResponse())

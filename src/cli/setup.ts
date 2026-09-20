@@ -478,6 +478,13 @@ async function handleMissingSyncEndpoint(
 		deps.exit(1);
 	}
 
+	// Gutenberg reports the experiment as already on, yet the route is still
+	// missing. Turning it on again cannot help, so don't offer to.
+	if (collab?.collaboration_enabled) {
+		deps.log(`  ${SYNC_BLOCKED_HINT}`);
+		deps.exit(1);
+	}
+
 	// The diagnosis already said "Ask an administrator".
 	if (collab && !collab.can_manage_options) {
 		deps.exit(1);
