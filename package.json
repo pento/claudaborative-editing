@@ -76,7 +76,7 @@
 		"pretest:plugin-php": "bash wordpress-plugin/bin/fetch-wp-tests-lib.sh && (cd wordpress-plugin && composer install --no-interaction --prefer-dist) && npm --prefix wordpress-plugin run prebuild",
 		"test:plugin-php": "NODE_USE_ENV_PROXY=1 wp-playground-cli php --mount=./wordpress-plugin:/wordpress/wp-content/plugins/claudaborative-editing --mount=./wordpress-plugin/.wp-tests-lib:/wordpress-phpunit --blueprint=./playground/phpunit.blueprint.json -- /wordpress/wp-content/plugins/claudaborative-editing/vendor/bin/phpunit -c /wordpress/wp-content/plugins/claudaborative-editing/phpunit.xml.dist",
 		"pretest:plugin-php:coverage": "npm run pretest:plugin-php",
-		"test:plugin-php:coverage": "NODE_USE_ENV_PROXY=1 wp-playground-cli php --xdebug --mount=./wordpress-plugin:/wordpress/wp-content/plugins/claudaborative-editing --mount=./wordpress-plugin/.wp-tests-lib:/wordpress-phpunit --blueprint=./playground/phpunit.blueprint.json -- /wordpress/wp-content/plugins/claudaborative-editing/vendor/bin/phpunit -c /wordpress/wp-content/plugins/claudaborative-editing/phpunit.xml.dist",
+		"test:plugin-php:coverage": "NODE_USE_ENV_PROXY=1 wp-playground-cli php --xdebug --mount=./wordpress-plugin:/wordpress/wp-content/plugins/claudaborative-editing --mount=./wordpress-plugin/.wp-tests-lib:/wordpress-phpunit --mount=./playground/xdebug-coverage.ini:/internal/shared/extensions/zz-xdebug-coverage.ini --blueprint=./playground/phpunit.blueprint.json -- /wordpress/wp-content/plugins/claudaborative-editing/vendor/bin/phpunit -c /wordpress/wp-content/plugins/claudaborative-editing/phpunit.xml.dist",
 		"test:watch": "vitest",
 		"typecheck": "tsc --noEmit"
 	},

@@ -13,10 +13,6 @@
 			"pluginPath": "claudaborative-editing/claudaborative-editing.php"
 		},
 		{
-			"step": "runPHP",
-			"code": "<?php $ini = '/internal/shared/extensions/xdebug.ini'; if (extension_loaded('xdebug')) { if (!is_file($ini)) { throw new Exception('xdebug coverage: ' . $ini . ' is missing, so xdebug.mode cannot be switched to coverage (scanned ini files: ' . php_ini_scanned_files() . ')'); } file_put_contents($ini, PHP_EOL . 'xdebug.mode=coverage' . PHP_EOL, FILE_APPEND); $contents = (string) file_get_contents($ini); if (strpos($contents, 'xdebug.mode=coverage') === false) { throw new Exception('xdebug coverage: appending to ' . $ini . ' did not stick; contents are: ' . $contents); } } ?>"
-		},
-		{
 			"step": "defineWpConfigConsts",
 			"consts": {
 				"WP_TESTS_CONFIG_FILE_PATH": "/wordpress/wp-content/plugins/claudaborative-editing/tests/wp-tests-config.php"

@@ -155,7 +155,7 @@ jobs:
                   covered=$(printf '%s' "$metrics" | grep -o 'coveredstatements="[0-9]*"' | grep -o '[0-9]*')
                   echo "Covered statements: ${covered:-0}"
                   if [ "${covered:-0}" -le 0 ]; then
-                      echo "::error::$file reports no covered statements — Xdebug was not in coverage mode. See the xdebug.mode step in playground/phpunit.blueprint.json."
+                      echo "::error::$file reports no covered statements — Xdebug was not in coverage mode. See playground/xdebug-coverage.ini."
                       exit 1
                   fi
 
