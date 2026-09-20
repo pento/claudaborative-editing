@@ -67,6 +67,9 @@ Source files are in the `wordpress-plugin/` directory. See the repository `READM
 
 == Changelog ==
 
+= 0.6.0 =
+* Updated minimum required WordPress version to 6.9 and Gutenberg plugin to 23.8.
+
 = 0.5.2 =
 * Added Claudaborative Cloud as a connection option, with onboarding help shown when disconnected.
 * Added a resizable Compose sidebar so the conversation panel can be widened for longer drafts.
