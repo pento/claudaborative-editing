@@ -14,7 +14,7 @@
 		},
 		{
 			"step": "runPHP",
-			"code": "<?php $m='xdebug.mode=coverage'; $f=array_filter(array_map('trim',explode(',',(string)php_ini_scanned_files()))); $l=php_ini_loaded_file(); if($l){$f[]=$l;} $f[]='/internal/shared/extensions/xdebug.ini'; foreach(array_unique($f) as $p){ if(!is_file($p)) continue; $c=file_get_contents($p); if(stripos($c,'xdebug')===false) continue; $c=preg_replace('/^\\s*xdebug\\.mode\\s*=.*$/m',$m,$c,-1,$n); if(!$n){$c.=\"\\n\".$m.\"\\n\";} file_put_contents($p,$c); } ?>"
+			"code": "<?php $ini = '/internal/shared/extensions/xdebug.ini'; if (is_file($ini)) { file_put_contents($ini, str_replace('xdebug.mode=debug,develop', 'xdebug.mode=coverage', file_get_contents($ini))); } ?>"
 		},
 		{
 			"step": "defineWpConfigConsts",
