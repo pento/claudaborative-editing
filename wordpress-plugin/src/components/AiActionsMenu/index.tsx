@@ -36,6 +36,8 @@ import TranslateModal from '../TranslateModal';
 import SetupModal from '../SetupModal';
 import aiActionsStore from '../../store';
 import { isCloudConfigured } from '../../cloud/connect';
+import { isConversationVisible } from '../../utils/conversation-visibility';
+import { SIDEBAR_ID } from '../ConversationPanel/constants';
 
 import './style.scss';
 
@@ -67,6 +69,9 @@ export default function AiActionsMenu() {
 
 	const { submitCommand } = useDispatch(aiActionsStore);
 	const { createNotice } = useDispatch(noticesStore);
+	const { enableComplementaryArea } = useDispatch('core/interface') as {
+		enableComplementaryArea: (scope: string, id: string) => void;
+	};
 
 	// Show submission errors as toasts.
 	const prevErrorRef = useRef<string | null>(error);
@@ -83,6 +88,14 @@ export default function AiActionsMenu() {
 		isSubmitting ||
 		activeCommand !== null ||
 		isEditingOtherPost;
+
+	// A hidden conversation panel (e.g. the sidebar auto-closed when the
+	// viewport shrank below the medium breakpoint) can be reopened without
+	// losing the session — offer Resume instead of the disabled Compose item.
+	const canResume =
+		activeCommand !== null &&
+		!isEditingOtherPost &&
+		isConversationVisible(activeCommand);
 
 	const [editModalOpen, setEditModalOpen] = useState(false);
 	const [translateModalOpen, setTranslateModalOpen] = useState(false);
@@ -112,16 +125,45 @@ export default function AiActionsMenu() {
 							onClose();
 						};
 
+						const handleResume = (): void => {
+							enableComplementaryArea?.('core', SIDEBAR_ID);
+							onClose();
+						};
+
 						return (
 							<>
 								<MenuGroup className="claudaborative-editing-ai-actions-menu">
-									<MenuItem
-										info={getCommandDescription('compose')}
-										disabled={itemsDisabled}
-										onClick={() => handleSubmit('compose')}
-									>
-										{getCommandLabel('compose')}
-									</MenuItem>
+									{canResume ? (
+										<MenuItem
+											info={__(
+												'Reopen the conversation panel.',
+												'claudaborative-editing'
+											)}
+											onClick={handleResume}
+										>
+											{activeCommand?.prompt === 'compose'
+												? __(
+														'Resume composing',
+														'claudaborative-editing'
+													)
+												: __(
+														'Resume conversation',
+														'claudaborative-editing'
+													)}
+										</MenuItem>
+									) : (
+										<MenuItem
+											info={getCommandDescription(
+												'compose'
+											)}
+											disabled={itemsDisabled}
+											onClick={() =>
+												handleSubmit('compose')
+											}
+										>
+											{getCommandLabel('compose')}
+										</MenuItem>
+									)}
 								</MenuGroup>
 								<MenuGroup>
 									<MenuItem

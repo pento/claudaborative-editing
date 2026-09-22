@@ -1277,96 +1277,6 @@ describe('ConversationPanel', () => {
 		expect(cancel).not.toHaveBeenCalled();
 	});
 
-	it('still cancels a different command whose sidebar closes after a prior approve', async () => {
-		const cancel = jest.fn();
-		const enableComplementaryArea = jest.fn();
-		mockedUseDispatch.mockImplementation((storeNameOrDescriptor?: any) => {
-			if (
-				storeNameOrDescriptor === 'core/interface' ||
-				storeNameOrDescriptor?.name === 'core/interface'
-			) {
-				return {
-					enableComplementaryArea,
-					disableComplementaryArea: jest.fn(),
-				};
-			}
-			return { createNotice: jest.fn() };
-		});
-
-		const respondToCommand = jest.fn().mockResolvedValue(undefined);
-		mockedUseCommands.mockReturnValue({
-			activeCommand: {
-				id: 1,
-				prompt: 'compose',
-				status: 'awaiting_input',
-				post_id: 100,
-				result_data: {
-					messages: [
-						{
-							role: 'assistant',
-							content: 'Here is the outline.',
-							timestamp: '2026-04-06T10:00:00Z',
-						},
-					],
-					planReady: true,
-				},
-			},
-			isResponding: false,
-			respondToCommand,
-			cancel,
-		});
-
-		const getActiveComplementaryArea = jest
-			.fn()
-			.mockReturnValue(
-				'claudaborative-editing-conversation/conversation'
-			);
-		mockUseSelect(
-			new Map<unknown, Record<string, (...args: any[]) => any>>([
-				[aiActionsStore, { getCurrentPostId: () => 100 }],
-				['core/interface', { getActiveComplementaryArea }],
-			])
-		);
-
-		const { rerender } = render(<ConversationPanel />);
-		fireEvent.click(screen.getByText('Approve outline'));
-		await new Promise(process.nextTick);
-
-		// Simulates the edge case where command 1 completes before the
-		// close-watcher effect fires — the id-scoped signal is left
-		// uncleared. A *different* compose command (id 2) then opens,
-		// and the user manually cancels its sidebar. The id mismatch
-		// must let cancel() through for command 2.
-		mockedUseCommands.mockReturnValue({
-			activeCommand: {
-				id: 2,
-				prompt: 'compose',
-				status: 'awaiting_input',
-				post_id: 100,
-				result_data: {
-					messages: [
-						{
-							role: 'assistant',
-							content: 'A new outline.',
-							timestamp: '2026-04-07T10:00:00Z',
-						},
-					],
-					planReady: true,
-				},
-			},
-			isResponding: false,
-			respondToCommand,
-			cancel,
-		});
-		rerender(<ConversationPanel />);
-
-		// User closes command 2's sidebar.
-		getActiveComplementaryArea.mockReturnValue(null);
-		rerender(<ConversationPanel />);
-
-		expect(cancel).toHaveBeenCalledWith(2);
-	});
-
 	it('does not re-open the conversation sidebar on awaiting_input → running', async () => {
 		const enableComplementaryArea = jest.fn();
 		mockedUseDispatch.mockImplementation((storeNameOrDescriptor?: any) => {
@@ -1478,7 +1388,8 @@ describe('ConversationPanel', () => {
 		);
 	});
 
-	it('closes the sidebar when Cancel is clicked so the slide-out animation plays', () => {
+	it('cancels the command and closes the sidebar when Cancel is clicked', () => {
+		const cancel = jest.fn();
 		const disableComplementaryArea = jest.fn();
 		mockedUseDispatch.mockImplementation((storeNameOrDescriptor?: any) => {
 			if (
@@ -1511,17 +1422,76 @@ describe('ConversationPanel', () => {
 			},
 			isResponding: false,
 			respondToCommand: jest.fn(),
-			cancel: jest.fn(),
+			cancel,
 		});
 
 		render(<ConversationPanel />);
 
 		fireEvent.click(screen.getByText('Cancel'));
 
+		expect(cancel).toHaveBeenCalledWith(7);
 		expect(disableComplementaryArea).toHaveBeenCalledWith('core');
 	});
 
-	it('cancels the in-flight command when the sidebar becomes inactive', () => {
+	it('shows a working Cancel button while a compose command is pending', () => {
+		const cancel = jest.fn();
+		const disableComplementaryArea = jest.fn();
+		mockedUseDispatch.mockImplementation((storeNameOrDescriptor?: any) => {
+			if (
+				storeNameOrDescriptor === 'core/interface' ||
+				storeNameOrDescriptor?.name === 'core/interface'
+			) {
+				return {
+					enableComplementaryArea: jest.fn(),
+					disableComplementaryArea,
+				};
+			}
+			return { createNotice: jest.fn() };
+		});
+
+		mockedUseCommands.mockReturnValue({
+			activeCommand: {
+				id: 8,
+				prompt: 'compose',
+				status: 'pending',
+				post_id: 100,
+				result_data: null,
+			},
+			isResponding: false,
+			respondToCommand: jest.fn(),
+			cancel,
+		});
+
+		render(<ConversationPanel />);
+
+		fireEvent.click(screen.getByText('Cancel'));
+
+		expect(cancel).toHaveBeenCalledWith(8);
+		expect(disableComplementaryArea).toHaveBeenCalledWith('core');
+	});
+
+	it('does not show a Cancel button while a compose command is running', () => {
+		// The server rejects cancelling a running command, so no Cancel
+		// button is offered.
+		mockedUseCommands.mockReturnValue({
+			activeCommand: {
+				id: 8,
+				prompt: 'compose',
+				status: 'running',
+				post_id: 100,
+				result_data: null,
+			},
+			isResponding: false,
+			respondToCommand: jest.fn(),
+			cancel: jest.fn(),
+		});
+
+		render(<ConversationPanel />);
+
+		expect(screen.queryByText('Cancel')).toBeNull();
+	});
+
+	it('does not cancel the in-flight command when the sidebar becomes inactive', () => {
 		const cancel = jest.fn();
 		const activeCommand = {
 			id: 7,
@@ -1539,11 +1509,12 @@ describe('ConversationPanel', () => {
 
 		const { rerender } = render(<ConversationPanel />);
 
-		// Sidebar was open and command was in-flight — no cancel yet.
 		expect(cancel).not.toHaveBeenCalled();
 
 		// Flip the active complementary area to something else, mimicking
-		// the close button or switching to the block inspector.
+		// the close button, switching to the block inspector, or the
+		// viewport shrinking below the medium breakpoint. The command must
+		// survive so the session can be resumed from the AI Actions menu.
 		mockUseSelect(
 			new Map<unknown, Record<string, (...args: any[]) => any>>([
 				[aiActionsStore, { getCurrentPostId: () => 100 }],
@@ -1558,10 +1529,10 @@ describe('ConversationPanel', () => {
 
 		rerender(<ConversationPanel />);
 
-		expect(cancel).toHaveBeenCalledWith(7);
+		expect(cancel).not.toHaveBeenCalled();
 	});
 
-	it('cancels an awaiting_input command when the sidebar becomes inactive', () => {
+	it('does not cancel an awaiting_input command when the sidebar becomes inactive', () => {
 		const cancel = jest.fn();
 		mockedUseCommands.mockReturnValue({
 			activeCommand: {
@@ -1588,7 +1559,8 @@ describe('ConversationPanel', () => {
 
 		expect(cancel).not.toHaveBeenCalled();
 
-		// User clicks close/Cancel — sidebar becomes inactive.
+		// Sidebar becomes inactive (close button or viewport shrink) — the
+		// session stays alive for resuming.
 		mockUseSelect(
 			new Map<unknown, Record<string, (...args: any[]) => any>>([
 				[aiActionsStore, { getCurrentPostId: () => 100 }],
@@ -1603,7 +1575,7 @@ describe('ConversationPanel', () => {
 
 		rerender(<ConversationPanel />);
 
-		expect(cancel).toHaveBeenCalledWith(9);
+		expect(cancel).not.toHaveBeenCalled();
 	});
 
 	it('does not cancel a terminal command when the sidebar becomes inactive', () => {
