@@ -6,7 +6,12 @@
  * and provides a text input for the user to respond.
  *
  * The sidebar is hidden from the editor's Panels menu via CSS (see style.scss)
- * since it opens/closes automatically based on command state.
+ * since it opens automatically based on command state.
+ *
+ * Closing the sidebar (close button, viewport shrinking below the medium
+ * breakpoint, another sidebar taking the slot) only hides the panel — the
+ * command stays alive and can be reopened from the AI Actions menu's Resume
+ * item. Only the explicit Cancel button cancels the command.
  */
 
 /**
@@ -34,17 +39,16 @@ import {
 	FLOATING_NOTES_SIDEBAR,
 	ALL_NOTES_SIDEBAR,
 } from './constants';
-import { TERMINAL_STATUSES, type CommandSlug } from '#shared/commands';
+import {
+	CONVERSATIONAL_PROMPTS,
+	isConversationVisible,
+} from '../../utils/conversation-visibility';
 import type {
 	ConversationMessage,
 	ConversationResultData,
 } from '../../store/types';
 
 import './style.scss';
-
-// Command prompts that open the conversation sidebar on submit (before the
-// MCP server has produced any messages).
-const CONVERSATIONAL_PROMPTS: readonly CommandSlug[] = ['compose'];
 
 const PROCESSING_WORD_INTERVAL_MS = 2000;
 
@@ -99,14 +103,6 @@ export default function ConversationPanel() {
 	const messagesEndRef = useRef<HTMLDivElement>(null);
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 	const prevStatusRef = useRef<string | null>(null);
-	// Holds the id of the command whose approval triggered a sidebar
-	// switch, so the cancel-on-close watcher below can skip cancelling
-	// that specific command. Scoping by id (rather than a boolean)
-	// ensures a stale signal can't leak into a future command's close
-	// event — if the approved command transitions to terminal before
-	// the watcher fires, the id simply won't match any subsequent
-	// active command.
-	const postApproveSwitchCommandIdRef = useRef<number | null>(null);
 
 	const isLargeViewport = useViewportMatch('medium');
 
@@ -129,18 +125,7 @@ export default function ConversationPanel() {
 	const isConversationalCommand = !!(
 		activeCommand && CONVERSATIONAL_PROMPTS.includes(activeCommand.prompt)
 	);
-	const isRunningWithConversation =
-		isRunning &&
-		activeCommand.result_data &&
-		Array.isArray(activeCommand.result_data.messages);
-
-	// Conversational commands open the sidebar the moment they're pending,
-	// so the user sees the processing indicator instead of staring at
-	// nothing while the MCP server spins up.
-	const shouldShow =
-		isAwaitingInput ||
-		isRunningWithConversation ||
-		(isInFlight && isConversationalCommand);
+	const shouldShow = isConversationVisible(activeCommand);
 	const shouldShowProcessing = shouldShow && isInFlight && !isAwaitingInput;
 
 	const conversationData = activeCommand
@@ -222,34 +207,6 @@ export default function ConversationPanel() {
 		}
 	}, [isAwaitingInput]);
 
-	// Close actions (built-in close button, Cancel button, switching to
-	// another sidebar) all route through `disableComplementaryArea`, which
-	// flips `isSidebarActive` false. When that happens while a non-terminal
-	// command is loaded, cancel it — one watcher for every close path.
-	const isCommandActive = !!(
-		activeCommand &&
-		!TERMINAL_STATUSES.includes(
-			activeCommand.status as (typeof TERMINAL_STATUSES)[number]
-		)
-	);
-	const prevSidebarActiveRef = useRef(isSidebarActive);
-	useEffect(() => {
-		const wasActive = prevSidebarActiveRef.current;
-		prevSidebarActiveRef.current = isSidebarActive;
-		if (wasActive && !isSidebarActive && activeCommand && isCommandActive) {
-			// Approve intentionally switches away to the notes sidebar while
-			// the command is still running the scaffold — don't treat that
-			// as a user-initiated close and cancel the command. Match by
-			// id so an unconsumed signal from a prior approve can't cause
-			// an unrelated command's close to silently skip cancel.
-			if (postApproveSwitchCommandIdRef.current === activeCommand.id) {
-				postApproveSwitchCommandIdRef.current = null;
-				return;
-			}
-			cancel(activeCommand.id);
-		}
-	}, [isSidebarActive, activeCommand, isCommandActive, cancel]);
-
 	useEffect(() => {
 		if (!shouldShowProcessing) {
 			setProcessingWordIndex(0);
@@ -263,7 +220,9 @@ export default function ConversationPanel() {
 		return () => clearInterval(interval);
 	}, [shouldShowProcessing]);
 
-	if (!shouldShow) {
+	// isConversationVisible() implies a non-null command; the extra check
+	// narrows the type for the JSX below.
+	if (!shouldShow || !activeCommand) {
 		return null;
 	}
 
@@ -297,7 +256,6 @@ export default function ConversationPanel() {
 				respondToCommand(approvedCommandId, 'approve')
 			).then(
 				() => {
-					postApproveSwitchCommandIdRef.current = approvedCommandId;
 					enableComplementaryArea?.(
 						'core',
 						isLargeViewport
@@ -320,8 +278,10 @@ export default function ConversationPanel() {
 	};
 
 	const handleCancel = () => {
-		// Closing via the store plays the slide-out animation; the watcher
-		// above cancels the actual command as the sidebar goes inactive.
+		if (activeCommand) {
+			cancel(activeCommand.id);
+		}
+		// Closing via the store plays the slide-out animation.
 		disableComplementaryArea?.('core');
 	};
 
@@ -364,6 +324,20 @@ export default function ConversationPanel() {
 
 					<div ref={messagesEndRef} />
 				</div>
+
+				{isPending && (
+					<div className="wpce-conversation-panel__input-area">
+						<div className="wpce-conversation-panel__actions">
+							<Button
+								variant="tertiary"
+								isDestructive
+								onClick={handleCancel}
+							>
+								{__('Cancel', 'claudaborative-editing')}
+							</Button>
+						</div>
+					</div>
+				)}
 
 				{isAwaitingInput && (
 					<div className="wpce-conversation-panel__input-area">

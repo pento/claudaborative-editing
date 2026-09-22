@@ -67,6 +67,10 @@ Source files are in the `wordpress-plugin/` directory. See the repository `READM
 
 == Changelog ==
 
+= 0.7.0 =
+* Added the ability to resume in-progress Compose sessions.
+* Fixed Compose sessions being lost when the conversation is accidentally closed.
+
 = 0.6.0 =
 * Updated minimum required WordPress version to 6.9 and Gutenberg plugin to 23.8.
 

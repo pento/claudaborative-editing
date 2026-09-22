@@ -478,6 +478,158 @@ describe('AiActionsMenu', () => {
 		expect(mockSubmitCommand).toHaveBeenCalledWith('compose', 123);
 	});
 
+	describe('resume', () => {
+		const mockEnableComplementaryArea = jest.fn();
+
+		beforeEach(() => {
+			mockedUseDispatch.mockImplementation((s: unknown) => {
+				if (s === aiActionsStore) {
+					return { submitCommand: mockSubmitCommand };
+				}
+				if (s === noticesStore) {
+					return { createNotice: mockCreateNotice };
+				}
+				if (s === 'core/interface') {
+					return {
+						enableComplementaryArea: mockEnableComplementaryArea,
+					};
+				}
+				return {};
+			});
+		});
+
+		function mockActiveCommand(command: Record<string, unknown>) {
+			mockUseSelect(
+				defaultStores({
+					getActiveCommand: () => command,
+				})
+			);
+		}
+
+		it('shows Resume composing for an awaiting_input compose on the current post', () => {
+			mockActiveCommand({
+				id: 42,
+				prompt: 'compose',
+				status: 'awaiting_input',
+				post_id: 123,
+				result_data: {
+					messages: [
+						{
+							role: 'assistant',
+							content: 'What is the topic?',
+							timestamp: '2026-04-06T10:00:00Z',
+						},
+					],
+				},
+			});
+
+			render(<AiActionsMenu />);
+
+			const item = screen
+				.getByText('Resume composing')
+				.closest('button')!;
+			expect(item.disabled).toBe(false);
+			expect(screen.queryByText('Compose')).toBeNull();
+		});
+
+		it('clicking Resume reopens the conversation sidebar without submitting a command', () => {
+			mockActiveCommand({
+				id: 42,
+				prompt: 'compose',
+				status: 'awaiting_input',
+				post_id: 123,
+				result_data: null,
+			});
+
+			render(<AiActionsMenu />);
+			fireEvent.click(screen.getByText('Resume composing'));
+
+			expect(mockEnableComplementaryArea).toHaveBeenCalledWith(
+				'core',
+				'claudaborative-editing-conversation/conversation'
+			);
+			expect(mockSubmitCommand).not.toHaveBeenCalled();
+			expect(mockOnClose).toHaveBeenCalled();
+		});
+
+		it('shows Resume conversation for a non-compose awaiting_input command', () => {
+			mockActiveCommand({
+				id: 43,
+				prompt: 'translate',
+				status: 'awaiting_input',
+				post_id: 123,
+				result_data: null,
+			});
+
+			render(<AiActionsMenu />);
+
+			expect(screen.getByText('Resume conversation')).toBeTruthy();
+			expect(screen.queryByText('Resume composing')).toBeNull();
+		});
+
+		it('keeps other items disabled while a resumable command exists', () => {
+			mockActiveCommand({
+				id: 42,
+				prompt: 'compose',
+				status: 'awaiting_input',
+				post_id: 123,
+				result_data: null,
+			});
+
+			render(<AiActionsMenu />);
+
+			expect(
+				screen.getByText('Proofread').closest('button')!.disabled
+			).toBe(true);
+			expect(screen.getByText('Review').closest('button')!.disabled).toBe(
+				true
+			);
+		});
+
+		it('does not show Resume when there is no active command', () => {
+			render(<AiActionsMenu />);
+
+			expect(screen.queryByText('Resume composing')).toBeNull();
+			expect(screen.queryByText('Resume conversation')).toBeNull();
+			expect(screen.getByText('Compose')).toBeTruthy();
+		});
+
+		it('does not show Resume for a command on another post', () => {
+			mockActiveCommand({
+				id: 42,
+				prompt: 'compose',
+				status: 'awaiting_input',
+				post_id: 999,
+				result_data: null,
+			});
+
+			render(<AiActionsMenu />);
+
+			expect(screen.queryByText('Resume composing')).toBeNull();
+			expect(
+				screen.getByText('Compose').closest('button')!.disabled
+			).toBe(true);
+		});
+
+		it('does not show Resume for a non-conversational running command', () => {
+			mockActiveCommand({
+				id: 42,
+				prompt: 'proofread',
+				status: 'running',
+				post_id: 123,
+				result_data: null,
+			});
+
+			render(<AiActionsMenu />);
+
+			expect(screen.queryByText('Resume composing')).toBeNull();
+			expect(screen.queryByText('Resume conversation')).toBeNull();
+			expect(
+				screen.getByText('Compose').closest('button')!.disabled
+			).toBe(true);
+		});
+	});
+
 	it('shows error as snackbar toast when error appears', async () => {
 		const { rerender } = render(<AiActionsMenu />);
 		expect(mockCreateNotice).not.toHaveBeenCalled();
