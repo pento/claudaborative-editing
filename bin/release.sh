@@ -82,17 +82,18 @@ confirm "Proceed with release $VERSION?"
 
 # --- Bump versions ---
 
-# Root package.json
-sed -i '' "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" package.json
+# Root package.json. `npm pkg set` only touches the top-level version field —
+# a bare sed on `"version":` would also clobber the devEngines version ranges.
+npm pkg set version="$VERSION"
 
 # Root package-lock.json
 npm install --package-lock-only
 
 # WordPress plugin package.json
-sed -i '' "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" wordpress-plugin/package.json
+cd wordpress-plugin
+npm pkg set version="$VERSION"
 
 # WordPress plugin package-lock.json
-cd wordpress-plugin
 npm install --package-lock-only
 cd "$PROJECT_DIR"
 
