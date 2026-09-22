@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Claudaborative Editing
  * Description: Adds AI action controls to the Gutenberg editor for use with the Claudaborative Editing MCP server.
- * Version: 0.6.0
+ * Version: 0.7.0
  * Author: pento
  * Author URI: https://pento.net
  * License: GPL-2.0-or-later
